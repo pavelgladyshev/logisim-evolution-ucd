@@ -11,6 +11,7 @@ package com.cburch.logisim.std;
 
 import static com.cburch.logisim.std.Strings.S;
 
+import com.cburch.sample.Components;
 import com.cburch.logisim.soc.Soc;
 import com.cburch.logisim.std.arith.ArithmeticLibrary;
 import com.cburch.logisim.std.base.BaseLibrary;
@@ -56,7 +57,8 @@ public class Builtin extends Library {
             new TclLibrary(),
             new BfhLibrary(),
             new ExtraIoLibrary(),
-            new Soc());
+            new Soc(),
+            new Components());
   }
 
   @Override
