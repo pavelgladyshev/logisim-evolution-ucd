@@ -58,7 +58,8 @@ public class Builtin extends Library {
             new BfhLibrary(),
             new ExtraIoLibrary(),
             new Soc(),
-            new Components());
+            new Components(),
+            new com.cburch.gray.Components());
   }
 
   @Override

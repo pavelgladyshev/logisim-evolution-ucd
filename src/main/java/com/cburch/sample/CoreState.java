@@ -4,6 +4,7 @@ import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
 
 public class CoreState implements InstanceData, Cloneable {
+
     public CoreState(Cpu cpu) {
         super();
     }

@@ -1,6 +1,7 @@
 package com.cburch.sample;
 
 import com.cburch.logisim.data.Bounds;
+import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.InstanceFactory;
 import com.cburch.logisim.instance.InstancePainter;
 import com.cburch.logisim.instance.InstanceState;
@@ -14,9 +15,18 @@ import java.awt.geom.AffineTransform;
 import java.util.ArrayList;
 
 public abstract class AbstractCpu extends InstanceFactory {
+    protected Pc pc;
 
     public AbstractCpu(String name) {
         super(name);
+    }
+
+    public void writePC(Pc nv) {
+        pc = nv;
+    }
+
+    public Value readPC() {
+        return pc.getValue();
     }
 
     protected abstract boolean getRESB(InstanceState state);

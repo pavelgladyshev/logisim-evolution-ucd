@@ -1,14 +1,11 @@
 package com.cburch.sample;
 
+import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Bounds;
 import com.cburch.logisim.data.Direction;
+import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.InstancePainter;
 import com.cburch.logisim.instance.InstanceState;
-import com.cburch.logisim.instance.Port;
-import com.cburch.logisim.util.GraphicsUtil;
-
-import java.awt.Graphics;
-import java.util.ArrayList;
 
 public class Cpu extends AbstractCpu {
 
@@ -17,7 +14,7 @@ public class Cpu extends AbstractCpu {
             PortInfo.simpleInput("SAddr", 32),
             PortInfo.simpleInput("RST", 1),
             PortInfo.simpleInput("DaIn", 32),
-            PortInfo.simpleOutput("PC", 32),
+            PortInfo.simpleOutput("Pc", 32),
             PortInfo.simpleInput("Sync", 32),
             PortInfo.simpleInput("MW", 1),
             PortInfo.simpleInput("MR", 1),
@@ -27,6 +24,7 @@ public class Cpu extends AbstractCpu {
 
     public Cpu() {
         super("cpu");
+        pc = new Pc(Value.FALSE, Value.createKnown(32, 4194304));
         setOffsetBounds(Bounds.create(-80, -60, 160, 120));
         addStandardPins(portInfos, -80, 80, -30, 40, 20, 5);
     }
@@ -68,9 +66,15 @@ public class Cpu extends AbstractCpu {
 
     @Override
     public void propagate(InstanceState state) {
-        // CoreState is a custom class that you need to define
-        // CoreState var2 = CoreState.get(state, this);
-        // Implement logic for propagating signals through the instance
+        final var cur = Pc.get(state, Pc.getBitWidth());
+        final var trigger = cur.updateClock(state.getPortValue(0));
+        if(trigger) {
+            cur.setValue(readPC());
+            ///pc.execute???
+            pc.updatePc();
+            System.out.println(cur.getValue());
+        }
+        state.setPort(4, cur.getValue(), 9);
     }
 
     @Override
