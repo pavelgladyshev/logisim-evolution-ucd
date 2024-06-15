@@ -11,6 +11,8 @@ package com.cburch.logisim.std;
 
 import static com.cburch.logisim.std.Strings.S;
 
+import com.cburch.gray.Components;
+import com.cburch.logisim.riscvim32cpu.RV32imComponents;
 import com.cburch.logisim.soc.Soc;
 import com.cburch.logisim.std.arith.ArithmeticLibrary;
 import com.cburch.logisim.std.base.BaseLibrary;
@@ -56,7 +58,9 @@ public class Builtin extends Library {
             new TclLibrary(),
             new BfhLibrary(),
             new ExtraIoLibrary(),
-            new Soc());
+            new Soc(),
+            new Components(),
+            new RV32imComponents());
   }
 
   @Override
