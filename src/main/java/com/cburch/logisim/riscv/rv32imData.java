@@ -137,7 +137,15 @@ class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x6F:  // Jump And Link (J-Type)
+        JumpAndLink.link(this); //jal rd,label
+        pc.set((pc.value + ir.imm_J()) & 0xffffffff);
+        fetchNextInstruction();
+        break;
       case 0x67:  // Jump And Link Reg (I-Type)
+        JumpAndLink.link(this); //jalr rd,rs1,imm_I
+        pc.set((getX(ir.rs1()) + ir.imm_I()) & 0xffffffff);
+        fetchNextInstruction();
+        break;
       case 0x37:  // Load Upper Immediate (U-type)
       case 0x17:  // Add Upper Immediate to PC (U-type)
       case 0x73:  // System instructions
