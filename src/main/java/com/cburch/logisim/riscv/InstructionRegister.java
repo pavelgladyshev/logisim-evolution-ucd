@@ -41,6 +41,16 @@ public class InstructionRegister {
 
     public long imm_U() { return ((value >> 12) & ((1 << 20)-1)); } // value[31:12]
 
+    // B-type additional fields
+
+    public long imm_B() {
+        long imm10_5 = (value >> 25) & 0x3F; // value[30:25]
+        long imm_odd = (value >> 7) & 0x1; // value [7]
+        long imm4_1 = (value >> 8) & 0xF; // value[11:8]
+
+        return ( ( ( (imm10_5 << 5) | (imm4_1 << 1) | (imm_odd << 11) ) ) ^ 0x800) - 0x800;
+    }
+
     // J-type additional fields
 
     public long imm_J() {  // sign-extended immediate field of J-type instruction
