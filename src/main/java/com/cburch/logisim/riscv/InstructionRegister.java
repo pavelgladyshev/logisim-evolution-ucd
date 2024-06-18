@@ -40,4 +40,15 @@ public class InstructionRegister {
     // U-type additional fields
 
     public long imm_U() { return ((value >> 12) & ((1 << 20)-1)); } // value[31:12]
+
+    // J-type additional fields
+
+    public long imm_J() {  // sign-extended immediate field of J-type instruction
+        long res = ((value >> 20) & ((1 << 11) - 2)); // value[30:21] (imm[10:1])
+        res |= ((value >> 9) & ((1 << 11)));          // value[20] (imm[11])
+        res |= (value & 0xff000);                     // value[19:12] (imm[19:12])
+        res |= ((value >> 11) & (1 << 20));           // value[31] (imm[20])
+        res = (res ^ 0x100000) - 0x100000;            // sign-extend 21-bit integer
+        return res;
+    }
 }
