@@ -133,6 +133,9 @@ class rv32imData implements InstanceData, Cloneable {
       case 0x03:  // load instruction (I-type)
       case 0x23:  // store instruction (S-type)
       case 0x63:  // branch instruction (B-type)
+        BranchInstruction.execute(this);
+        fetchNextInstruction();
+        break;
       case 0x6F:  // Jump And Link (J-Type)
       case 0x67:  // Jump And Link Reg (I-Type)
       case 0x37:  // Load Upper Immediate (U-type)
