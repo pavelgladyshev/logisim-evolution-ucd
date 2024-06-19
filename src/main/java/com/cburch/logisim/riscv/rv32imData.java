@@ -28,6 +28,7 @@ class rv32imData implements InstanceData, Cloneable {
   private int outputDataWidth;    // width of the data to be written in bytes (1,2,or 4)
   private Value memRead;
   private Value memWrite;
+  private Value isSync;
 
   /** Registers */
   private boolean fetching;
@@ -35,6 +36,14 @@ class rv32imData implements InstanceData, Cloneable {
   private final ProgramCounter pc;
   private final InstructionRegister ir;
   private final IntegerRegisters x;
+
+  private CPUState cpuState;
+
+  /** Enum representing CPU states */
+  public enum CPUState {
+    OPERATIONAL,
+    HALTED
+  }
 
   // More To Do
 
@@ -46,6 +55,7 @@ class rv32imData implements InstanceData, Cloneable {
     this.pc = new ProgramCounter(resetAddress);
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
+    this.cpuState = CPUState.OPERATIONAL;
 
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
@@ -65,6 +75,7 @@ class rv32imData implements InstanceData, Cloneable {
      outputDataWidth = 4;    // all 4 bytes of the output
      memRead = Value.TRUE;  //  MemRead active
      memWrite = Value.FALSE; // MemWrite not active
+     isSync = Value.TRUE;
    }
 
   /**
@@ -149,9 +160,9 @@ class rv32imData implements InstanceData, Cloneable {
       case 0x37:  // Load Upper Immediate (U-type)
       case 0x17:  // Add Upper Immediate to PC (U-type)
       case 0x73:  // System instructions
-      default: // Unknown instruction: should cause an exception
-        pc.increment();
-        fetchNextInstruction();
+      default: // Unknown instruction: halts CPU
+        isSync = Value.FALSE;
+        cpuState = CPUState.HALTED;
     }
 
   }
@@ -164,7 +175,11 @@ class rv32imData implements InstanceData, Cloneable {
   /** get last value of dataIn */
   public long getLastDataIn() { return lastDataIn; }
   public ProgramCounter getPC() { return pc; }
+  public CPUState getCpuState() { return cpuState; }
   public InstructionRegister getIR() { return ir; }
+  public Value getIsSync() { return isSync; }
   public long getX(int index) { return x.get(index); }
   public void setX(int index, long value) { x.set(index,value); }
+  public void setCpuState(CPUState newCpuState) { cpuState = newCpuState; }
+  public void skipInstruction() { pc.increment(); fetchNextInstruction(); }
 }
