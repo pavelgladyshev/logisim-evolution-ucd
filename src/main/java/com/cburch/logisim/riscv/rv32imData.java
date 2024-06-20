@@ -158,13 +158,20 @@ class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x37:  // Load Upper Immediate (U-type)
+        setX(ir.rd(),ir.imm_U()); //lui rd,imm_U
+        pc.increment();
+        fetchNextInstruction();
+        break;
       case 0x17:  // Add Upper Immediate to PC (U-type)
+        setX(ir.rd(), (pc.value + ir.imm_U())); //auipc rd,imm_U
+        pc.increment();
+        fetchNextInstruction();
+        break;
       case 0x73:  // System instructions
       default: // Unknown instruction: halts CPU
         isSync = Value.FALSE;
         cpuState = CPUState.HALTED;
     }
-
   }
 
   public Value getAddress() { return address; }
