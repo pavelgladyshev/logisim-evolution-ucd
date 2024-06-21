@@ -32,6 +32,9 @@ class rv32imData implements InstanceData, Cloneable {
 
   /** Registers */
   private boolean fetching;
+  private DataState dataStoring;
+  private DataState dataLoading;
+  private boolean firstExecution;
 
   private final ProgramCounter pc;
   private final InstructionRegister ir;
@@ -45,6 +48,12 @@ class rv32imData implements InstanceData, Cloneable {
     HALTED
   }
 
+  public enum DataState {
+    ADDRESSING,
+    STORING,
+    IDLE
+  }
+
   // More To Do
 
   /** Constructs a state with the given values. */
@@ -56,6 +65,9 @@ class rv32imData implements InstanceData, Cloneable {
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
     this.cpuState = CPUState.OPERATIONAL;
+    this.dataStoring = DataState.IDLE;
+    this.dataLoading = DataState.IDLE;
+    this.firstExecution = true;
 
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
@@ -76,6 +88,7 @@ class rv32imData implements InstanceData, Cloneable {
      memRead = Value.TRUE;  //  MemRead active
      memWrite = Value.FALSE; // MemWrite not active
      isSync = Value.TRUE;
+     firstExecution = true;
    }
 
   /**
@@ -126,9 +139,30 @@ class rv32imData implements InstanceData, Cloneable {
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
-    lastDataIn = dataIn;
+    if (firstExecution) {
+      lastDataIn = dataIn;
+      ir.set(dataIn);
+    }
 
-    if(fetching) { ir.set(dataIn); }
+    if (dataStoring == DataState.ADDRESSING) {
+      pc.increment();
+      fetchNextInstruction();
+      dataStoring = DataState.IDLE;
+      return;
+    }
+
+    if (dataLoading == DataState.ADDRESSING) {
+      dataLoading = DataState.STORING;
+      return;
+    }
+
+    if (dataLoading == DataState.STORING) {
+      LoadInstruction.loadData(this);
+      pc.increment();
+      fetchNextInstruction();
+      dataLoading = DataState.IDLE;
+      return;
+    }
 
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
@@ -142,7 +176,26 @@ class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x03:  // load instruction (I-type)
+        if (dataLoading == DataState.IDLE) {
+          memRead = Value.TRUE;
+          memWrite = Value.FALSE;
+          fetching = false;
+          dataLoading = DataState.ADDRESSING;
+          address = LoadInstruction.getAddress(this);
+          LoadInstruction.setRd(ir.rd());
+          LoadInstruction.setfunc3(ir.func3());
+        }
+        break;
       case 0x23:  // store instruction (S-type)
+        if (dataStoring == DataState.IDLE) {
+          outputData = StoreInstruction.getData(this);
+          address = StoreInstruction.getAddress(this);
+          memRead = Value.FALSE;
+          memWrite = Value.TRUE;
+          fetching = false;
+          dataStoring = DataState.ADDRESSING;
+        }
+        break;
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
         fetchNextInstruction();
@@ -172,13 +225,17 @@ class rv32imData implements InstanceData, Cloneable {
         isSync = Value.FALSE;
         cpuState = CPUState.HALTED;
     }
+
+    if (fetching && dataStoring == DataState.IDLE && dataLoading == DataState.IDLE) { lastDataIn = dataIn; ir.set(dataIn); }
+
   }
 
   public Value getAddress() { return address; }
+  public void setAddress(Value newAddress) { address = newAddress; }
   public Value getOutputData() { return outputData; }
-  public long getOutputDataWidth() { return outputDataWidth; }
   public Value getMemRead() { return memRead; }
   public Value getMemWrite() { return memWrite;  }
+
   /** get last value of dataIn */
   public long getLastDataIn() { return lastDataIn; }
   public ProgramCounter getPC() { return pc; }
