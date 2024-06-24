@@ -1,3 +1,6 @@
+# Test for Load Instructions 
+# To run in Logisim, assemble file, export .data as Hexadecimal text (load into RAM) and .text as Hexadecimal text (load into ROM)
+
 .data
 number: .word 0x12345678
 negative_word: .word -30 
