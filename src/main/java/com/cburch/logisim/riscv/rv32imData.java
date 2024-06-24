@@ -32,8 +32,7 @@ class rv32imData implements InstanceData, Cloneable {
 
   /** Registers */
   private boolean fetching;
-  private DataState dataStoring;
-  private DataState dataLoading;
+  private boolean addressing;
   private boolean firstExecution;
 
   private final ProgramCounter pc;
@@ -48,12 +47,6 @@ class rv32imData implements InstanceData, Cloneable {
     HALTED
   }
 
-  public enum DataState {
-    ADDRESSING,
-    STORING,
-    IDLE
-  }
-
   // More To Do
 
   /** Constructs a state with the given values. */
@@ -65,13 +58,10 @@ class rv32imData implements InstanceData, Cloneable {
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
     this.cpuState = CPUState.OPERATIONAL;
-    this.dataStoring = DataState.IDLE;
-    this.dataLoading = DataState.IDLE;
     this.firstExecution = true;
 
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
-
   }
 
   /**
@@ -80,6 +70,7 @@ class rv32imData implements InstanceData, Cloneable {
    private void fetchNextInstruction()
    {
      fetching = true;
+     addressing = false;
 
      // Values for outputs fetching instruction
      address = Value.createKnown(32,pc.get());
@@ -90,6 +81,22 @@ class rv32imData implements InstanceData, Cloneable {
      isSync = Value.TRUE;
      firstExecution = true;
    }
+
+   private void addressData(Value address)
+   {
+     fetching = false;
+     addressing = true;
+
+     // Values for outputs fetching data
+     this.address = address;
+     outputData = HiZ32;     // The output data bus is in High Z
+     outputDataWidth = 4;    // all 4 bytes of the output
+     memRead = Value.TRUE;   //  MemRead active
+     memWrite = Value.FALSE; // MemWrite not active
+     isSync = Value.TRUE;
+     firstExecution = false;
+   }
+
 
   /**
    * Retrieves the state associated with this counter in the circuit state, generating the state if
@@ -139,29 +146,10 @@ class rv32imData implements InstanceData, Cloneable {
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
-    if (firstExecution) {
+    if (fetching) { lastDataIn = dataIn; ir.set(dataIn); }
+
+    if (addressing) {
       lastDataIn = dataIn;
-      ir.set(dataIn);
-    }
-
-    if (dataStoring == DataState.ADDRESSING) {
-      pc.increment();
-      fetchNextInstruction();
-      dataStoring = DataState.IDLE;
-      return;
-    }
-
-    if (dataLoading == DataState.ADDRESSING) {
-      dataLoading = DataState.STORING;
-      return;
-    }
-
-    if (dataLoading == DataState.STORING) {
-      LoadInstruction.loadData(this);
-      pc.increment();
-      fetchNextInstruction();
-      dataLoading = DataState.IDLE;
-      return;
     }
 
     switch(ir.opcode()) {
@@ -176,24 +164,28 @@ class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x03:  // load instruction (I-type)
-        if (dataLoading == DataState.IDLE) {
-          memRead = Value.TRUE;
-          memWrite = Value.FALSE;
-          fetching = false;
-          dataLoading = DataState.ADDRESSING;
-          address = LoadInstruction.getAddress(this);
-          LoadInstruction.setRd(ir.rd());
-          LoadInstruction.setfunc3(ir.func3());
+        if(!addressing){
+          addressData(LoadInstruction.getAddress(this));
+        }
+        else{
+          LoadInstruction.latch(this);
+          pc.increment();
+          fetchNextInstruction();
         }
         break;
       case 0x23:  // store instruction (S-type)
-        if (dataStoring == DataState.IDLE) {
+        if(!addressing){  //maintain support for sw (sb, sh, unsupported with current format)
           outputData = StoreInstruction.getData(this);
           address = StoreInstruction.getAddress(this);
           memRead = Value.FALSE;
           memWrite = Value.TRUE;
           fetching = false;
-          dataStoring = DataState.ADDRESSING;
+          addressing = true;
+        }
+        else{
+          pc.increment();
+          fetchNextInstruction();
+          addressing = false;
         }
         break;
       case 0x63:  // branch instruction (B-type)
@@ -225,9 +217,6 @@ class rv32imData implements InstanceData, Cloneable {
         isSync = Value.FALSE;
         cpuState = CPUState.HALTED;
     }
-
-    if (fetching && dataStoring == DataState.IDLE && dataLoading == DataState.IDLE) { lastDataIn = dataIn; ir.set(dataIn); }
-
   }
 
   public Value getAddress() { return address; }
