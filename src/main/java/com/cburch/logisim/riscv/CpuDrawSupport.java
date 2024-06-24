@@ -102,6 +102,7 @@ public class CpuDrawSupport {
             graphics.setColor(i == 0 ? Color.WHITE : Color.BLUE);
             Bounds bdsRegValueText = getBounds(bdsRegValue.getX() + blockWidth / 2, posY + 21 + i * 15, 0, 0, scale);
             GraphicsUtil.drawCenteredText(graphics, String.valueOf(state.getX(i)), bdsRegValueText.getX(), bdsRegValueText.getY());
+            //GraphicsUtil.drawCenteredText(graphics, Long.toHexString(state.getX(i)), bdsRegValueText.getX(), bdsRegValueText.getY());
 
             // Register ABI name
             graphics.setColor(Color.DARK_GRAY);
