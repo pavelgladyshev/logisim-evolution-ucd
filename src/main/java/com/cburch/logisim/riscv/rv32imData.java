@@ -33,6 +33,7 @@ class rv32imData implements InstanceData, Cloneable {
   /** Registers */
   private boolean fetching;
   private boolean addressing;
+  private boolean storing;
   private boolean firstExecution;
 
   private final ProgramCounter pc;
@@ -71,6 +72,7 @@ class rv32imData implements InstanceData, Cloneable {
    {
      fetching = true;
      addressing = false;
+     storing = false;
 
      // Values for outputs fetching instruction
      address = Value.createKnown(32,pc.get());
@@ -86,6 +88,7 @@ class rv32imData implements InstanceData, Cloneable {
    {
      fetching = false;
      addressing = true;
+     storing = false;
 
      // Values for outputs fetching data
      this.address = address;
@@ -93,6 +96,22 @@ class rv32imData implements InstanceData, Cloneable {
      outputDataWidth = 4;    // all 4 bytes of the output
      memRead = Value.TRUE;   //  MemRead active
      memWrite = Value.FALSE; // MemWrite not active
+     isSync = Value.TRUE;
+     firstExecution = false;
+   }
+
+   private void storeData(Value outputData, Value address)
+   {
+     fetching = false;
+     addressing = false;
+     storing = true;
+
+     // Values for outputs writing data
+     this.address = address;
+     this.outputData = outputData;
+     outputDataWidth = 4;
+     memRead = Value.FALSE;
+     memWrite = Value.TRUE;
      isSync = Value.TRUE;
      firstExecution = false;
    }
@@ -164,28 +183,36 @@ class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x03:  // load instruction (I-type)
-        if(!addressing){
+        if(!addressing) {
           addressData(LoadInstruction.getAddress(this));
         }
-        else{
+        else {
           LoadInstruction.latch(this);
           pc.increment();
           fetchNextInstruction();
         }
         break;
-      case 0x23:  // store instruction (S-type)
-        if(!addressing){  //maintain support for sw (sb, sh, unsupported with current format)
-          outputData = StoreInstruction.getData(this);
-          address = StoreInstruction.getAddress(this);
-          memRead = Value.FALSE;
-          memWrite = Value.TRUE;
-          fetching = false;
-          addressing = true;
+      case 0x23:  // storing instruction (S-type)
+        if(ir.func3() == 0x2) { // sw
+          if(!storing) {
+            storeData(StoreInstruction.getData(this), StoreInstruction.getAddress(this));
+          }
+          else {
+            pc.increment();
+            fetchNextInstruction();
+          }
         }
-        else{
-          pc.increment();
-          fetchNextInstruction();
-          addressing = false;
+        else if(!addressing){ // sb, sh
+          addressData(StoreInstruction.getAddress(this));
+        }
+        else {
+          if(!storing) {  //mix and store received data (from lastDataIn)
+            storeData(StoreInstruction.getData(this), StoreInstruction.getAddress(this));
+          }
+          else {
+            pc.increment();
+            fetchNextInstruction();
+          }
         }
         break;
       case 0x63:  // branch instruction (B-type)
