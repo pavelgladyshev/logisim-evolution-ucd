@@ -7,9 +7,8 @@ import static com.cburch.logisim.riscv.rv32imData.HiZ32;
 
 public class LoadInstruction {
 
-    public static void latch(rv32imData hartData) {
+    public static void latch(rv32imData hartData, long data) {
         long address = getAddress(hartData).toLongValue();
-        long data = hartData.getLastDataIn();
         InstructionRegister ir = hartData.getIR();
 
         switch (ir.func3()) {
@@ -36,7 +35,6 @@ public class LoadInstruction {
     public static void fetch(rv32imData hartData) {
         hartData.setFetching(false);
         hartData.setAddressing(true);
-        hartData.setStoring(false);
 
         // Values for outputs fetching data
         hartData.setAddress(LoadInstruction.getAddress(hartData));
@@ -63,5 +61,4 @@ public class LoadInstruction {
         InstructionRegister ir = hartData.getIR();
         return Value.createKnown(BitWidth.create(32), (hartData.getX(ir.rs1()) + ir.imm_I()));
     }
-
 }
