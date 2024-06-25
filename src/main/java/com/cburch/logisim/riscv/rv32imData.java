@@ -18,7 +18,6 @@ import com.cburch.logisim.instance.InstanceState;
 class rv32imData implements InstanceData, Cloneable {
   /** The last input values observed. */
   private Value lastClock;
-  private long lastDataIn;
 
   /** Output values */
   static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
@@ -33,7 +32,6 @@ class rv32imData implements InstanceData, Cloneable {
   /** Registers */
   private boolean fetching;
   private boolean addressing;
-  private boolean storing;
 
   private final ProgramCounter pc;
   private final InstructionRegister ir;
@@ -70,33 +68,15 @@ class rv32imData implements InstanceData, Cloneable {
    {
      fetching = true;
      addressing = false;
-     storing = false;
 
      // Values for outputs fetching instruction
      address = Value.createKnown(32,pc.get());
      outputData = HiZ32;     // The output data bus is in High Z
      outputDataWidth = 4;    // all 4 bytes of the output
-     memRead = Value.TRUE;  //  MemRead active
+     memRead = Value.TRUE;   // MemRead active
      memWrite = Value.FALSE; // MemWrite not active
      isSync = Value.TRUE;
    }
-
-
-   private void storeData(Value outputData, Value address)
-   {
-     fetching = false;
-     addressing = false;
-     storing = true;
-
-     // Values for outputs writing data
-     this.address = address;
-     this.outputData = outputData;
-     outputDataWidth = 4;
-     memRead = Value.FALSE;
-     memWrite = Value.TRUE;
-     isSync = Value.TRUE;
-   }
-
 
   /**
    * Retrieves the state associated with this counter in the circuit state, generating the state if
@@ -146,11 +126,7 @@ class rv32imData implements InstanceData, Cloneable {
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
-    if (fetching) { lastDataIn = dataIn; ir.set(dataIn); }
-
-    if (addressing) {
-      lastDataIn = dataIn;
-    }
+    if (fetching) { ir.set(dataIn); }
 
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
@@ -168,13 +144,13 @@ class rv32imData implements InstanceData, Cloneable {
           LoadInstruction.fetch(this);
         }
         else {
-          LoadInstruction.latch(this);
+          LoadInstruction.latch(this, dataIn);
           pc.increment();
           fetchNextInstruction();
         }
         break;
       case 0x23:  // storing instruction (S-type)
-        if(!storing) {
+        if(!addressing) {
           StoreInstruction.fetch(this);
         }
         else {
@@ -225,7 +201,6 @@ class rv32imData implements InstanceData, Cloneable {
   public Value getMemWrite() { return memWrite;  }
 
   /** get last value of dataIn */
-  public long getLastDataIn() { return lastDataIn; }
   public ProgramCounter getPC() { return pc; }
   public CPUState getCpuState() { return cpuState; }
   public InstructionRegister getIR() { return ir; }
@@ -235,13 +210,10 @@ class rv32imData implements InstanceData, Cloneable {
   public void setCpuState(CPUState newCpuState) { cpuState = newCpuState; }
   public void setFetching(boolean value) { fetching = value; }
   public void setAddressing(boolean value) { addressing = value; }
-  public void setStoring(boolean value) { storing = value; }
   public void setOutputData(Value value) { outputData = value; }
   public void setOutputDataWidth(int value) { outputDataWidth = value; }
   public void setMemRead(Value value) { memRead = value; }
   public void setMemWrite(Value value) { memWrite = value; }
   public void setIsSync(Value value) { isSync = value; }
-
-
   public void skipInstruction() { pc.increment(); fetchNextInstruction(); }
 }

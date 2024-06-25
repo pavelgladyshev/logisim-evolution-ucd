@@ -9,14 +9,13 @@ import static com.cburch.logisim.riscv.rv32imData.HiZ32;
 public class StoreInstruction {
 
     public static void latch(rv32imData hartData) {
-        hartData.setStoring(false);
+        hartData.setAddressing(false);
     }
 
     public static void fetch(rv32imData hartData)
     {
         hartData.setFetching(false);
-        hartData.setAddressing(false);
-        hartData.setStoring(true);
+        hartData.setAddressing(true);
 
         // Values for outputs fetching data
         hartData.setAddress(StoreInstruction.getAddress(hartData));
