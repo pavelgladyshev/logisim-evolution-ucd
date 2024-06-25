@@ -3,7 +3,10 @@ package com.cburch.logisim.riscv;
 import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;
 
+import static com.cburch.logisim.riscv.rv32imData.HiZ32;
+
 public class LoadInstruction {
+
     public static void latch(rv32imData hartData) {
         long address = getAddress(hartData).toLongValue();
         long data = hartData.getLastDataIn();
@@ -26,8 +29,22 @@ public class LoadInstruction {
                 hartData.setX(ir.rd(), getUnsignedDataHalf(data, address));
                 break;
             default:
-                // Exception
+                hartData.halt();
         }
+    }
+
+    public static void fetch(rv32imData hartData) {
+        hartData.setFetching(false);
+        hartData.setAddressing(true);
+        hartData.setStoring(false);
+
+        // Values for outputs fetching data
+        hartData.setAddress(LoadInstruction.getAddress(hartData));
+        hartData.setOutputData(HiZ32);     // The output data bus is in High Z
+        hartData.setOutputDataWidth(4);    // all 4 bytes of the output
+        hartData.setMemRead(Value.TRUE);   //  MemRead active
+        hartData.setMemWrite(Value.FALSE); // MemWrite not active
+        hartData.setIsSync(Value.TRUE);
     }
 
     private static long getUnsignedDataByte(long data, long address){

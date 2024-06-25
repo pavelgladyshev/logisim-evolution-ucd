@@ -125,8 +125,8 @@ class rv32im extends InstanceFactory {
 
       // For Debugging purposes
 //      drawHexReg(graphics, posX, posY - 90, false, (int) state.getLastDataIn(), "LD", true);
-//      drawHexReg(graphics, posX, posY - 90, false, (int) state.getOutputData().toLongValue(), "OUTPUT", true);
-//      drawHexReg(graphics, posX+80, posY - 90, false, (int) state.getAddress().toLongValue(), "Addr", true);
+      drawHexReg(graphics, posX, posY - 90, false, (int) state.getOutputData().toLongValue(), "OUTPUT", true);
+      drawHexReg(graphics, posX+80, posY - 90, false, (int) state.getAddress().toLongValue(), "Addr", true);
 
       drawRegisters(graphics, posX, posY, false, state);
       drawCpuState(graphics, posX+80, posY-40, false, "CPU state", state.getCpuState());
