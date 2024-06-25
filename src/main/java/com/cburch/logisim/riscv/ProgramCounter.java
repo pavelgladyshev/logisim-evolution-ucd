@@ -8,7 +8,7 @@ public class ProgramCounter {
     }
 
     public void increment() {
-        value = (value + 4) & 0xffffffff;
+        value = (value + 4) & 0xffffffffL;
     }
 
     public long get() {

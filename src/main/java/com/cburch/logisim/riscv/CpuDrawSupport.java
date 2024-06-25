@@ -58,7 +58,7 @@ public class CpuDrawSupport {
     }
 
     public static void drawRegisters(
-            Graphics2D graphics, int posX, int posY, boolean scale, rv32imData state) {
+            Graphics2D graphics, int posX, int posY, boolean scale, rv32imData state, boolean hex) {
         int blockWidth = getBlockWidth(graphics, scale);
         int blockX = ((scale ? AppPreferences.getScaled(160) : 160) - blockWidth) / 2;
         if (scale) {
@@ -101,8 +101,11 @@ public class CpuDrawSupport {
             graphics.drawRect(bdsRegValue.getX(), bdsRegValue.getY(), bdsRegValue.getWidth(), bdsRegValue.getHeight());
             graphics.setColor(i == 0 ? Color.WHITE : Color.BLUE);
             Bounds bdsRegValueText = getBounds(bdsRegValue.getX() + blockWidth / 2, posY + 21 + i * 15, 0, 0, scale);
-            GraphicsUtil.drawCenteredText(graphics, String.valueOf(state.getX(i)), bdsRegValueText.getX(), bdsRegValueText.getY());
-            //GraphicsUtil.drawCenteredText(graphics, Long.toHexString(state.getX(i)), bdsRegValueText.getX(), bdsRegValueText.getY());
+            if(!hex) GraphicsUtil.drawCenteredText(graphics, String.valueOf(state.getX(i)), bdsRegValueText.getX(), bdsRegValueText.getY());
+            else {
+                GraphicsUtil.drawCenteredText(graphics, "0x"+Long.toHexString(state.getX(i) & 0xffffffffL),
+                        bdsRegValueText.getX(), bdsRegValueText.getY());
+            }
 
             // Register ABI name
             graphics.setColor(Color.DARK_GRAY);

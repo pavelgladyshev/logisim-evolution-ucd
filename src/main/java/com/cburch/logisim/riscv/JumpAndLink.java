@@ -5,6 +5,6 @@ public class JumpAndLink {
         InstructionRegister ir = hartData.getIR();
         ProgramCounter pc = new ProgramCounter(hartData.getPC().value);
         pc.increment();
-        hartData.setX(ir.rd(), (pc.value & 0xffffffff));
+        hartData.setX(ir.rd(), (pc.value & 0xffffffffL));
     }
 }

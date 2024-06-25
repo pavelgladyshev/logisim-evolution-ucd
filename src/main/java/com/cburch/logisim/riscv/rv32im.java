@@ -44,6 +44,9 @@ class rv32im extends InstanceFactory {
   public static final Attribute<Long> ATTR_RESET_ADDR =
           Attributes.forHexLong("resetAddress", S.getter("rv32imResetAddress"));
 
+  static final Attribute<Boolean> ATTR_HEX_REGS =
+          Attributes.forBoolean("hexRegisters", S.getter("rv32imHexRegisters"));
+
   // We don't have any instance variables related to an
   // individual instance's state. We can't put that here, because only one
   // rv32im object is ever created, and its job is to manage all
@@ -79,8 +82,8 @@ class rv32im extends InstanceFactory {
 
     // Add attributes
     setAttributes(
-            new Attribute[] {ATTR_RESET_ADDR,StdAttr.LABEL, StdAttr.LABEL_FONT},
-            new Object[] {Long.valueOf(0), "", StdAttr.DEFAULT_LABEL_FONT});
+            new Attribute[] {ATTR_RESET_ADDR, ATTR_HEX_REGS, StdAttr.LABEL, StdAttr.LABEL_FONT},
+            new Object[] {Long.valueOf(0), false, "", StdAttr.DEFAULT_LABEL_FONT});
   }
 
   @Override
@@ -128,10 +131,9 @@ class rv32im extends InstanceFactory {
       drawHexReg(graphics, posX, posY - 90, false, (int) state.getOutputData().toLongValue(), "OUTPUT", true);
       drawHexReg(graphics, posX+80, posY - 90, false, (int) state.getAddress().toLongValue(), "Addr", true);
 
-      drawRegisters(graphics, posX, posY, false, state);
+      drawRegisters(graphics, posX, posY, false, state, painter.getAttributeValue(ATTR_HEX_REGS));
       drawCpuState(graphics, posX+80, posY-40, false, "CPU state", state.getCpuState());
     }
-
   }
 
   @Override

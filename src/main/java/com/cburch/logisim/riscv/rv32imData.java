@@ -29,10 +29,11 @@ class rv32imData implements InstanceData, Cloneable {
   private Value memWrite;
   private Value isSync;
 
-  /** Registers */
+  /** Boolean */
   private boolean fetching;
   private boolean addressing;
 
+  /** Registers */
   private final ProgramCounter pc;
   private final InstructionRegister ir;
   private final IntegerRegisters x;
@@ -134,7 +135,7 @@ class rv32imData implements InstanceData, Cloneable {
         pc.increment();
         fetchNextInstruction();
         break;
-      case 0x33:  // R-type arithmetic instruction
+      case 0x33:  // R-type arithmetic & multiplication and division instructions
         ArithmeticInstruction.executeRegister(this);
         pc.increment();
         fetchNextInstruction();
