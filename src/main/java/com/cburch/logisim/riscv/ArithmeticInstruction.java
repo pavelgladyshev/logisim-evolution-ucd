@@ -43,6 +43,7 @@ public class ArithmeticInstruction {
         InstructionRegister ir = hartData.getIR();
         switch (ir.func3()) {
             case 0x0:
+
                 switch (ir.func7()) {
                     case 0x00:  // add rd,rs1,rs2
                         hartData.setX(ir.rd(), hartData.getX(ir.rs1()) + hartData.getX(ir.rs2()));
@@ -50,8 +51,11 @@ public class ArithmeticInstruction {
                     case 0x20:  // sub rd,rs1,rs2
                         hartData.setX(ir.rd(), hartData.getX(ir.rs1()) - hartData.getX(ir.rs2()));
                         break;
+                    default:
+                        hartData.halt();
                 }
                 break;
+
             case 0x1:   // sll rd,rs1,rs2
                 hartData.setX(ir.rd(), hartData.getX(ir.rs1()) << (hartData.getX(ir.rs2()) & 0x1f));
                 break;
@@ -73,6 +77,8 @@ public class ArithmeticInstruction {
                     case 0x20:  // sra rd,rs1,rs2
                         hartData.setX(ir.rd(), hartData.getX(ir.rs1()) >> (hartData.getX(ir.rs2()) & 0x1f));
                         break;
+                    default:
+                        hartData.halt();
                 }
                 break;
             case 0x6:   // or rd,rs1,rs2
@@ -81,6 +87,8 @@ public class ArithmeticInstruction {
             case 0x7:   // and rd,rs1,rs2
                 hartData.setX(ir.rd(),hartData.getX(ir.rs1()) & hartData.getX(ir.rs2()));
                 break;
+            default:
+                hartData.halt();
         }
     }
 }

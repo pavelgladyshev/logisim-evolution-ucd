@@ -21,7 +21,7 @@ class rv32imData implements InstanceData, Cloneable {
   private long lastDataIn;
 
   /** Output values */
-  private static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
+  static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
 
   private Value address;          // value to be placed on the address bus;
   private Value outputData;       // value to be placed on data bus
@@ -34,7 +34,6 @@ class rv32imData implements InstanceData, Cloneable {
   private boolean fetching;
   private boolean addressing;
   private boolean storing;
-  private boolean firstExecution;
 
   private final ProgramCounter pc;
   private final InstructionRegister ir;
@@ -59,7 +58,6 @@ class rv32imData implements InstanceData, Cloneable {
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
     this.cpuState = CPUState.OPERATIONAL;
-    this.firstExecution = true;
 
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
@@ -81,24 +79,8 @@ class rv32imData implements InstanceData, Cloneable {
      memRead = Value.TRUE;  //  MemRead active
      memWrite = Value.FALSE; // MemWrite not active
      isSync = Value.TRUE;
-     firstExecution = true;
    }
 
-   private void addressData(Value address)
-   {
-     fetching = false;
-     addressing = true;
-     storing = false;
-
-     // Values for outputs fetching data
-     this.address = address;
-     outputData = HiZ32;     // The output data bus is in High Z
-     outputDataWidth = 4;    // all 4 bytes of the output
-     memRead = Value.TRUE;   //  MemRead active
-     memWrite = Value.FALSE; // MemWrite not active
-     isSync = Value.TRUE;
-     firstExecution = false;
-   }
 
    private void storeData(Value outputData, Value address)
    {
@@ -113,7 +95,6 @@ class rv32imData implements InstanceData, Cloneable {
      memRead = Value.FALSE;
      memWrite = Value.TRUE;
      isSync = Value.TRUE;
-     firstExecution = false;
    }
 
 
@@ -184,7 +165,7 @@ class rv32imData implements InstanceData, Cloneable {
         break;
       case 0x03:  // load instruction (I-type)
         if(!addressing) {
-          addressData(LoadInstruction.getAddress(this));
+          LoadInstruction.fetch(this);
         }
         else {
           LoadInstruction.latch(this);
@@ -193,26 +174,13 @@ class rv32imData implements InstanceData, Cloneable {
         }
         break;
       case 0x23:  // storing instruction (S-type)
-        if(ir.func3() == 0x2) { // sw
-          if(!storing) {
-            storeData(StoreInstruction.getData(this), StoreInstruction.getAddress(this));
-          }
-          else {
-            pc.increment();
-            fetchNextInstruction();
-          }
-        }
-        else if(!addressing){ // sb, sh
-          addressData(StoreInstruction.getAddress(this));
+        if(!storing) {
+          StoreInstruction.fetch(this);
         }
         else {
-          if(!storing) {  //mix and store received data (from lastDataIn)
-            storeData(StoreInstruction.getData(this), StoreInstruction.getAddress(this));
-          }
-          else {
-            pc.increment();
-            fetchNextInstruction();
-          }
+          StoreInstruction.latch(this);
+          pc.increment();
+          fetchNextInstruction();
         }
         break;
       case 0x63:  // branch instruction (B-type)
@@ -241,9 +209,13 @@ class rv32imData implements InstanceData, Cloneable {
         break;
       case 0x73:  // System instructions
       default: // Unknown instruction: halts CPU
-        isSync = Value.FALSE;
-        cpuState = CPUState.HALTED;
+        halt();
     }
+  }
+
+  public void halt() {
+    isSync = Value.FALSE;
+    cpuState = CPUState.HALTED;
   }
 
   public Value getAddress() { return address; }
@@ -261,5 +233,15 @@ class rv32imData implements InstanceData, Cloneable {
   public long getX(int index) { return x.get(index); }
   public void setX(int index, long value) { x.set(index,value); }
   public void setCpuState(CPUState newCpuState) { cpuState = newCpuState; }
+  public void setFetching(boolean value) { fetching = value; }
+  public void setAddressing(boolean value) { addressing = value; }
+  public void setStoring(boolean value) { storing = value; }
+  public void setOutputData(Value value) { outputData = value; }
+  public void setOutputDataWidth(int value) { outputDataWidth = value; }
+  public void setMemRead(Value value) { memRead = value; }
+  public void setMemWrite(Value value) { memWrite = value; }
+  public void setIsSync(Value value) { isSync = value; }
+
+
   public void skipInstruction() { pc.increment(); fetchNextInstruction(); }
 }

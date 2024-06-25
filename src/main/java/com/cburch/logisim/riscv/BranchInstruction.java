@@ -37,6 +37,8 @@ public class BranchInstruction {
                     takeBranch = true;
                 }
                 break;
+            default:
+                hartData.halt();
         }
 
         if (takeBranch) {
