@@ -19,7 +19,6 @@ public class StoreInstruction {
 
         // Values for outputs fetching data
         hartData.setAddress(StoreInstruction.getAddress(hartData));
-        System.out.println(hartData.getAddress());
         hartData.setOutputData(StoreInstruction.getData(hartData));     // The output data bus is data from instruction
         hartData.setOutputDataWidth(4);    // all 4 bytes of the output
         hartData.setMemRead(Value.FALSE);   //  MemRead is not active
@@ -41,7 +40,7 @@ public class StoreInstruction {
                 result = Value.createKnown(BitWidth.create(32), getDataHalf(data, hartData.getAddress().toLongValue()));
                 break;
             case 0x2:  // sw rs2, imm(rs1)
-                result = Value.createKnown(BitWidth.create(32), (data ^ 0x80000000) - 0x80000000);
+                result = Value.createKnown(BitWidth.create(32), (data ^ 0x80000000L) - 0x80000000L);
                 break;
             default:
                 hartData.halt();

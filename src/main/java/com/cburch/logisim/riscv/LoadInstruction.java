@@ -19,7 +19,7 @@ public class LoadInstruction {
                 hartData.setX(ir.rd(), ((getUnsignedDataHalf(data, address) ^ 0x8000) - 0x8000));
                 break;
             case 0x2:  // lw rd, imm(rs1)
-                hartData.setX(ir.rd(), (data ^ 0x80000000) - 0x80000000);
+                hartData.setX(ir.rd(), (data ^ 0x80000000L) - 0x80000000L);
                 break;
             case 0x4:  // lbu rd, imm(rs1)
                 hartData.setX(ir.rd(), getUnsignedDataByte(data, address));
