@@ -40,7 +40,8 @@ public class RiscvComponents extends Library {
   public RiscvComponents() {
     tools =
         Arrays.asList(
-            new AddTool(new rv32im()));
+            new AddTool(new rv32im()),
+            new AddTool(new MonochromeVideoram()));
   }
 
   /** Returns the name of the library that the user will see. */

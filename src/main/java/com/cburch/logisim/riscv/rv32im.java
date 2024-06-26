@@ -52,6 +52,8 @@ class rv32im extends InstanceFactory {
   // rv32im object is ever created, and its job is to manage all
   // instances that appear in any circuits.
 
+  private static boolean pressedContinue = false;
+
   public rv32im() {
     super(_ID);
     setOffsetBounds(Bounds.create(-60, -20, 50+130, 80 + 495 + 30 + 10 + 60));
@@ -122,14 +124,15 @@ class rv32im extends InstanceFactory {
       final var posX = bds.getX() + 10;
       final var posY = bds.getY() + 110 + 60;
 
+      Font font = new Font("SansSerif", Font.BOLD, 20);
+      GraphicsUtil.drawText(graphics, font,"RISC-V RV32IM", posX+80, posY-127,0,0, Color.black, Color.WHITE);
 
-      GraphicsUtil.drawCenteredText(graphics, "RISC-V RV32IM", posX+80, posY-107);
       drawHexReg(graphics, posX, posY - 40, false, (int) state.getPC().get(), "PC", true);
 
       // For Debugging purposes
 //      drawHexReg(graphics, posX, posY - 90, false, (int) state.getLastDataIn(), "LD", true);
-      drawHexReg(graphics, posX, posY - 90, false, (int) state.getOutputData().toLongValue(), "OUTPUT", true);
-      drawHexReg(graphics, posX+80, posY - 90, false, (int) state.getAddress().toLongValue(), "Addr", true);
+      drawHexReg(graphics, posX, posY - 80, false, (int) state.getOutputData().toLongValue(), "OUTPUT", true);
+      drawHexReg(graphics, posX+80, posY - 80, false, (int) state.getAddress().toLongValue(), "Addr", true);
 
       drawRegisters(graphics, posX, posY, false, state, painter.getAttributeValue(ATTR_HEX_REGS));
       drawCpuState(graphics, posX+80, posY-40, false, "CPU state", state.getCpuState());
@@ -149,16 +152,21 @@ class rv32im extends InstanceFactory {
     if (cur.getCpuState() == rv32imData.CPUState.HALTED)
     {
       if (state.getPortValue(CONTINUE) == Value.TRUE) {
-        cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
-        cur.skipInstruction();
+        pressedContinue = true;
+        cur.setIsSync(Value.TRUE);
       }
-      return;
     }
 
     // check if clock signal is changing from low/false to high/true
     final var trigger = cur.updateClock(state.getPortValue(0));
 
     if (trigger) {
+        if (pressedContinue) {
+          pressedContinue = false;
+          cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
+          cur.skipInstruction();
+          return;
+        }
         // process state update, current values of input ports (e.g Data-In bus value)
         // are passed to update() as parameters
         cur.update(state.getPortValue(DATA_IN).toLongValue());
@@ -167,9 +175,10 @@ class rv32im extends InstanceFactory {
     // set output port values according to the current cpu state (possibly after an update)
     state.setPort(ADDRESS,cur.getAddress(),9);
     state.setPort(DATA_OUT,cur.getOutputData(),9);
+
     // To Do: mix outputData into DATA_IN according to 4 least significant bits of address and output data width!!!
-    state.setPort(MEMREAD,cur.getMemRead(),9);
-    state.setPort(MEMWRITE,cur.getMemWrite(),9);
-    state.setPort(SYNC,cur.getIsSync(),9);
+    state.setPort(MEMREAD, cur.getMemRead(), 9);
+    state.setPort(MEMWRITE, cur.getMemWrite(), 9);
+    state.setPort(SYNC, cur.getIsSync(), 9);
   }
 }
