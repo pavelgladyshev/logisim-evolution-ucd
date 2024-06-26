@@ -58,6 +58,9 @@ class rv32imData implements InstanceData, Cloneable {
     this.x = new IntegerRegisters();
     this.cpuState = CPUState.OPERATIONAL;
 
+    x.set(2, 0x7fffeffc);
+    x.set(3, 0x10008000);
+
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -65,10 +68,11 @@ class rv32imData implements InstanceData, Cloneable {
   /**
    * Set up outputs to fetch next instruction
    */
-   private void fetchNextInstruction()
+   public void fetchNextInstruction()
    {
      fetching = true;
      addressing = false;
+     flag = false;
 
      // Values for outputs fetching instruction
      address = Value.createKnown(32,pc.get());
@@ -124,8 +128,12 @@ class rv32imData implements InstanceData, Cloneable {
      pc.set(pcInit);
   }
 
+  boolean flag = false;
+
   /** update CPU state (execute) */
   public void update(long dataIn) {
+
+    if(flag) {flag = false; pc.increment(); fetchNextInstruction(); return; }
 
     if (fetching) { ir.set(dataIn); }
 
@@ -155,9 +163,8 @@ class rv32imData implements InstanceData, Cloneable {
           StoreInstruction.fetch(this);
         }
         else {
-          StoreInstruction.latch(this);
-          pc.increment();
-          fetchNextInstruction();
+          StoreInstruction.latch(this, dataIn);
+          flag = true;
         }
         break;
       case 0x63:  // branch instruction (B-type)
@@ -208,6 +215,7 @@ class rv32imData implements InstanceData, Cloneable {
   public Value getIsSync() { return isSync; }
   public long getX(int index) { return x.get(index); }
   public void setX(int index, long value) { x.set(index,value); }
+  public boolean getAddressing() { return addressing; }
   public void setCpuState(CPUState newCpuState) { cpuState = newCpuState; }
   public void setFetching(boolean value) { fetching = value; }
   public void setAddressing(boolean value) { addressing = value; }
