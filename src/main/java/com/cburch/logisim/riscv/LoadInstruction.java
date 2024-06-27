@@ -32,7 +32,7 @@ public class LoadInstruction {
         }
     }
 
-    public static void fetch(rv32imData hartData) {
+    public static void performAddressing(rv32imData hartData) {
         hartData.setFetching(false);
         hartData.setAddressing(true);
 

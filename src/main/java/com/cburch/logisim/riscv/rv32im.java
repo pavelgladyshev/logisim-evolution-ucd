@@ -17,6 +17,7 @@ import java.awt.*;
 
 import static com.cburch.logisim.riscv.CpuDrawSupport.*;
 import static com.cburch.logisim.std.Strings.S;
+import static java.lang.Thread.sleep;
 
 /**
  * Initial stab at RISC-V rv32im cpu component. All of the code relevant to state, though,
@@ -157,6 +158,10 @@ class rv32im extends InstanceFactory {
       }
     }
 
+    if(cur.intermixFlag) {
+        StoreInstruction.storeData(cur, state.getPortValue(DATA_IN).toLongValue());
+    }
+
     // check if clock signal is changing from low/false to high/true
     final var trigger = cur.updateClock(state.getPortValue(0));
 
@@ -167,18 +172,26 @@ class rv32im extends InstanceFactory {
           cur.skipInstruction();
           return;
         }
-        // process state update, current values of input ports (e.g Data-In bus value)
-        // are passed to update() as parameters
-        cur.update(state.getPortValue(DATA_IN).toLongValue());
+
+        if(cur.intermixFlag) {
+          cur.getPC().increment();
+          cur.fetchNextInstruction();
+          cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
+          cur.intermixFlag = false;
+        }
+        else {
+          // process state update, current values of input ports (e.g Data-In bus value)
+          // are passed to update() as parameters
+          cur.update(state.getPortValue(DATA_IN).toLongValue());
+        }
     }
 
-    // set output port values according to the current cpu state (possibly after an update)
-    state.setPort(ADDRESS,cur.getAddress(),9);
-    state.setPort(DATA_OUT,cur.getOutputData(),9);
+      state.setPort(ADDRESS, cur.getAddress(), 9);
+      state.setPort(DATA_OUT, cur.getOutputData(), 9);
 
-    // To Do: mix outputData into DATA_IN according to 4 least significant bits of address and output data width!!!
-    state.setPort(MEMREAD, cur.getMemRead(), 9);
-    state.setPort(MEMWRITE, cur.getMemWrite(), 9);
-    state.setPort(SYNC, cur.getIsSync(), 9);
+      // To Do: mix outputData into DATA_IN according to 4 least significant bits of address and output data width!!!
+      state.setPort(MEMREAD, cur.getMemRead(), 9);
+      state.setPort(MEMWRITE, cur.getMemWrite(), 9);
+      state.setPort(SYNC, cur.getIsSync(), 9);
   }
 }
