@@ -16,14 +16,15 @@ public class StoreInstruction {
     }
 
     public static void latch(rv32imData hartData, long data) {
+        System.out.println("X" + newData + " " + data);
         StoreInstruction.storeData(hartData, data);
         hartData.setOutputDataWidth(4);
-        hartData.setMemRead(Value.FALSE);
+        hartData.setMemRead(Value.TRUE);
         hartData.setMemWrite(Value.TRUE);
         hartData.setIsSync(Value.TRUE);
     }
 
-    public static void fetch(rv32imData hartData) {
+    public static void performAddressing(rv32imData hartData, long data) {
         hartData.setFetching(false);
         hartData.setAddressing(true);
 
@@ -37,14 +38,22 @@ public class StoreInstruction {
         if (mode == Mode.HALF) {
             if (address % 4 != 1 && address % 4 != 3) {
                 hartData.halt();
+                hartData.setMemWrite(Value.FALSE);
+                return;
             }
         }
 
         if (mode == Mode.WORD) {
             if (address % 4 != 2) {
                 hartData.halt();
+                hartData.setMemRead(Value.TRUE);
+                return;
             }
         }
+
+        hartData.setMemRead(Value.TRUE);
+        hartData.setMemWrite(Value.TRUE);
+        hartData.setIsSync(Value.TRUE);
 
     }
 
@@ -52,7 +61,7 @@ public class StoreInstruction {
         InstructionRegister ir = hartData.getIR();
         int rs2 = ir.rs2();
         long data = hartData.getX(rs2);
-        Value result = Value.createUnknown(BitWidth.create(32));
+        Value result = Value.createKnown(32, 0);
 
         switch (ir.func3()) {
             case 0x0:  // sb rs2, imm(rs1)
@@ -72,6 +81,8 @@ public class StoreInstruction {
             default:
                 hartData.halt();
         }
+
+        System.out.println(result);
         return result;
     }
 

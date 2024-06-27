@@ -58,9 +58,6 @@ class rv32imData implements InstanceData, Cloneable {
     this.x = new IntegerRegisters();
     this.cpuState = CPUState.OPERATIONAL;
 
-    x.set(2, 0x7fffeffc);
-    x.set(3, 0x10008000);
-
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -72,7 +69,6 @@ class rv32imData implements InstanceData, Cloneable {
    {
      fetching = true;
      addressing = false;
-     flag = false;
 
      // Values for outputs fetching instruction
      address = Value.createKnown(32,pc.get());
@@ -123,17 +119,14 @@ class rv32imData implements InstanceData, Cloneable {
     return old == Value.FALSE && value == Value.TRUE;
   }
 
+  public boolean intermixFlag = false;
   /** reset CPU state to initial values */
   public void reset(long pcInit) {
      pc.set(pcInit);
   }
 
-  boolean flag = false;
-
   /** update CPU state (execute) */
   public void update(long dataIn) {
-
-    if(flag) {flag = false; pc.increment(); fetchNextInstruction(); return; }
 
     if (fetching) { ir.set(dataIn); }
 
@@ -150,7 +143,7 @@ class rv32imData implements InstanceData, Cloneable {
         break;
       case 0x03:  // load instruction (I-type)
         if(!addressing) {
-          LoadInstruction.fetch(this);
+          LoadInstruction.performAddressing(this);
         }
         else {
           LoadInstruction.latch(this, dataIn);
@@ -160,11 +153,8 @@ class rv32imData implements InstanceData, Cloneable {
         break;
       case 0x23:  // storing instruction (S-type)
         if(!addressing) {
-          StoreInstruction.fetch(this);
-        }
-        else {
-          StoreInstruction.latch(this, dataIn);
-          flag = true;
+          StoreInstruction.performAddressing(this, dataIn);
+          intermixFlag = !(cpuState == CPUState.HALTED);
         }
         break;
       case 0x63:  // branch instruction (B-type)

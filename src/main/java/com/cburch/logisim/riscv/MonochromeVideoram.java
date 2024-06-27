@@ -5,8 +5,6 @@ import com.cburch.logisim.data.Bounds;
 import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.*;
 
-import javax.xml.validation.Validator;
-
 import static com.cburch.logisim.std.Strings.S;
 
 public class MonochromeVideoram extends InstanceFactory {
@@ -63,10 +61,9 @@ public class MonochromeVideoram extends InstanceFactory {
     @Override
     public void propagate(InstanceState state) {
 
-
         final var cur = VideoramRegisters.get(state);
 
-        if(state.getPortValue(RESET) == Value.TRUE) {
+        if (state.getPortValue(RESET) == Value.TRUE) {
             for (int i = 0; i < 32; i++) {
                 cur.set(i, 0);
             }
@@ -86,9 +83,7 @@ public class MonochromeVideoram extends InstanceFactory {
         }
 
         for (int i = 0; i < 32; i++) {
-            System.out.print(cur.get(i) + " ");
             state.setPort(i + 6, Value.createKnown(32, cur.get(i)), 9);
         }
-        System.out.println();
     }
 }

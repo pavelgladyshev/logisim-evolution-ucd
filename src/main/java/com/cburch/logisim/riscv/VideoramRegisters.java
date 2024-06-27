@@ -4,7 +4,9 @@ import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
 
 public class VideoramRegisters implements InstanceData, Cloneable {
-    long registers[] = new long[] {0,0,0,0,0,0,0,0,0,0,
+    long registers[] =
+            new long[]
+            {0,0,0,0,0,0,0,0,0,0,
             0,0,0,0,0,0,0,0,0,0,
             0,0,0,0,0,0,0,0,0,0,
             0,0};
@@ -15,6 +17,7 @@ public class VideoramRegisters implements InstanceData, Cloneable {
             registers[i] = 0;
         }
     }
+
     @Override
     public Object clone() {
         return null;
