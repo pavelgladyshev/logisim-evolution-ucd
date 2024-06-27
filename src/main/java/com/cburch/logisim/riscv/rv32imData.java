@@ -16,12 +16,13 @@ import com.cburch.logisim.instance.InstanceState;
 
 /** Represents the state of a cpu. */
 class rv32imData implements InstanceData, Cloneable {
+
   /** The last input values observed. */
   private Value lastClock;
+  private long lastDataIn;
 
   /** Output values */
   static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
-
   private Value address;          // value to be placed on the address bus;
   private Value outputData;       // value to be placed on data bus
   private int outputDataWidth;    // width of the data to be written in bytes (1,2,or 4)
@@ -38,13 +39,14 @@ class rv32imData implements InstanceData, Cloneable {
   private final InstructionRegister ir;
   private final IntegerRegisters x;
 
-  private CPUState cpuState;
-
   /** Enum representing CPU states */
+  private CPUState cpuState;
   public enum CPUState {
     OPERATIONAL,
     HALTED
   }
+
+  private boolean intermixFlag;
 
   // More To Do
 
@@ -57,6 +59,7 @@ class rv32imData implements InstanceData, Cloneable {
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
     this.cpuState = CPUState.OPERATIONAL;
+    this.intermixFlag = false;
 
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
@@ -119,7 +122,6 @@ class rv32imData implements InstanceData, Cloneable {
     return old == Value.FALSE && value == Value.TRUE;
   }
 
-  public boolean intermixFlag = false;
   /** reset CPU state to initial values */
   public void reset(long pcInit) {
      pc.set(pcInit);
@@ -128,7 +130,7 @@ class rv32imData implements InstanceData, Cloneable {
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
-    if (fetching) { ir.set(dataIn); }
+    if (fetching) { lastDataIn = dataIn; ir.set(dataIn); }
 
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
@@ -144,18 +146,15 @@ class rv32imData implements InstanceData, Cloneable {
       case 0x03:  // load instruction (I-type)
         if(!addressing) {
           LoadInstruction.performAddressing(this);
-        }
-        else {
+        } else {
           LoadInstruction.latch(this, dataIn);
           pc.increment();
           fetchNextInstruction();
         }
         break;
       case 0x23:  // storing instruction (S-type)
-        if(!addressing) {
-          StoreInstruction.performAddressing(this, dataIn);
-          intermixFlag = !(cpuState == CPUState.HALTED);
-        }
+        StoreInstruction.performAddressing(this);
+        intermixFlag = !(cpuState == CPUState.HALTED);  // WE ARE MIXING DATA ONLY WHEN INSTRUCTION DOESN'T HALT CPU!
         break;
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
@@ -192,13 +191,18 @@ class rv32imData implements InstanceData, Cloneable {
     cpuState = CPUState.HALTED;
   }
 
+  public void skipInstruction() {
+    pc.increment();
+    fetchNextInstruction();
+  }
+
+  /** getters and setters*/
+  public long getLastDataIn() { return lastDataIn; }
   public Value getAddress() { return address; }
-  public void setAddress(Value newAddress) { address = newAddress; }
   public Value getOutputData() { return outputData; }
+  public int getOutputDataWidth() { return outputDataWidth; }
   public Value getMemRead() { return memRead; }
   public Value getMemWrite() { return memWrite;  }
-
-  /** get last value of dataIn */
   public ProgramCounter getPC() { return pc; }
   public CPUState getCpuState() { return cpuState; }
   public InstructionRegister getIR() { return ir; }
@@ -206,13 +210,15 @@ class rv32imData implements InstanceData, Cloneable {
   public long getX(int index) { return x.get(index); }
   public void setX(int index, long value) { x.set(index,value); }
   public boolean getAddressing() { return addressing; }
+  public boolean getIntermixFlag() { return intermixFlag; }
+  public void setOutputData(Value value) { outputData = value; }
   public void setCpuState(CPUState newCpuState) { cpuState = newCpuState; }
   public void setFetching(boolean value) { fetching = value; }
   public void setAddressing(boolean value) { addressing = value; }
-  public void setOutputData(Value value) { outputData = value; }
+  public void setAddress(Value newAddress) { address = newAddress; }
   public void setOutputDataWidth(int value) { outputDataWidth = value; }
   public void setMemRead(Value value) { memRead = value; }
   public void setMemWrite(Value value) { memWrite = value; }
   public void setIsSync(Value value) { isSync = value; }
-  public void skipInstruction() { pc.increment(); fetchNextInstruction(); }
+  public void setIntermixFlag(boolean value) { intermixFlag = value; }
 }

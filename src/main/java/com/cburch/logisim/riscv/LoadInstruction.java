@@ -45,13 +45,13 @@ public class LoadInstruction {
         hartData.setIsSync(Value.TRUE);
     }
 
-    private static long getUnsignedDataByte(long data, long address){
+    private static long getUnsignedDataByte(long data, long address) {
         long shift = address & 3;
         long mask = 0xffL << shift*8;
         return (data & mask) >>> (shift * 8);
     }
 
-    private static long getUnsignedDataHalf(long data, long address){
+    private static long getUnsignedDataHalf(long data, long address) {
         long shift = address & 3;
         long mask = 0xffffL << shift*8;
         return (data & mask) >>> (shift * 8);

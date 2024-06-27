@@ -158,8 +158,8 @@ class rv32im extends InstanceFactory {
       }
     }
 
-    if(cur.intermixFlag) {
-        StoreInstruction.storeData(cur, state.getPortValue(DATA_IN).toLongValue());
+    if(cur.getIntermixFlag()) {
+        StoreInstruction.storeIntermixedData(cur, state.getPortValue(DATA_IN).toLongValue());
     }
 
     // check if clock signal is changing from low/false to high/true
@@ -173,13 +173,12 @@ class rv32im extends InstanceFactory {
           return;
         }
 
-        if(cur.intermixFlag) {
+        if (cur.getIntermixFlag()) {
           cur.getPC().increment();
           cur.fetchNextInstruction();
           cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
-          cur.intermixFlag = false;
-        }
-        else {
+          cur.setIntermixFlag(false);
+        } else {
           // process state update, current values of input ports (e.g Data-In bus value)
           // are passed to update() as parameters
           cur.update(state.getPortValue(DATA_IN).toLongValue());

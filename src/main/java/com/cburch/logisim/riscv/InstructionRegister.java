@@ -26,7 +26,6 @@ public class InstructionRegister {
     public int func7() { return (int) ((value >> 25) & ((1 << 7)-1)); } // value[31:25]
 
     // I-type additional fields
-
     public long imm_I() {  // sign-extended immediate field of I-type instruction
         long res = ((value >> 20) & ((1 << 12) - 1)); // value[31:20], zero extended
         res = (res ^ 0x800) - 0x800; // sign-extend 12 bit integer.
@@ -34,14 +33,12 @@ public class InstructionRegister {
     }
 
     // S-type additional fields
-
     public long imm_S() { return ((func7() << 5) | func3()); }      // value[31:25].value[11:7]
 
     // U-type additional fields
     public long imm_U() { return ( (value & 0xfffff000L) ^ 0x80000000L) - 0x80000000L; } // value[31:12], sign extended
 
     // B-type additional fields
-
     public long imm_B() {
         long imm10_5 = (value >> 25) & 0x3F; // value[30:25]
         long imm_odd = (value >> 7) & 0x1; // value [7]
@@ -51,7 +48,6 @@ public class InstructionRegister {
     }
 
     // J-type additional fields
-
     public long imm_J() {  // sign-extended immediate field of J-type instruction
         long res = ((value >> 20) & ((1 << 11) - 2)); // value[30:21] (imm[10:1])
         res |= ((value >> 9) & ((1 << 11)));          // value[20] (imm[11])

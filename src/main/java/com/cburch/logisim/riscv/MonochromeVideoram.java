@@ -71,8 +71,7 @@ public class MonochromeVideoram extends InstanceFactory {
 
         if (state.getPortValue(LOAD) == Value.TRUE) {
             state.setPort(DATA_OUT, Value.createKnown(cur.get((int) state.getPortValue(ADDRESS).toLongValue())), 9);
-        }
-        else {
+        } else {
             state.setPort(DATA_OUT, HiZ32, 9);
         }
 
