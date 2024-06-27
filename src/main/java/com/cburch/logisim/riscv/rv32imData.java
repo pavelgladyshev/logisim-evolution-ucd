@@ -17,9 +17,10 @@ import com.cburch.logisim.instance.InstanceState;
 /** Represents the state of a cpu. */
 class rv32imData implements InstanceData, Cloneable {
 
-  /** The last input values observed. */
+  /** The last values observed. */
   private Value lastClock;
   private long lastDataIn;
+  private long lastAddress;
 
   /** Output values */
   static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
@@ -30,9 +31,11 @@ class rv32imData implements InstanceData, Cloneable {
   private Value memWrite;
   private Value isSync;
 
-  /** Boolean */
+  /** Boolean flags */
   private boolean fetching;
   private boolean addressing;
+  private boolean intermixFlag;
+  private boolean pressedContinue;
 
   /** Registers */
   private final ProgramCounter pc;
@@ -46,8 +49,6 @@ class rv32imData implements InstanceData, Cloneable {
     HALTED
   }
 
-  private boolean intermixFlag;
-
   // More To Do
 
   /** Constructs a state with the given values. */
@@ -60,6 +61,7 @@ class rv32imData implements InstanceData, Cloneable {
     this.x = new IntegerRegisters();
     this.cpuState = CPUState.OPERATIONAL;
     this.intermixFlag = false;
+    this.pressedContinue = false;
 
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
@@ -130,7 +132,7 @@ class rv32imData implements InstanceData, Cloneable {
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
-    if (fetching) { lastDataIn = dataIn; ir.set(dataIn); }
+    if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
 
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
@@ -154,7 +156,7 @@ class rv32imData implements InstanceData, Cloneable {
         break;
       case 0x23:  // storing instruction (S-type)
         StoreInstruction.performAddressing(this);
-        intermixFlag = !(cpuState == CPUState.HALTED);  // WE ARE MIXING DATA ONLY WHEN INSTRUCTION DOESN'T HALT CPU!
+        intermixFlag = (cpuState == CPUState.OPERATIONAL);  // WE ARE MIXING DATA ONLY WHEN INSTRUCTION DOESN'T HALT CPU!
         break;
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
@@ -162,7 +164,7 @@ class rv32imData implements InstanceData, Cloneable {
         break;
       case 0x6F:  // Jump And Link (J-Type)
         JumpAndLink.link(this); //jal rd,label
-        pc.set((pc.value + ir.imm_J()) & 0xffffffff);
+        pc.set((pc.get() + ir.imm_J()) & 0xffffffff);
         fetchNextInstruction();
         break;
       case 0x67:  // Jump And Link Reg (I-Type)
@@ -176,7 +178,7 @@ class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x17:  // Add Upper Immediate to PC (U-type)
-        setX(ir.rd(), (pc.value + ir.imm_U())); //auipc rd,imm_U
+        setX(ir.rd(), (pc.get() + ir.imm_U())); //auipc rd,imm_U
         pc.increment();
         fetchNextInstruction();
         break;
@@ -198,6 +200,7 @@ class rv32imData implements InstanceData, Cloneable {
 
   /** getters and setters*/
   public long getLastDataIn() { return lastDataIn; }
+  public long getLastAddress() { return lastAddress; }
   public Value getAddress() { return address; }
   public Value getOutputData() { return outputData; }
   public int getOutputDataWidth() { return outputDataWidth; }
@@ -211,6 +214,10 @@ class rv32imData implements InstanceData, Cloneable {
   public void setX(int index, long value) { x.set(index,value); }
   public boolean getAddressing() { return addressing; }
   public boolean getIntermixFlag() { return intermixFlag; }
+  public boolean getPressedContinue() { return pressedContinue; }
+
+  public void setLastDataIn(long value) { lastDataIn = value; }
+  public void setLastAddress(long value) { lastAddress = value; }
   public void setOutputData(Value value) { outputData = value; }
   public void setCpuState(CPUState newCpuState) { cpuState = newCpuState; }
   public void setFetching(boolean value) { fetching = value; }
@@ -221,4 +228,5 @@ class rv32imData implements InstanceData, Cloneable {
   public void setMemWrite(Value value) { memWrite = value; }
   public void setIsSync(Value value) { isSync = value; }
   public void setIntermixFlag(boolean value) { intermixFlag = value; }
+  public void setPressedContinue(boolean value) { pressedContinue = value; }
 }

@@ -17,7 +17,6 @@ import java.awt.*;
 
 import static com.cburch.logisim.riscv.CpuDrawSupport.*;
 import static com.cburch.logisim.std.Strings.S;
-import static java.lang.Thread.sleep;
 
 /**
  * Initial stab at RISC-V rv32im cpu component. All of the code relevant to state, though,
@@ -53,11 +52,9 @@ class rv32im extends InstanceFactory {
   // rv32im object is ever created, and its job is to manage all
   // instances that appear in any circuits.
 
-  private static boolean pressedContinue = false;
-
   public rv32im() {
     super(_ID);
-    setOffsetBounds(Bounds.create(-60, -20, 50+130, 80 + 495 + 30 + 10 + 60));
+    setOffsetBounds(Bounds.create(-60, -20, 180, 675));
 
     Port ps[] = new Port[9];
 
@@ -115,26 +112,22 @@ class rv32im extends InstanceFactory {
     painter.drawPort(7); // draw port 7 as just a dot
     painter.drawPort(8); // draw port 8 as just a dot
 
-    // Display the current state To-Do.
-    // if the context says not to show state (as when generating
+    // Display the current state.
+    // If the context says not to show state (as when generating
     // printer output), then skip this.
     if (painter.getShowState()) {
       final var state = rv32imData.get(painter);
       final var bds = painter.getBounds();
       final var graphics = (Graphics2D) painter.getGraphics();
       final var posX = bds.getX() + 10;
-      final var posY = bds.getY() + 110 + 60;
+      final var posY = bds.getY() + 170;
 
       Font font = new Font("SansSerif", Font.BOLD, 20);
       GraphicsUtil.drawText(graphics, font,"RISC-V RV32IM", posX+80, posY-127,0,0, Color.black, Color.WHITE);
 
       drawHexReg(graphics, posX, posY - 40, false, (int) state.getPC().get(), "PC", true);
-
-      // For Debugging purposes
-//      drawHexReg(graphics, posX, posY - 90, false, (int) state.getLastDataIn(), "LD", true);
-      drawHexReg(graphics, posX, posY - 80, false, (int) state.getOutputData().toLongValue(), "OUTPUT", true);
-      drawHexReg(graphics, posX+80, posY - 80, false, (int) state.getAddress().toLongValue(), "Addr", true);
-
+      drawHexReg(graphics, posX, posY-80, false, (int) state.getOutputData().toLongValue(), "OUTPUT", true);
+      drawHexReg(graphics, posX+80, posY-80, false, (int) state.getAddress().toLongValue(), "Addr", true);
       drawRegisters(graphics, posX, posY, false, state, painter.getAttributeValue(ATTR_HEX_REGS));
       drawCpuState(graphics, posX+80, posY-40, false, "CPU state", state.getCpuState());
     }
@@ -143,54 +136,86 @@ class rv32im extends InstanceFactory {
   @Override
   public void propagate(InstanceState state) {
 
-    if (state.getPortValue(RESET) == Value.TRUE) {
-      state.setData(null); // if reset input is active, clear out component data
-    }
+    // Checks reset port. If active -> clears out component data
+    checkReset(state);
 
     // This helper method will end up creating a rv32imData object if one doesn't already exist.
     final var cur = rv32imData.get(state);
 
-    if (cur.getCpuState() == rv32imData.CPUState.HALTED)
-    {
-      if (state.getPortValue(CONTINUE) == Value.TRUE) {
-        pressedContinue = true;
-        cur.setIsSync(Value.TRUE);
-      }
-    }
+    // Check if continue button is pressed and mark flag to change CPU state on rising edge
+    // of clock cycle
+    checkContinuePressed(state, cur);
 
-    if(cur.getIntermixFlag()) {
-        StoreInstruction.storeIntermixedData(cur, state.getPortValue(DATA_IN).toLongValue());
-    }
+    // Check if intermixing data before 2nd clock cycle and
+    // store intermix data when needed
+    checkIntermixData(state, cur);
 
-    // check if clock signal is changing from low/false to high/true
+    // Check if clock signal is changing from low/false to high/true
     final var trigger = cur.updateClock(state.getPortValue(0));
 
     if (trigger) {
-        if (pressedContinue) {
-          pressedContinue = false;
-          cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
-          cur.skipInstruction();
+
+        if (cur.getPressedContinue()) {
+          resumeCPU(cur);
           return;
         }
 
         if (cur.getIntermixFlag()) {
-          cur.getPC().increment();
-          cur.fetchNextInstruction();
-          cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
-          cur.setIntermixFlag(false);
+          // 2nd clock cycle finishes intermixing:
+          // fetches new data, updates PC
+          finishIntermixing(cur);
         } else {
           // process state update, current values of input ports (e.g Data-In bus value)
           // are passed to update() as parameters
           cur.update(state.getPortValue(DATA_IN).toLongValue());
         }
+
     }
 
-      state.setPort(ADDRESS, cur.getAddress(), 9);
-      state.setPort(DATA_OUT, cur.getOutputData(), 9);
+    updatePorts(state, cur);
 
-      // To Do: mix outputData into DATA_IN according to 4 least significant bits of address and output data width!!!
-      state.setPort(MEMREAD, cur.getMemRead(), 9);
-      state.setPort(MEMWRITE, cur.getMemWrite(), 9);
-      state.setPort(SYNC, cur.getIsSync(), 9);
+  }
+
+  /** Helper functions */
+  private void checkReset(InstanceState state) {
+    if (state.getPortValue(RESET) == Value.TRUE) {
+      state.setData(null);
+    }
+  }
+
+  private void checkContinuePressed(InstanceState state, rv32imData cur) {
+    if (cur.getCpuState() == rv32imData.CPUState.HALTED) {
+      if (state.getPortValue(CONTINUE) == Value.TRUE) {
+        cur.setPressedContinue(true);
+        cur.setIsSync(Value.TRUE);
+      }
+    }
+  }
+
+  private void checkIntermixData(InstanceState state, rv32imData cur) {
+    if(cur.getIntermixFlag()) {
+      StoreInstruction.storeIntermixedData(cur, state.getPortValue(DATA_IN).toLongValue());
+    }
+  }
+
+  // CALL THIS METHOD ON THE RISING EDGE OF THE CLOCK ONLY!
+  private void finishIntermixing(rv32imData cur) {
+    cur.getPC().increment();
+    cur.fetchNextInstruction();
+    cur.setIntermixFlag(false);
+  }
+
+  private void updatePorts(InstanceState state, rv32imData cur) {
+    state.setPort(ADDRESS, cur.getAddress(), 9);
+    state.setPort(DATA_OUT, cur.getOutputData(), 9);
+    state.setPort(MEMREAD, cur.getMemRead(), 9);
+    state.setPort(MEMWRITE, cur.getMemWrite(), 9);
+    state.setPort(SYNC, cur.getIsSync(), 9);
+  }
+
+  private void resumeCPU(rv32imData cur) {
+    cur.setPressedContinue(false);
+    cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
+    cur.skipInstruction();
   }
 }
