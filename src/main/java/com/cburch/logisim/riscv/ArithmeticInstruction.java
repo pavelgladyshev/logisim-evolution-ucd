@@ -29,6 +29,8 @@ public class ArithmeticInstruction {
                     case 0x20: // srai rd,rs1,shamt_I
                         hartData.setX(ir.rd(), rs1 >> ir.rs2());
                         break;
+                    default:
+                        hartData.halt();
                 }
                 break;
             case 0x6:   // ori rd,rs1,imm_I
@@ -37,6 +39,8 @@ public class ArithmeticInstruction {
             case 0x7:   // andi rd,rs1,imm_I
                 hartData.setX(ir.rd(), rs1 & ir.imm_I());
                 break;
+            default:
+                hartData.halt();
         }
     }
 
@@ -88,12 +92,11 @@ public class ArithmeticInstruction {
             case 0x7:   // and rd,rs1,rs2
                 hartData.setX(ir.rd(),rs1 & rs2);
                 break;
+            default:
+                hartData.halt();
         }
     }
 
-    private static long unsigned(long value){
-        return value & 0xffffffffL;
-    }
     private static void executeMultiplicationDivision(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
         long rs1 = hartData.getX(ir.rs1());
@@ -123,11 +126,17 @@ public class ArithmeticInstruction {
             case 0x7:   // remu rd,rs1,rs2
                 hartData.setX(ir.rd(), Long.remainderUnsigned(rs1, rs2));
                 break;
+            default:
+                hartData.halt();
         }
     }
     public static void executeRegister(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
         if(ir.func7() == 0x1) executeMultiplicationDivision(hartData);
         else executeArithmetic(hartData);
+    }
+
+    private static long unsigned(long value) {
+        return value & 0xffffffffL;
     }
 }

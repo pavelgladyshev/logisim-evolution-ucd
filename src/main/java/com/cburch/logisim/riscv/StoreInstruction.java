@@ -7,35 +7,28 @@ public class StoreInstruction {
 
     static long newData;
     static long address;
-    static Mode mode;
-
-    enum Mode {
-        BYTE,
-        HALF,
-        WORD
-    }
 
     public static void latch(rv32imData hartData, long data) {
         System.out.println("X" + newData + " " + data);
-        StoreInstruction.storeData(hartData, data);
+        StoreInstruction.storeIntermixedData(hartData, data);
         hartData.setOutputDataWidth(4);
         hartData.setMemRead(Value.TRUE);
         hartData.setMemWrite(Value.TRUE);
         hartData.setIsSync(Value.TRUE);
     }
 
-    public static void performAddressing(rv32imData hartData, long data) {
+    public static void performAddressing(rv32imData hartData) {
         hartData.setFetching(false);
         hartData.setAddressing(true);
 
-        newData = getData(hartData).toLongValue();
+        newData = getNewData(hartData).toLongValue();
         address = getAddress(hartData).toLongValue();
 
         // Values for outputs fetching data
         hartData.setAddress(Value.createKnown(32, address - (address % 4) ) );
 
         // Check for correct offset
-        if (mode == Mode.HALF) {
+        if (hartData.getOutputDataWidth() == 4) {
             if (address % 4 != 1 && address % 4 != 3) {
                 hartData.halt();
                 hartData.setMemWrite(Value.FALSE);
@@ -43,10 +36,10 @@ public class StoreInstruction {
             }
         }
 
-        if (mode == Mode.WORD) {
+        if (hartData.getOutputDataWidth() == 8) {
             if (address % 4 != 2) {
                 hartData.halt();
-                hartData.setMemRead(Value.TRUE);
+                hartData.setMemWrite(Value.FALSE);
                 return;
             }
         }
@@ -57,7 +50,7 @@ public class StoreInstruction {
 
     }
 
-    public static Value getData(rv32imData hartData) {
+    public static Value getNewData(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
         int rs2 = ir.rs2();
         long data = hartData.getX(rs2);
@@ -65,30 +58,29 @@ public class StoreInstruction {
 
         switch (ir.func3()) {
             case 0x0:  // sb rs2, imm(rs1)
-                mode = Mode.BYTE;
+                hartData.setOutputDataWidth(1);
                 result = Value.createKnown(BitWidth.create(32),
                         data << (hartData.getAddress().toLongValue() & 0x3) * 8);
                 break;
             case 0x1:  // sh rs2, imm(rs1)
-                mode = Mode.HALF;
+                hartData.setOutputDataWidth(4);
                 result = Value.createKnown(BitWidth.create(32),
                         data << (hartData.getAddress().toLongValue() & 0x3) * 8);
                 break;
             case 0x2:  // sw rs2, imm(rs1)
-                mode = Mode.WORD;
+                hartData.setOutputDataWidth(8);
                 result = Value.createKnown(BitWidth.create(32), (data ^ 0x80000000L) - 0x80000000L);
                 break;
             default:
                 hartData.halt();
         }
 
-        System.out.println(result);
         return result;
     }
 
-    public static void storeData(rv32imData hartData, long data) {
-        switch (mode) {
-            case BYTE:
+    public static void storeIntermixedData(rv32imData hartData, long data) {
+        switch (hartData.getOutputDataWidth()) {
+            case 1:
                 if (address % 4 == 0) {
                     data -= (data & 0xFF);
                     hartData.setOutputData(Value.createKnown(32, data | newData));
@@ -104,7 +96,7 @@ public class StoreInstruction {
                 }
                 break;
 
-            case HALF:
+            case 4:
                 if (address % 4 == 1) {
                     data -= (data & 0xFFFF);
                     hartData.setOutputData(Value.createKnown(32, data | newData));
@@ -114,7 +106,7 @@ public class StoreInstruction {
                 }
                 break;
 
-            case WORD:
+            case 8:
                 hartData.setOutputData(Value.createKnown(32, newData));
                 break;
         }
