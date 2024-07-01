@@ -101,7 +101,47 @@ public class ArithmeticInstruction {
         InstructionRegister ir = hartData.getIR();
         long rs1 = hartData.getX(ir.rs1());
         long rs2 = hartData.getX(ir.rs2());
-        switch (ir.func3()){
+
+        // Refer to specification for division/mod by zero:
+        // https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf
+        // (page 36)
+
+        if (rs2 == 0) {
+
+            // div by zero
+            switch (ir.func3()) {
+                case 0x4:   // div by zero
+                    hartData.setX(ir.rd(), -1);
+                    return;
+                case 0x5:   // divu by zero
+                    hartData.setX(ir.rd(), ( ( (1L << 32) - 1) ^ 0x80000000L) - 0x80000000L);
+                    return;
+                case 0x6:   // rem by zero
+                case 0x7:   // remu by zero
+                    hartData.setX(ir.rd(), rs1);
+                    return;
+            }
+
+        }
+
+        // Overflow cases:
+        if (rs1 == ( ( (-(1L << 31)) ^ 0x80000000L) - 0x80000000L) || rs2 == -1) {
+
+            // div by zero
+            if(ir.func3() == 0x4) {
+                hartData.setX(ir.rd(), ( ( (1L << 32) - 1) ^ 0x80000000L) - 0x80000000L);
+                return;
+            }
+
+            // rem by zero
+            if(ir.func3() == 0x6) {
+                hartData.setX(ir.rd(), 0);
+                return;
+            }
+
+        }
+
+        switch (ir.func3()) {
             case 0x0:   // mul rd,rs1,rs2
                 hartData.setX(ir.rd(), ((unsigned(rs1 * rs2) ^ 0x80000000L) - 0x80000000L));
                 break;
