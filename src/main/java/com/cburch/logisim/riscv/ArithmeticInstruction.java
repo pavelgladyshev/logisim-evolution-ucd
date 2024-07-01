@@ -52,10 +52,10 @@ public class ArithmeticInstruction {
             case 0x0:
                 switch (ir.func7()) {
                     case 0x00:  // add rd,rs1,rs2
-                        hartData.setX(ir.rd(), rs1 + rs2);
+                        hartData.setX(ir.rd(), (int) (rs1 + rs2));
                         break;
                     case 0x20:  // sub rd,rs1,rs2
-                        hartData.setX(ir.rd(), rs1 - rs2);
+                        hartData.setX(ir.rd(), (int) (rs1 - rs2));
                         break;
                     default:
                         hartData.halt();
@@ -68,11 +68,10 @@ public class ArithmeticInstruction {
                 hartData.setX(ir.rd(), (rs1 < rs2) ? 1 : 0);
                 break;
             case 0x3:   // sltu rd,rs1,rs2
-                hartData.setX(ir.rd(),
-                        (Long.compareUnsigned(rs1,rs2) < 0) ? 1 : 0);
+                hartData.setX(ir.rd(), ((Integer.compareUnsigned((int)rs1,(int)rs2)) < 0) ? 1 : 0);
                 break;
             case 0x4:   // xor rd,rs1,rs2
-                hartData.setX(ir.rd(),rs1 ^ rs2);
+                hartData.setX(ir.rd(), rs1 ^ rs2);
                 break;
             case 0x5:
                 switch (ir.func7()) {
@@ -80,7 +79,7 @@ public class ArithmeticInstruction {
                         hartData.setX(ir.rd(), rs1 >>> (rs2 & 0x1f));
                         break;
                     case 0x20:  // sra rd,rs1,rs2
-                        hartData.setX(ir.rd(), rs1 >> (rs2 & 0x1f));
+                        hartData.setX(ir.rd(), (int) rs1 >> (rs2 & 0x1f));
                         break;
                     default:
                         hartData.halt();
