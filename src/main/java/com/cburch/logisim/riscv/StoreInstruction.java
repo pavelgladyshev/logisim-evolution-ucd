@@ -14,19 +14,19 @@ public class StoreInstruction {
 
         // Values for outputs fetching data
         hartData.setAddress(Value.createKnown(
-                32, hartData.getLastAddress() - get4LSB(hartData) ) );
+                32, hartData.getLastAddress() - get2LSB(hartData) ) );
 
         // Check for correct offset
-        if (hartData.getOutputDataWidth() == 4) {
-            if (get4LSB(hartData) != 1 && get4LSB(hartData) != 3) {
+        if (hartData.getOutputDataWidth() == 2) {
+            if (get2LSB(hartData) != 1 && get2LSB(hartData) != 3) {
                 hartData.halt();
                 hartData.setMemWrite(Value.FALSE);
                 return;
             }
         }
 
-        if (hartData.getOutputDataWidth() == 8) {
-            if (get4LSB(hartData) != 2) {
+        if (hartData.getOutputDataWidth() == 4) {
+            if (get2LSB(hartData) != 2) {
                 hartData.halt();
                 hartData.setMemWrite(Value.FALSE);
                 return;
@@ -42,32 +42,32 @@ public class StoreInstruction {
     public static void storeIntermixedData(rv32imData hartData, long data) {
         switch (hartData.getOutputDataWidth()) {
             case 1:
-                if (get4LSB(hartData) == 0) {
+                if (get2LSB(hartData) == 0) {
                     data -= (data & 0xFF);
                     hartData.setOutputData(Value.createKnown(32, data | hartData.getLastDataIn()));
-                } else if (get4LSB(hartData) == 1) {
+                } else if (get2LSB(hartData) == 1) {
                     data -= (data & 0xFF00);
                     hartData.setOutputData(Value.createKnown(32, data | (hartData.getLastDataIn() << 8) ) );
-                } else if (get4LSB(hartData) == 2) {
+                } else if (get2LSB(hartData) == 2) {
                     data -= (data & 0xFF0000);
                     hartData.setOutputData(Value.createKnown(32, data | (hartData.getLastDataIn() << 16) ) );
-                } else if (get4LSB(hartData) == 3) {
+                } else if (get2LSB(hartData) == 3) {
                     data -= (data & 0xFF000000L);
                     hartData.setOutputData(Value.createKnown(32, data | (hartData.getLastDataIn() << 24) ) );
                 }
                 break;
 
-            case 4:
-                if (get4LSB(hartData) == 1) {
+            case 2:
+                if (get2LSB(hartData) == 1) {
                     data -= (data & 0xFFFF);
                     hartData.setOutputData(Value.createKnown(32, data | hartData.getLastDataIn()));
-                } else if (get4LSB(hartData) == 3) {
+                } else if (get2LSB(hartData) == 3) {
                     data -= (data & 0xFFFF0000L);
                     hartData.setOutputData(Value.createKnown(32, data | (hartData.getLastDataIn() << 16) ) );
                 }
                 break;
 
-            case 8:
+            case 4:
                 hartData.setOutputData(Value.createKnown(32, hartData.getLastDataIn()));
                 break;
         }
@@ -86,12 +86,12 @@ public class StoreInstruction {
                         data << (hartData.getAddress().toLongValue() & 0x3) * 8);
                 break;
             case 0x1:  // sh rs2, imm(rs1)
-                hartData.setOutputDataWidth(4);
+                hartData.setOutputDataWidth(2);
                 result = Value.createKnown(BitWidth.create(32),
                         data << (hartData.getAddress().toLongValue() & 0x3) * 8);
                 break;
             case 0x2:  // sw rs2, imm(rs1)
-                hartData.setOutputDataWidth(8);
+                hartData.setOutputDataWidth(4);
                 result = Value.createKnown(BitWidth.create(32), (data ^ 0x80000000L) - 0x80000000L);
                 break;
             default:
@@ -110,7 +110,7 @@ public class StoreInstruction {
         return Value.createKnown(BitWidth.create(32), address);
     }
 
-    private static long get4LSB(rv32imData hartData) {
+    private static long get2LSB(rv32imData hartData) {
         return (hartData.getLastAddress() & 0x3);
     }
 
