@@ -5,7 +5,7 @@ import org.junit.jupiter.api.*;
 import static com.cburch.logisim.riscv.rv32imDataTest.verifyRegisterRange;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class TestJumpAndLink {
+public class JumpAndLinkTest {
 
     rv32imData cpu;
     private long[] expected;

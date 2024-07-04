@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static com.cburch.logisim.riscv.rv32imDataTest.verifyRegisterRange;
 
-public class TestArithmeticTypeR {
+public class ArithmeticTypeRTest {
 
     rv32imData cpu;
 

@@ -23,6 +23,7 @@ public class MonochromeVideoram extends InstanceFactory {
     public static final int LOAD = 3;
     public static final int DATA_OUT = 4;
     public static final int RESET = 5;
+    public static final int CLOCK = 6;
 
     static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
 
@@ -30,13 +31,14 @@ public class MonochromeVideoram extends InstanceFactory {
         super(_ID);
         setOffsetBounds(Bounds.create(-30, -10, 30, 330));
 
-        Port ps[] = new Port[38];
+        Port ps[] = new Port[39];
         ps[STORE] = new Port(-30, 140, Port.INPUT, 1);
         ps[ADDRESS] = new Port(-30, 150, Port.INPUT, 5);
         ps[DATA_IN] = new Port(-30, 160, Port.INPUT, 32);
         ps[LOAD] = new Port(-30, 170, Port.INPUT, 1);
         ps[DATA_OUT] = new Port(-20, -10, Port.OUTPUT, 32);
         ps[RESET] = new Port(-20, 320, Port.INPUT, 1);
+        ps[CLOCK] = new Port(-10, 320, Port.INPUT, 1);
 
         ps[STORE].setToolTip(S.getter("monoRamStore"));
         ps[ADDRESS].setToolTip(S.getter("monoRamAddress"));
@@ -44,10 +46,11 @@ public class MonochromeVideoram extends InstanceFactory {
         ps[LOAD].setToolTip(S.getter("monoRamLoad"));
         ps[DATA_OUT].setToolTip(S.getter("monoRamDataOut"));
         ps[RESET].setToolTip(S.getter("monoRamReset"));
+        ps[CLOCK].setToolTip(S.getter("monoRamClock"));
 
         for (int i = 0; i < 32; i++) {
-            ps[i+6] = new Port(0, i*10, Port.OUTPUT, 32);
-            ps[i+6].setToolTip(S.getter("L_" + i));
+            ps[i+7] = new Port(0, i*10, Port.OUTPUT, 32);
+            ps[i+7].setToolTip(S.getter("L_" + i));
         }
         setPorts(ps);
     }
@@ -66,23 +69,23 @@ public class MonochromeVideoram extends InstanceFactory {
         if (state.getPortValue(RESET) == Value.TRUE) {
             for (int i = 0; i < 32; i++) {
                 cur.set(i, 0);
+                state.setPort(i + 7, Value.createKnown(32, cur.get(i)), 9);
             }
         }
 
-        if (state.getPortValue(LOAD) == Value.TRUE) {
+        final var trigger = cur.updateClock(state.getPortValue(CLOCK));
+
+        if (state.getPortValue(LOAD) == Value.TRUE && trigger) {
             state.setPort(DATA_OUT, Value.createKnown(cur.get((int) state.getPortValue(ADDRESS).toLongValue())), 9);
         } else {
             state.setPort(DATA_OUT, HiZ32, 9);
         }
 
-        if (state.getPortValue(STORE) == Value.TRUE) {
+        if (trigger && state.getPortValue(STORE) == Value.TRUE) {
             int index = (int) state.getPortValue(ADDRESS).toLongValue();
-            cur.set(index, state.getPortValue(DATA_IN).toLongValue());
-            state.setPort(index + 6, Value.createKnown(32, cur.get(index)), 9);
+            cur.set(index, (state.getPortValue(DATA_IN).toLongValue() ^ 0x80000000L) - 0x80000000L);
+            state.setPort(index + 7, Value.createKnown(32, cur.get(index)), 9);
         }
 
-        for (int i = 0; i < 32; i++) {
-            state.setPort(i + 6, Value.createKnown(32, cur.get(i)), 9);
-        }
     }
 }

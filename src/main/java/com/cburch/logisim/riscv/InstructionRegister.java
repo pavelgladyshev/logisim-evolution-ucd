@@ -33,7 +33,7 @@ public class InstructionRegister {
     }
 
     // S-type additional fields
-    public long imm_S() { return ((func7() << 5) | func3()); }      // value[31:25].value[11:7]
+    public long imm_S() { return ((func7() << 5) | rd()); }      // value[31:25].value[11:7]
 
     // U-type additional fields
     public long imm_U() { return ( (value & 0xfffff000L) ^ 0x80000000L) - 0x80000000L; } // value[31:12], sign extended
