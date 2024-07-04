@@ -18,7 +18,7 @@ public class StoreInstruction {
 
         // Check for correct offset
         if (hartData.getOutputDataWidth() == 2) {
-            if (get2LSB(hartData) != 1 && get2LSB(hartData) != 3) {
+            if (get2LSB(hartData) != 0 && get2LSB(hartData) != 2) {
                 hartData.halt();
                 hartData.setMemWrite(Value.FALSE);
                 return;
@@ -43,6 +43,7 @@ public class StoreInstruction {
     public static void storeIntermixedData(rv32imData hartData, long data) {
         switch (hartData.getOutputDataWidth()) {
             case 1:
+                hartData.setLastDataIn(hartData.getLastDataIn() & 0xFF);
                 if (get2LSB(hartData) == 0) {
                     data -= (data & 0xFF);
                     hartData.setOutputData(Value.createKnown(32, data | hartData.getLastDataIn()));
@@ -59,10 +60,11 @@ public class StoreInstruction {
                 break;
 
             case 2:
-                if (get2LSB(hartData) == 1) {
+                hartData.setLastDataIn(hartData.getLastDataIn() & 0xFFFF);
+                if (get2LSB(hartData) == 0) {
                     data -= (data & 0xFFFF);
                     hartData.setOutputData(Value.createKnown(32, data | hartData.getLastDataIn()));
-                } else if (get2LSB(hartData) == 3) {
+                } else if (get2LSB(hartData) == 2) {
                     data -= (data & 0xFFFF0000L);
                     hartData.setOutputData(Value.createKnown(32, data | (hartData.getLastDataIn() << 16) ) );
                 }

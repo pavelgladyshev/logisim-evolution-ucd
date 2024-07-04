@@ -1,0 +1,15 @@
+li 	a0,0x78
+lui	a5,0x10010
+sb	a0,0(a5)
+sb	a0,1(a5)
+sb	a0,2(a5)
+sb	a0,3(a5)
+sb	a0,4(a5)
+sb	a0,5(a5)
+sb	a0,6(a5)
+sb	a0,7(a5)
+sb	a0,8(a5)
+sb	a0,9(a5)
+sb	a0,10(a5)
+sb	a0,11(a5)
+sb	a0,12(a5)

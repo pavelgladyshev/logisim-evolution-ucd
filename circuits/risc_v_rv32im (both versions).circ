@@ -403,9 +403,15 @@
       <a name="label" val="Data_out"/>
       <a name="width" val="32"/>
     </comp>
+    <comp lib="0" loc="(580,1180)" name="Clock"/>
+    <comp lib="0" loc="(580,1200)" name="Constant"/>
     <comp lib="0" loc="(580,70)" name="Tunnel">
       <a name="label" val="Address"/>
       <a name="width" val="32"/>
+    </comp>
+    <comp lib="0" loc="(610,1240)" name="Tunnel">
+      <a name="facing" val="east"/>
+      <a name="label" val="RST"/>
     </comp>
     <comp lib="0" loc="(610,140)" name="Splitter">
       <a name="appear" val="right"/>
@@ -511,14 +517,13 @@
       <a name="facing" val="east"/>
       <a name="label" val="MemRead"/>
     </comp>
-    <comp lib="0" loc="(720,1220)" name="Tunnel">
-      <a name="facing" val="north"/>
-      <a name="label" val="RST"/>
-    </comp>
     <comp lib="0" loc="(730,730)" name="Splitter">
       <a name="appear" val="center"/>
       <a name="fanout" val="8"/>
       <a name="incoming" val="8"/>
+    </comp>
+    <comp lib="0" loc="(750,1220)" name="Clock">
+      <a name="facing" val="west"/>
     </comp>
     <comp lib="0" loc="(750,360)" name="Clock"/>
     <comp lib="0" loc="(750,570)" name="Tunnel">
@@ -630,6 +635,7 @@
     <comp lib="1" loc="(670,1070)" name="AND Gate">
       <a name="size" val="30"/>
     </comp>
+    <comp lib="1" loc="(700,1220)" name="OR Gate"/>
     <comp lib="1" loc="(740,200)" name="AND Gate">
       <a name="size" val="30"/>
     </comp>
@@ -654,7 +660,7 @@
     <comp lib="11" loc="(260,70)" name="rv_32_im">
       <a name="resetAddress" val="0x400000"/>
     </comp>
-    <comp lib="11" loc="(740,890)" name="monochrome_videoram"/>
+    <comp lib="12" loc="(740,890)" name="Videoram_for_monochrome_display"/>
     <comp lib="3" loc="(1210,310)" name="Comparator">
       <a name="width" val="32"/>
     </comp>
@@ -687,6 +693,9 @@
       <a name="appearance" val="classic"/>
       <a name="asyncread" val="true"/>
       <a name="dataWidth" val="32"/>
+    </comp>
+    <comp lib="4" loc="(640,1180)" name="D Flip-Flop">
+      <a name="appearance" val="classic"/>
     </comp>
     <comp lib="4" loc="(780,280)" name="RAM">
       <a name="addrWidth" val="14"/>
@@ -998,6 +1007,8 @@ ffff82b7 2000313 52383 72a023 428293 450513 fff30313 fe0316e3
     <wire from="(560,940)" to="(560,980)"/>
     <wire from="(560,940)" to="(580,940)"/>
     <wire from="(560,980)" to="(570,980)"/>
+    <wire from="(580,1180)" to="(600,1180)"/>
+    <wire from="(580,1200)" to="(600,1200)"/>
     <wire from="(580,920)" to="(590,920)"/>
     <wire from="(580,930)" to="(580,940)"/>
     <wire from="(590,560)" to="(590,580)"/>
@@ -1005,6 +1016,7 @@ ffff82b7 2000313 52383 72a023 428293 450513 fff30313 fe0316e3
     <wire from="(590,580)" to="(640,580)"/>
     <wire from="(590,920)" to="(590,950)"/>
     <wire from="(590,950)" to="(690,950)"/>
+    <wire from="(610,1240)" to="(650,1240)"/>
     <wire from="(610,990)" to="(620,990)"/>
     <wire from="(620,1020)" to="(630,1020)"/>
     <wire from="(620,1040)" to="(640,1040)"/>
@@ -1021,6 +1033,7 @@ ffff82b7 2000313 52383 72a023 428293 450513 fff30313 fe0316e3
     <wire from="(630,330)" to="(640,330)"/>
     <wire from="(630,340)" to="(630,360)"/>
     <wire from="(630,360)" to="(640,360)"/>
+    <wire from="(640,1200)" to="(650,1200)"/>
     <wire from="(640,290)" to="(640,330)"/>
     <wire from="(640,290)" to="(780,290)"/>
     <wire from="(640,550)" to="(760,550)"/>
@@ -1044,6 +1057,7 @@ ffff82b7 2000313 52383 72a023 428293 450513 fff30313 fe0316e3
     <wire from="(690,410)" to="(690,430)"/>
     <wire from="(690,430)" to="(710,430)"/>
     <wire from="(690,950)" to="(690,1040)"/>
+    <wire from="(700,1220)" to="(720,1220)"/>
     <wire from="(700,320)" to="(700,370)"/>
     <wire from="(700,320)" to="(720,320)"/>
     <wire from="(700,370)" to="(700,410)"/>
@@ -1059,6 +1073,8 @@ ffff82b7 2000313 52383 72a023 428293 450513 fff30313 fe0316e3
     <wire from="(720,730)" to="(730,730)"/>
     <wire from="(720,850)" to="(1070,850)"/>
     <wire from="(720,850)" to="(720,880)"/>
+    <wire from="(730,1210)" to="(730,1220)"/>
+    <wire from="(730,1220)" to="(750,1220)"/>
     <wire from="(740,1000)" to="(760,1000)"/>
     <wire from="(740,1010)" to="(760,1010)"/>
     <wire from="(740,1020)" to="(760,1020)"/>
