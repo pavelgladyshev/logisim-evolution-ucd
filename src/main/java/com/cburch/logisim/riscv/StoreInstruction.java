@@ -26,7 +26,8 @@ public class StoreInstruction {
         }
 
         if (hartData.getOutputDataWidth() == 4) {
-            if (get2LSB(hartData) != 2) {
+            if (get2LSB(hartData) != 0) {
+                System.out.println(get2LSB(hartData));
                 hartData.halt();
                 hartData.setMemWrite(Value.FALSE);
                 return;
