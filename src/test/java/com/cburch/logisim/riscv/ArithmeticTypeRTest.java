@@ -4,7 +4,7 @@ import com.cburch.logisim.data.Value;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static com.cburch.logisim.riscv.rv32imDataTest.verifyRegisterRange;
+import static com.cburch.logisim.riscv.rv32imConstructorTest.verifyRegisterRange;
 
 public class ArithmeticTypeRTest {
 
