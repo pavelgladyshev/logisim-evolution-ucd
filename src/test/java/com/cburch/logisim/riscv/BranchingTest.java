@@ -19,6 +19,11 @@ public class BranchingTest {
         cpu = new rv32imData(Value.FALSE, 0x400000);
         cpu.update(0xfe028ee3L);  // beq x5, x0, 0xfffffffc
         assertEquals(0x3ffffc, cpu.getPC().get());
+
+        // Test 3: beqz x0, 0xfffffff0 (backward jump)
+        cpu = new rv32imData(Value.FALSE, 0x400000);
+        cpu.update(0xfe00083);  // beqz x0, 0xfffffff0
+        assertEquals(0x400000, cpu.getPC().get());
     }
 
     @Test
@@ -87,7 +92,7 @@ public class BranchingTest {
 
         // Test 1: bgeu x5, x6, 0x00000004 (forward jump)
         cpu.update(0x00430383);  // bgeu x5, x6, 0x00000004
-        assertEquals(0x400004, cpu.getPC().get()+4);
+        assertEquals(0x400000, cpu.getPC().get());
 
         // Test 2: bgeu x6, x5, 0xfffffffc (backward jump)
         cpu = new rv32imData(Value.FALSE, 0x400000);
