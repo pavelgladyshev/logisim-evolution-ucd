@@ -6,9 +6,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import static java.lang.System.out;
 
-public class rv32imConstructorTest {
+public class rv32imDataTest {
+
     @Test
-    void defaultContrustor_shouldProduceZeroedState() {
+    void defaultConstructor_shouldProduceZeroedState() {
         out.println("rv32imData test: default constructor should produce zeroed initial state with specified initial PC value");
 
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000);

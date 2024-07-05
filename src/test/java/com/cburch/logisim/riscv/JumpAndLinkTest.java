@@ -2,7 +2,7 @@ package com.cburch.logisim.riscv;
 
 import com.cburch.logisim.data.Value;
 import org.junit.jupiter.api.*;
-import static com.cburch.logisim.riscv.rv32imConstructorTest.verifyRegisterRange;
+import static com.cburch.logisim.riscv.rv32imDataTest.verifyRegisterRange;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class JumpAndLinkTest {

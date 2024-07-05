@@ -106,7 +106,6 @@ public class ArithmeticInstruction {
         // (page 36)
 
         if (rs2 == 0) {
-
             // div by zero
             switch (ir.func3()) {
                 case 0x4:   // div by zero
@@ -116,28 +115,26 @@ public class ArithmeticInstruction {
                     hartData.setX(ir.rd(), ( ( (1L << 32) - 1) ^ 0x80000000L) - 0x80000000L);
                     return;
                 case 0x6:   // rem by zero
+                    hartData.setX(ir.rd(), rs1);
+                    return;
                 case 0x7:   // remu by zero
                     hartData.setX(ir.rd(), rs1);
                     return;
             }
-
         }
 
-        // Overflow cases:
-        if (rs1 == ( ( (-(1L << 31)) ^ 0x80000000L) - 0x80000000L) || rs2 == -1) {
-
+        // Signed Overflow (−2^XLEN−1, is divided by −1):
+        if (rs1 == (Math.pow(-2,31)) && rs2 == -1) {
             // div by zero
             if(ir.func3() == 0x4) {
-                hartData.setX(ir.rd(), ( ( (1L << 32) - 1) ^ 0x80000000L) - 0x80000000L);
+                hartData.setX(ir.rd(), rs1);
                 return;
             }
-
             // rem by zero
             if(ir.func3() == 0x6) {
                 hartData.setX(ir.rd(), 0);
                 return;
             }
-
         }
 
         switch (ir.func3()) {
@@ -157,13 +154,13 @@ public class ArithmeticInstruction {
                 hartData.setX(ir.rd(), rs1/rs2);
                 break;
             case 0x5:   // divu rd,rs1,rs2
-                hartData.setX(ir.rd(), Long.divideUnsigned(rs1,rs2));
+                hartData.setX(ir.rd(), Integer.divideUnsigned((int)rs1,(int)rs2));
                 break;
             case 0x6:   // rem rd,rs1,rs2
                 hartData.setX(ir.rd(), rs1 % rs2);
                 break;
             case 0x7:   // remu rd,rs1,rs2
-                hartData.setX(ir.rd(), Long.remainderUnsigned(rs1, rs2));
+                hartData.setX(ir.rd(), Integer.remainderUnsigned((int)rs1,(int)rs2));
                 break;
             default:
                 hartData.halt();
