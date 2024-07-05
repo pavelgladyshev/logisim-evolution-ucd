@@ -75,15 +75,18 @@ public class MonochromeVideoram extends InstanceFactory {
 
         final var trigger = cur.updateClock(state.getPortValue(CLOCK));
 
-        if (state.getPortValue(LOAD) == Value.TRUE && trigger) {
-            state.setPort(DATA_OUT, Value.createKnown(cur.get((int) state.getPortValue(ADDRESS).toLongValue())), 9);
-        } else if(!trigger){
+        if (state.getPortValue(LOAD) == Value.TRUE) {
+            state.setPort(DATA_OUT, Value.createKnown(32, cur.get((int) state.getPortValue(ADDRESS).toLongValue())), 9);
+        } else {
             state.setPort(DATA_OUT, HiZ32, 9);
         }
 
-        if (trigger && state.getPortValue(STORE) == Value.TRUE) {
+        if (state.getPortValue(STORE) == Value.TRUE && trigger) {
             int index = (int) state.getPortValue(ADDRESS).toLongValue();
-            cur.set(index, (state.getPortValue(DATA_IN).toLongValue() ^ 0x80000000L) - 0x80000000L);
+            System.out.print(state.getPortValue(DATA_IN).toLongValue());
+            System.out.print(" ");
+            System.out.println(state.getPortValue(DATA_OUT).toLongValue());
+            cur.set(index, state.getPortValue(DATA_IN).toLongValue() & 0xFFFFFFFFFL);
             for (int i = 0; i < 32; i++) {
                 state.setPort(i + 7, Value.createKnown(32, cur.get(i)), 9);
             }
