@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import static java.lang.System.out;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static com.cburch.logisim.riscv.rv32imConstructorTest.assertRegistersEqual;
+import static com.cburch.logisim.riscv.rv32imDataTest.assertRegistersEqual;
 
 public class ArithmeticTypeITest {
     @Test
