@@ -58,7 +58,7 @@ public class CpuDrawSupport {
     }
 
     public static void drawRegisters(
-            Graphics2D graphics, int posX, int posY, boolean scale, rv32imData state) {
+            Graphics2D graphics, int posX, int posY, boolean scale, rv32imData state, boolean hex) {
         int blockWidth = getBlockWidth(graphics, scale);
         int blockX = ((scale ? AppPreferences.getScaled(160) : 160) - blockWidth) / 2;
         if (scale) {
@@ -101,7 +101,11 @@ public class CpuDrawSupport {
             graphics.drawRect(bdsRegValue.getX(), bdsRegValue.getY(), bdsRegValue.getWidth(), bdsRegValue.getHeight());
             graphics.setColor(i == 0 ? Color.WHITE : Color.BLUE);
             Bounds bdsRegValueText = getBounds(bdsRegValue.getX() + blockWidth / 2, posY + 21 + i * 15, 0, 0, scale);
-            GraphicsUtil.drawCenteredText(graphics, String.valueOf(state.getX(i)), bdsRegValueText.getX(), bdsRegValueText.getY());
+            if(!hex) GraphicsUtil.drawCenteredText(graphics, String.valueOf(state.getX(i)), bdsRegValueText.getX(), bdsRegValueText.getY());
+            else {
+                GraphicsUtil.drawCenteredText(graphics, "0x"+Long.toHexString(state.getX(i) & 0xffffffffL),
+                        bdsRegValueText.getX(), bdsRegValueText.getY());
+            }
 
             // Register ABI name
             graphics.setColor(Color.DARK_GRAY);
@@ -112,4 +116,48 @@ public class CpuDrawSupport {
             graphics.setColor(Color.BLACK);
         }
     }
+
+    public static void drawCpuState(
+            Graphics2D g, int x, int y, boolean scale, String Name, rv32imData.CPUState cpuState) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        Bounds bds;
+        if (scale) g2.setFont(AppPreferences.getScaledFont(g.getFont()));
+        bds = getBounds(x, y, 0, 0, scale);
+        g2.translate(bds.getX(), bds.getY());
+        int blockWidth = getBlockWidth(g2, scale);
+        if (scale) blockWidth = AppPreferences.getDownScaled(blockWidth);
+        g2.setColor(Color.YELLOW);
+        bds = getBounds(0, 0, blockWidth, 30, scale);
+        g2.fillRect(bds.getX(), bds.getY(), bds.getWidth(), bds.getHeight());
+        g2.setColor(Color.BLUE);
+        bds = getBounds(0, 0, blockWidth, 15, scale);
+        g2.fillRect(bds.getX(), bds.getY(), bds.getWidth(), bds.getHeight());
+        g2.setColor(Color.YELLOW);
+        bds = getBounds(blockWidth / 2, 6, 0, 0, scale);
+        GraphicsUtil.drawCenteredText(g2, Name, bds.getX(), bds.getY());
+        g2.setColor(Color.BLACK);
+        bds = getBounds(0, 0, blockWidth, 30, scale);
+        g2.drawRect(bds.getX(), bds.getY(), bds.getWidth(), bds.getHeight());
+
+        switch(cpuState)
+        {
+            case OPERATIONAL -> g2.setColor(Color.GREEN);
+            case HALTED -> g2.setColor(Color.RED);
+        }
+        bds = getBounds(1, 16, blockWidth - 2, 13, scale);
+        g2.fillRect(bds.getX(), bds.getY(), bds.getWidth(), bds.getHeight());
+        g2.setColor(Color.BLACK);
+        g2.drawRect(bds.getX(), bds.getY(), bds.getWidth(), bds.getHeight());
+        g2.setColor(Color.MAGENTA);
+        bds = getBounds(blockWidth / 2, 21, 0, 0, scale);
+
+        switch (cpuState)
+        {
+            case OPERATIONAL -> GraphicsUtil.drawCenteredText(g2, "ACTIVE", bds.getX(), bds.getY());
+            case HALTED ->
+            { g2.setColor(Color.cyan); GraphicsUtil.drawCenteredText(g2, "HALTED", bds.getX(), bds.getY()); }
+        }
+        g2.dispose();
+    }
+
 }
