@@ -19,11 +19,13 @@
 
 // This is the number of discs in the puzzle.
 
-#define NUM_DISCS 7 
+#define NUM_DISCS 9 
 
 // debug output
 
 #define TDR (*(char *)0xffff000c)
+
+#define COUNTER (*(volatile unsigned int *)0xffff0020)
 
 void printstr(char str[]) 
 {
@@ -267,7 +269,10 @@ int main( int argc, char* argv[] )
   // Chek the results
   res = towers_verify( &towers );
   printstr("Result = "); printhex(res); printstr("\n");
-  
+ 
+  unsigned int count = COUNTER;
+  printstr("Total Clock Ticks = "); printhex(count); printstr("\n"); 
+
   return res;
 }
 
