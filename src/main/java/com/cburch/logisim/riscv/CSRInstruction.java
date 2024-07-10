@@ -1,5 +1,8 @@
 package com.cburch.logisim.riscv;
 
+
+import static com.cburch.logisim.riscv.MMCSR.*;
+
 public class CSRInstruction {
     public static void execute(rv32imData state) {
         int funct3 = state.getIR().func3();
@@ -11,6 +14,18 @@ public class CSRInstruction {
         long result;
 
         switch (funct3) {
+            case 0x0: // _ret
+                if (rs1 == 0 && rd == 0 && csr == 0x2) {
+                    // uret
+                    // PC = uepc
+                } else if (rs1 == 0 && rd == 0 && csr == 0x102) {
+                    // sret
+                    // PC = sepc
+                } else if (rs1 == 0 && rd == 0 && csr == 0x302) {
+                    // mret
+                    state.getPC().set(MMCSR.getValue(state, MEPC) - 4);
+                }
+                break;
             case 0x1: // csrrw rd,csr,rs1
                 csrValue = state.getCSR(csr);
                 result = rs1Value;

@@ -1,5 +1,7 @@
 package com.cburch.logisim.riscv;
 
+
+
 public class ControlAndStatusRegisters {
 
     CSR[] registers = new CSR[4096]; // reserve space for 4096 CSRs
@@ -10,7 +12,12 @@ public class ControlAndStatusRegisters {
         //set non-implemented CSSRs to (read-only) 0
         for(int i = 0; i < 4096; i++) if (registers[i] == null) registers[i] = new CSR_R(0);
 
-        // TODO: set USE & ACCESSIBILITY
+        //csr address mapping conventions
+        for(int i = 0; i < 4096; i++) {
+            if((i >> 10) < 0x2) {
+                registers[i] = new CSR_RW(0);
+            }
+        }
     }
 
     public long read(int index) {
