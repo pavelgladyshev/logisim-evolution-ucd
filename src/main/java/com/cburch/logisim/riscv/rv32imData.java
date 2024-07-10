@@ -42,6 +42,9 @@ class rv32imData implements InstanceData, Cloneable {
   private final InstructionRegister ir;
   private final IntegerRegisters x;
 
+  /** CSR registers */
+  private final ControlAndStatusRegisters csr;
+
   /** Enum representing CPU states */
   private CPUState cpuState;
   public enum CPUState {
@@ -59,6 +62,7 @@ class rv32imData implements InstanceData, Cloneable {
     this.pc = new ProgramCounter(resetAddress);
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
+    this.csr = new ControlAndStatusRegisters();
     this.cpuState = CPUState.OPERATIONAL;
     this.intermixFlag = false;
     this.pressedContinue = false;
@@ -183,6 +187,10 @@ class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x73:  // System instructions
+        CSRInstruction.execute(this);
+        pc.increment();
+        fetchNextInstruction();
+        break;
       default: // Unknown instruction: halts CPU
         halt();
     }
@@ -215,6 +223,8 @@ class rv32imData implements InstanceData, Cloneable {
   public boolean getAddressing() { return addressing; }
   public boolean getIntermixFlag() { return intermixFlag; }
   public boolean getPressedContinue() { return pressedContinue; }
+  public long getCSR(int csr) { return this.csr.read(csr); }
+
 
   public void setLastDataIn(long value) { lastDataIn = value; }
   public void setLastAddress(long value) { lastAddress = value; }
@@ -229,4 +239,5 @@ class rv32imData implements InstanceData, Cloneable {
   public void setIsSync(Value value) { isSync = value; }
   public void setIntermixFlag(boolean value) { intermixFlag = value; }
   public void setPressedContinue(boolean value) { pressedContinue = value; }
+  public void setCSR(int csr, long value) { this.csr.write(csr, value); }
 }
