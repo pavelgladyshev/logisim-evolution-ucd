@@ -32,6 +32,9 @@ public class InstructionRegister {
         return res;
     }
 
+    public int csr() { return (int)((value >> 20) & 0xFFF);}
+
+
     // S-type additional fields
     public long imm_S() { return ( ( (func7() << 5) | rd() ) ^ 0x800) - 0x800; }      // value[31:25].value[11:7]
 

@@ -9,6 +9,8 @@ public class ControlAndStatusRegisters {
 
         //set non-implemented CSSRs to (read-only) 0
         for(int i = 0; i < 4096; i++) if (registers[i] == null) registers[i] = new CSR_R(0);
+
+        // TODO: set USE & ACCESSIBILITY
     }
 
     public long read(int index) {
