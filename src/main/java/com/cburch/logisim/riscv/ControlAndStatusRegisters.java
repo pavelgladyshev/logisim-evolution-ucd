@@ -14,7 +14,7 @@ public class ControlAndStatusRegisters {
 
         //csr address mapping conventions
         for(int i = 0; i < 4096; i++) {
-            if((i >> 10) < 0x2) {
+            if((i >> 10) < 0x3) {
                 registers[i] = new CSR_RW(0);
             }
         }
