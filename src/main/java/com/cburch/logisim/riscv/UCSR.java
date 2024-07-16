@@ -80,7 +80,7 @@ public enum UCSR {
     }
 
     public static long getValue(rv32imData hartData, UCSR csr) {
-        return hartData.getCSR(csr.getAddress());
+        return hartData.getCSRValue(csr.getAddress());
     }
 
 }
