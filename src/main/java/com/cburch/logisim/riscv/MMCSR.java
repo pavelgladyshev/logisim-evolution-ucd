@@ -218,6 +218,6 @@ public enum MMCSR {
     }
 
     public static long getValue(rv32imData hartData, MMCSR csr) {
-        return hartData.getCSR(csr.getAddress());
+        return hartData.getCSRValue(csr.getAddress());
     }
 }

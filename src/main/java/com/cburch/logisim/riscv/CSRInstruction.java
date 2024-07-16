@@ -23,41 +23,46 @@ public class CSRInstruction {
                     // PC = sepc
                 } else if (rs1 == 0 && rd == 0 && csr == 0x302) {
                     // mret
+                    MSTATUS mstatus = (MSTATUS)state.getCSR(MSTATUS.getAddress());
                     state.getPC().set(MMCSR.getValue(state, MEPC) - 4);
+                    mstatus.MIE.set(mstatus.MPIE.get());
+                    mstatus.MPIE.set(1);
+                    // set MPP to user mode if implemented
+                    mstatus.MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
                 }
                 break;
             case 0x1: // csrrw rd,csr,rs1
-                csrValue = state.getCSR(csr);
+                csrValue = state.getCSRValue(csr);
                 result = rs1Value;
                 state.setCSR(csr, result);
                 state.setX(rd, csrValue);
                 break;
             case 0x2: // csrrs rd,csr,rs1
-                csrValue = state.getCSR(csr);
+                csrValue = state.getCSRValue(csr);
                 result = csrValue | rs1Value;
                 state.setCSR(csr, result);
                 state.setX(rd, csrValue);
                 break;
             case 0x3: // csrrc rd,csr,rs1
-                csrValue = state.getCSR(csr);
+                csrValue = state.getCSRValue(csr);
                 result = csrValue & ~rs1Value;
                 state.setCSR(csr, result);
                 state.setX(rd, csrValue);
                 break;
             case 0x5: // csrrwi rd,csr,uimm
-                csrValue = state.getCSR(csr);
+                csrValue = state.getCSRValue(csr);
                 result = state.getIR().rs1();
                 state.setCSR(csr, result);
                 state.setX(rd, csrValue);
                 break;
             case 0x6: // csrrsi rd,csr,uimm
-                csrValue = state.getCSR(csr);
+                csrValue = state.getCSRValue(csr);
                 result = csrValue | state.getIR().rs1();
                 state.setCSR(csr, result);
                 state.setX(rd, csrValue);
                 break;
             case 0x7: // csrrci rd,csr,uimm
-                csrValue = state.getCSR(csr);
+                csrValue = state.getCSRValue(csr);
                 result = csrValue & ~state.getIR().rs1();
                 state.setCSR(csr, result);
                 state.setX(rd, csrValue);

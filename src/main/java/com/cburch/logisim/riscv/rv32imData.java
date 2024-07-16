@@ -223,7 +223,8 @@ class rv32imData implements InstanceData, Cloneable {
   public boolean getAddressing() { return addressing; }
   public boolean getIntermixFlag() { return intermixFlag; }
   public boolean getPressedContinue() { return pressedContinue; }
-  public long getCSR(int csr) { return this.csr.read(csr); }
+  public long getCSRValue(int csr) {return this.csr.read(csr);}
+  public CSR getCSR(int csr) { return this.csr.get(csr); }
 
 
   public void setLastDataIn(long value) { lastDataIn = value; }

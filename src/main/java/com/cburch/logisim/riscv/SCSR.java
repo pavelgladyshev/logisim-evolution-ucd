@@ -25,6 +25,6 @@ public enum SCSR {
     }
 
     public static long getValue(rv32imData hartData, SCSR csr) {
-        return hartData.getCSR(csr.getAddress());
+        return hartData.getCSRValue(csr.getAddress());
     }
 }
