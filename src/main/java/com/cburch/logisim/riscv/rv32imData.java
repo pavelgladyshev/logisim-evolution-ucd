@@ -49,7 +49,8 @@ class rv32imData implements InstanceData, Cloneable {
   private CPUState cpuState;
   public enum CPUState {
     OPERATIONAL,
-    HALTED
+    HALTED,
+    INTERRUPTED
   }
 
   // More To Do
@@ -135,6 +136,9 @@ class rv32imData implements InstanceData, Cloneable {
 
   /** update CPU state (execute) */
   public void update(long dataIn) {
+
+    if (cpuState == CPUState.INTERRUPTED)
+        {pc.set(MMCSR.getValue(this, MMCSR.MTVEC)); cpuState = CPUState.OPERATIONAL;fetchNextInstruction();}
 
     if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
 

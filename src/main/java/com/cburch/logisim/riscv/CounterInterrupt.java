@@ -26,6 +26,7 @@ public class CounterInterrupt extends InstanceFactory {
     public static final int INTERRUPT_OUT = 3;
     public static final int RESET = 4;
     public static final int CLOCK = 5;
+    public static final int DATA_OUT = 6;
 
     static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
 
@@ -33,13 +34,14 @@ public class CounterInterrupt extends InstanceFactory {
         super(_ID);
         setOffsetBounds(Bounds.create(-30, -10, 50, 60));
 
-        Port ps[] = new Port[6];
+        Port ps[] = new Port[7];
         ps[ADDRESS] = new Port(-30, 10, Port.INPUT, 32);
         ps[STORE] = new Port(-30, 20, Port.INPUT, 1);
         ps[DATA_IN] = new Port(-30, 30, Port.INPUT, 32);
         ps[INTERRUPT_OUT] = new Port(20, 20, Port.INPUT, 1);
         ps[RESET] = new Port(-10, 50, Port.INPUT, 1);
         ps[CLOCK] = new Port(0, 50, Port.INPUT, 1);
+        ps[DATA_OUT] = new Port(0, -10, Port.INPUT, 32);
 
         ps[ADDRESS].setToolTip(S.getter("counterInterruptAddress"));
         ps[STORE].setToolTip(S.getter("counterInterruptStore"));
@@ -47,7 +49,7 @@ public class CounterInterrupt extends InstanceFactory {
         ps[INTERRUPT_OUT].setToolTip(S.getter("counterInterruptOut"));
         ps[RESET].setToolTip(S.getter("counterInterruptReset"));
         ps[CLOCK].setToolTip(S.getter("counterInterruptClock"));
-
+        ps[DATA_OUT].setToolTip(S.getter("counterDataOut"));
         setPorts(ps);
     }
 
@@ -78,11 +80,26 @@ public class CounterInterrupt extends InstanceFactory {
         // Check if clock signal is changing from low/false to high/true
         final var trigger = cur.updateClock(state.getPortValue(5));
 
+        if(state.getPortValue(RESET) == Value.TRUE) {
+            cur.setCounter(0);
+            cur.setCounterComparator(0xFFFFFFFFL);
+        }
+
+        if (state.getPortValue(STORE) == Value.TRUE &&
+                (state.getPortValue(ADDRESS).toLongValue() == 0xFFFF0C00L) ) {
+            state.setPort(DATA_OUT, Value.createKnown(32, cur.getCounter()), 9);
+            cur.setCounterComparator(state.getPortValue(DATA_IN).toLongValue());
+        } else {
+            state.setPort(DATA_OUT, HiZ32, 9);
+        }
+
         if (trigger) {
+
             cur.setCounter(cur.getCounter() + 1);
-            if (cur.getCounter() >= cur.getCounterComparator() && cur.isInterruptEnabled()) {
+
+            if (cur.getCounter() >= cur.getCounterComparator()) {
                 state.setPort(INTERRUPT_OUT, Value.TRUE, 9);
-                cur.setCounter(0);
+                cur.setCounterComparator(0xFFFFFFFFL);
             } else {
                 state.setPort(INTERRUPT_OUT, Value.FALSE, 9);
             }
