@@ -9,4 +9,5 @@ public class CSR_R extends CSR {
     protected long read() {
         return value;
     }
+
 }

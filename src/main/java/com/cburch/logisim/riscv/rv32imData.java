@@ -191,8 +191,8 @@ class rv32imData implements InstanceData, Cloneable {
         pc.increment();
         fetchNextInstruction();
         break;
-      default: // Unknown instruction: halts CPU
-        halt();
+      default:  // Unknown instruction
+        TrapHandler.throwIllegalInstructionException(this);
     }
   }
 
@@ -223,7 +223,7 @@ class rv32imData implements InstanceData, Cloneable {
   public boolean getAddressing() { return addressing; }
   public boolean getIntermixFlag() { return intermixFlag; }
   public boolean getPressedContinue() { return pressedContinue; }
-  public long getCSRValue(int csr) {return this.csr.read(csr);}
+  public long getCSRValue(int csr) {return this.csr.read(this, csr);}
   public CSR getCSR(int csr) { return this.csr.get(csr); }
 
 
@@ -240,5 +240,5 @@ class rv32imData implements InstanceData, Cloneable {
   public void setIsSync(Value value) { isSync = value; }
   public void setIntermixFlag(boolean value) { intermixFlag = value; }
   public void setPressedContinue(boolean value) { pressedContinue = value; }
-  public void setCSR(int csr, long value) { this.csr.write(csr, value); }
+  public void setCSR(int csr, long value) { this.csr.write(this, csr, value); }
 }

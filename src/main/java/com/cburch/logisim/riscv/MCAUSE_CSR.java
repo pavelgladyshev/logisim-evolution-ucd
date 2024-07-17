@@ -1,11 +1,11 @@
 package com.cburch.logisim.riscv;
 
-public class MCAUSE extends CSR_RW {
+public class MCAUSE_CSR extends CSR_RW {
 
     protected BITFIELD EXCEPTION_CODE;
     protected BITFIELD INTERRUPT;
 
-    MCAUSE(long initValue) {
+    MCAUSE_CSR(long initValue) {
         super(initValue);
         EXCEPTION_CODE = new BITFIELD(this, 0,30);
         INTERRUPT = new BITFIELD(this, 31,31);

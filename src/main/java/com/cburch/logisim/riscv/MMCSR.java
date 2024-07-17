@@ -216,6 +216,7 @@ public enum MMCSR {
     public int getAddress() {
         return address;
     }
+    public static CSR getCSR(rv32imData hartData, MMCSR csr) {return hartData.getCSR(csr.getAddress());}
 
     public static long getValue(rv32imData hartData, MMCSR csr) {
         return hartData.getCSRValue(csr.getAddress());

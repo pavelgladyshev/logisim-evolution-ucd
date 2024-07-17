@@ -1,11 +1,11 @@
 package com.cburch.logisim.riscv;
 
-public class MTVEC extends CSR_RW {
+public class MTVEC_CSR extends CSR_RW {
 
     protected BITFIELD MODE;
     protected BITFIELD BASE;
 
-    MTVEC(long initValue) {
+    MTVEC_CSR(long initValue) {
         super(initValue);
         MODE = new BITFIELD(this, 0, 1);
         BASE = new BITFIELD(this, 2,31);

@@ -13,18 +13,34 @@ public class ControlAndStatusRegisters {
         }
     }
 
-    public long read(int index) {
+    public long read(rv32imData hartData, int csr) {
         // check privilege level ( illegal-instruction / virtual-instruction exception if invalid) (18.6.1 priv arch.)
-        return registers[index].read();
+        if(checkRequiredAccessPrivilege(hartData, csr)) return get(csr).read();
+        else return 0;
     }
 
-    public void write(int index, long value) {
+    public void write(rv32imData hartData, int csr, long value) {
         //check privilege level ( illegal-instruction / virtual-instruction exception if invalid) (18.6.1 priv arch.)
         //check read-only ( illegal-instruction exception )
-        registers[index].write(value);
+        if(checkRequiredAccessPrivilege(hartData, csr) && (get(csr) instanceof CSR_RW)) get(csr).write(value);
+        else TrapHandler.throwIllegalInstructionException(hartData);
     }
 
-    public CSR get(int index) {
-        return registers[index];
+    public CSR get(int csr) {
+        return registers[csr];
+    }
+
+    private static int getRequiredAccessPrivilege(int csr) {
+        return (csr >> 8) & 0x3;
+    }
+
+    private Boolean checkRequiredAccessPrivilege(rv32imData hartData, int csr) {
+        Boolean hasAccessPermission = Boolean.TRUE;
+        long priv = ((MSTATUS_CSR)MMCSR.getCSR(hartData, MMCSR.MSTATUS)).MPP.get();
+        if(priv < getRequiredAccessPrivilege(csr)) {
+            TrapHandler.throwIllegalInstructionException(hartData);
+            hasAccessPermission = Boolean.FALSE;
+        }
+        return hasAccessPermission;
     }
 }

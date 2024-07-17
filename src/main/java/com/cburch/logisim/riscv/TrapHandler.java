@@ -1,20 +1,22 @@
 package com.cburch.logisim.riscv;
 
+import static com.cburch.logisim.riscv.MMCSR.*;
+
 public class TrapHandler {
 
-    public static void processTrap(rv32imData hartData, MCAUSE.TRAP_CAUSE cause) {
+    public static void handle(rv32imData hartData, MCAUSE_CSR.TRAP_CAUSE cause) {
 
-        MSTATUS mstatus = (MSTATUS) hartData.getCSR(MMCSR.MSTATUS.getAddress());
-        MEPC mepc = (MEPC) hartData.getCSR(MMCSR.MEPC.getAddress());
-        MTVEC mtvec = (MTVEC) hartData.getCSR(MMCSR.MTVEC.getAddress());
-        MCAUSE mcause = (MCAUSE) hartData.getCSR(MMCSR.MCAUSE.getAddress());
-        CSR mtval = hartData.getCSR(MMCSR.MTVAL.getAddress());
+        MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(hartData, MSTATUS);
+        MEPC_CSR mepc = (MEPC_CSR) MMCSR.getCSR(hartData, MEPC);
+        MTVEC_CSR mtvec = (MTVEC_CSR) MMCSR.getCSR(hartData, MTVEC);
+        MCAUSE_CSR mcause = (MCAUSE_CSR) MMCSR.getCSR(hartData, MCAUSE);
+        CSR mtval = MMCSR.getCSR(hartData, MTVAL);
         ProgramCounter pc = hartData.getPC();
 
         // mepc = PC ( points to instruction that caused the exception / instruction to resume after interrupt )
         mepc.write(pc.get());
         // PC = mtvec
-        if( cause.isInterrupt() && ((MTVEC.MODE) mtvec.MODE).isVectored() ) {
+        if( cause.isInterrupt() && ((MTVEC_CSR.MODE) mtvec.MODE).isVectored() ) {
             pc.set((mtvec.BASE.get() + 4) * cause.getExceptionCode());
         }
         else {
@@ -38,5 +40,9 @@ public class TrapHandler {
         mstatus.MIE.set(0);
         // privilege mode = MACHINE ( 0b11 )
         mstatus.MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
+    }
+
+    public static void throwIllegalInstructionException(rv32imData hartData) {
+        TrapHandler.handle(hartData, MCAUSE_CSR.TRAP_CAUSE.ILLEGAL_INSTRUCTION);
     }
 }
