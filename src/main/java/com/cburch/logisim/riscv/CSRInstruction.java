@@ -1,21 +1,38 @@
 package com.cburch.logisim.riscv;
 
-
 import static com.cburch.logisim.riscv.MMCSR.*;
-
 public class CSRInstruction {
     public static void execute(rv32imData state) {
         int funct3 = state.getIR().func3();
         int csr = state.getIR().csr();
         int rd = state.getIR().rd();
         int rs1 = state.getIR().rs1();
+        long imm_I = state.getIR().imm_I();
         long rs1Value = state.getX(rs1);
         long csrValue;
         long result;
 
         switch (funct3) {
-            case 0x0: // _ret
-                if (rs1 == 0 && rd == 0 && csr == 0x2) {
+            case 0x0: { // ecall/ebreak/_ret
+                MSTATUS_CSR mstatus = ((MSTATUS_CSR)MMCSR.getCSR(state, MSTATUS));
+                if (imm_I == 0) {
+                    // ecall
+                    MSTATUS_CSR.MPP mpp = (MSTATUS_CSR.MPP)mstatus.MPP;
+                    switch(mpp.getLastPrivilegeMode()){
+                        case USER:
+                            TrapHandler.handle(state, MCAUSE_CSR.TRAP_CAUSE.ENVIRONMENT_CALL_FROM_U_MODE);
+                            break;
+                        case SUPERVISOR:
+                            TrapHandler.handle(state, MCAUSE_CSR.TRAP_CAUSE.ENVIRONMENT_CALL_FROM_S_MODE);
+                            break;
+                        case MACHINE:
+                            TrapHandler.handle(state, MCAUSE_CSR.TRAP_CAUSE.ENVIRONMENT_CALL_FROM_M_MODE);
+                            break;
+                    }
+                } else if (imm_I == 1) {
+                    //ebreak
+                    TrapHandler.handle(state, MCAUSE_CSR.TRAP_CAUSE.BREAKPOINT);
+                } else if (rs1 == 0 && rd == 0 && csr == 0x2) {
                     // uret
                     // PC = uepc
                 } else if (rs1 == 0 && rd == 0 && csr == 0x102) {
@@ -23,7 +40,6 @@ public class CSRInstruction {
                     // PC = sepc
                 } else if (rs1 == 0 && rd == 0 && csr == 0x302) {
                     // mret
-                    MSTATUS mstatus = (MSTATUS)state.getCSR(MSTATUS.getAddress());
                     state.getPC().set(MMCSR.getValue(state, MEPC) - 4);
                     mstatus.MIE.set(mstatus.MPIE.get());
                     mstatus.MPIE.set(1);
@@ -31,6 +47,7 @@ public class CSRInstruction {
                     mstatus.MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
                 }
                 break;
+            }
             case 0x1: // csrrw rd,csr,rs1
                 csrValue = state.getCSRValue(csr);
                 result = rs1Value;

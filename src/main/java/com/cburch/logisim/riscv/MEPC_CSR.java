@@ -1,8 +1,7 @@
 package com.cburch.logisim.riscv;
 
-public class MEPC extends CSR_RW {
-
-    MEPC(long initValue) {
+public class MEPC_CSR extends CSR_RW {
+    MEPC_CSR(long initValue) {
         super(initValue);
     }
 
