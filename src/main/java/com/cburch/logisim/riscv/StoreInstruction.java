@@ -26,7 +26,7 @@ public class StoreInstruction {
         }
 
         if (hartData.getOutputDataWidth() == 4) {
-            if (get2LSB(hartData) != 0) {
+            if (get2LSB(hartData) != 0 && !(hartData.getLastAddress() == 0xFFFF0C01L)) {
                 hartData.halt();
                 hartData.setMemWrite(Value.FALSE);
                 return;
