@@ -23,7 +23,7 @@ public class CSRInstruction {
                     // PC = sepc
                 } else if (rs1 == 0 && rd == 0 && csr == 0x302) {
                     // mret
-                    MSTATUS mstatus = (MSTATUS)state.getCSR(MSTATUS.getAddress());
+                    MSTATUS mstatus = new MSTATUS(MMCSR.getValue(state, MMCSR.MSTATUS));
                     state.getPC().set(MMCSR.getValue(state, MEPC) - 4);
                     mstatus.MIE.set(mstatus.MPIE.get());
                     mstatus.MPIE.set(1);

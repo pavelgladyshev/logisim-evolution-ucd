@@ -95,11 +95,13 @@ public class CounterInterrupt extends InstanceFactory {
 
         if (trigger) {
 
+            System.out.println(cur.getCounter() + " " + cur.getCounterComparator());
+
             cur.setCounter(cur.getCounter() + 1);
 
             if (cur.getCounter() >= cur.getCounterComparator()) {
                 state.setPort(INTERRUPT_OUT, Value.TRUE, 9);
-                cur.setCounterComparator(0xFFFFFFFFL);
+                cur.setCounterComparator(2 * cur.getCounterComparator());
             } else {
                 state.setPort(INTERRUPT_OUT, Value.FALSE, 9);
             }

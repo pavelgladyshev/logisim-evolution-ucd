@@ -70,7 +70,11 @@ public class StoreInstruction {
                 break;
 
             case 4:
-                hartData.setOutputData(Value.createKnown(32, hartData.getLastDataIn()));
+                if (hartData.getLastAddress() == 0xFFFF0C01L) {
+                    hartData.setOutputData(Value.createKnown(32, data + hartData.getLastDataIn()));
+                } else {
+                    hartData.setOutputData(Value.createKnown(32, hartData.getLastDataIn()));
+                }
                 break;
         }
     }

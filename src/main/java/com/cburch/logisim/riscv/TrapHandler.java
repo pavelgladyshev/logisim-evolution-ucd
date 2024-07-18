@@ -4,21 +4,22 @@ public class TrapHandler {
 
     public static void processTrap(rv32imData hartData, MCAUSE.TRAP_CAUSE cause) {
 
-        MSTATUS mstatus = (MSTATUS) hartData.getCSR(MMCSR.MSTATUS.getAddress());
-        MEPC mepc = (MEPC) hartData.getCSR(MMCSR.MEPC.getAddress());
-        MTVEC mtvec = (MTVEC) hartData.getCSR(MMCSR.MTVEC.getAddress());
-        MCAUSE mcause = (MCAUSE) hartData.getCSR(MMCSR.MCAUSE.getAddress());
+        MSTATUS mstatus = new MSTATUS(MMCSR.getValue(hartData, MMCSR.MSTATUS));
+        MTVEC mtvec = new MTVEC(MMCSR.getValue(hartData, MMCSR.MTVEC));
+        MCAUSE mcause = new MCAUSE(MMCSR.getValue(hartData, MMCSR.MCAUSE));
         CSR mtval = hartData.getCSR(MMCSR.MTVAL.getAddress());
         ProgramCounter pc = hartData.getPC();
 
         // mepc = PC ( points to instruction that caused the exception / instruction to resume after interrupt )
-        mepc.write(pc.get());
+        hartData.setCSR(MMCSR.MEPC.getAddress(), pc.get());
+        System.out.println(pc.get());
+
         // PC = mtvec
-        if( cause.isInterrupt() && ((MTVEC.MODE) mtvec.MODE).isVectored() ) {
+        if( cause.isInterrupt() && (mtvec.MODE.get() == 1)) {
             pc.set((mtvec.BASE.get() + 4) * cause.getExceptionCode());
         }
         else {
-            pc.set(mtvec.BASE.get());
+            pc.set(MMCSR.getValue(hartData, MMCSR.MTVEC));
         }
         // mcause = exception cause
         mcause.INTERRUPT.set(cause.getInterrupt());

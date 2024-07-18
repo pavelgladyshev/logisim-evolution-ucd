@@ -138,7 +138,7 @@ class rv32imData implements InstanceData, Cloneable {
   public void update(long dataIn) {
 
     if (cpuState == CPUState.INTERRUPTED)
-        {pc.set(MMCSR.getValue(this, MMCSR.MTVEC)); cpuState = CPUState.OPERATIONAL;fetchNextInstruction();}
+        {TrapHandler.processTrap(this, MCAUSE.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT); cpuState = CPUState.OPERATIONAL;fetchNextInstruction(); return;}
 
     if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
 
