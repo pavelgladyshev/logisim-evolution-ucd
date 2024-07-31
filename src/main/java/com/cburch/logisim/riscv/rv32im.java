@@ -150,6 +150,9 @@ class rv32im extends InstanceFactory {
     // of clock cycle
     checkContinuePressed(state, cur);
 
+    // Check if interrupt is risen
+    checkInterrupt(state, cur);
+
     // Check if intermixing data before 2nd clock cycle and
     // store intermix data when needed
     checkIntermixData(state, cur);
@@ -184,6 +187,12 @@ class rv32im extends InstanceFactory {
   private void checkReset(InstanceState state) {
     if (state.getPortValue(RESET) == Value.TRUE) {
       state.setData(null);
+    }
+  }
+
+  private void checkInterrupt(InstanceState state, rv32imData cur) {
+    if (state.getPortValue(INTERRUPT_IN) == Value.TRUE) {
+      cur.setCpuState(rv32imData.CPUState.INTERRUPTED);
     }
   }
 

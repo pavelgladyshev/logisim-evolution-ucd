@@ -7,14 +7,12 @@ import com.cburch.logisim.instance.InstanceState;
 public class CounterInterruptRegisters implements InstanceData, Cloneable {
 
     private Value lastClock;
-    private int counter;
-    private int counterComparator;
-    private boolean interruptEnabled;
+    private long counter;
+    private long counterComparator;
 
     public CounterInterruptRegisters(Value lastClock) {
         this.lastClock = lastClock;
         this.counter = 0;
-        this.interruptEnabled = false;
     }
 
     @Override
@@ -35,28 +33,20 @@ public class CounterInterruptRegisters implements InstanceData, Cloneable {
         return ret;
     }
 
-    public int getCounter() {
+    public long getCounter() {
         return counter;
     }
 
-    public void setCounter(int value) {
+    public void setCounter(long value) {
         counter = value;
     }
 
-    public int getCounterComparator() {
+    public long getCounterComparator() {
         return counterComparator;
     }
 
-    public void setCounterComparator(int value) {
+    public void setCounterComparator(long value) {
         counterComparator = value;
-    }
-
-    public boolean isInterruptEnabled() {
-        return interruptEnabled;
-    }
-
-    public void setInterruptEnabled(boolean value) {
-        interruptEnabled = value;
     }
 
     public boolean updateClock(Value value) {
