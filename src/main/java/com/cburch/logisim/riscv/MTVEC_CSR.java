@@ -7,7 +7,7 @@ public class MTVEC_CSR extends CSR_RW {
 
     MTVEC_CSR(long initValue) {
         super(initValue);
-        MODE = new BITFIELD(this, 0, 1);
+        MODE = new MODE(this, 0, 1);
         BASE = new BITFIELD(this, 2,31);
     }
 

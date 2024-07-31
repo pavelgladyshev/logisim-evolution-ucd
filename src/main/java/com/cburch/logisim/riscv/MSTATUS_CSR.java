@@ -10,7 +10,7 @@ public class MSTATUS_CSR extends CSR_RW {
         super(initValue);
         MIE = new BITFIELD(this, 3,3);
         MPIE = new BITFIELD(this, 7,7);
-        MPP = new BITFIELD(this, 11,12);
+        MPP = new MPP(this, 11,12);
 
         MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
     }
