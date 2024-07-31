@@ -194,9 +194,10 @@ class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x73:  // System instructions
-        CSRInstruction.execute(this);
-        pc.increment();
+        SystemInstruction.execute(this);
+        if(ir.func3() != 0x0) pc.increment();
         fetchNextInstruction();
+
         break;
       default:  // Unknown instruction
         TrapHandler.throwIllegalInstructionException(this);
