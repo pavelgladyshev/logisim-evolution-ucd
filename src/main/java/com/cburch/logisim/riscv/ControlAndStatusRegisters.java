@@ -4,12 +4,20 @@ public class ControlAndStatusRegisters {
     CSR[] registers = new CSR[4096]; // reserve space for 4096 CSRs
 
     ControlAndStatusRegisters() {
+
+        //predefined CSRs
+        registers[MMCSR.MCAUSE.getAddress()] = new MCAUSE_CSR(0);
+        registers[MMCSR.MEPC.getAddress()] = new MEPC_CSR(0);
+        registers[MMCSR.MSTATUS.getAddress()] = new MSTATUS_CSR(0);
+        registers[MMCSR.MTVEC.getAddress()] = new MTVEC_CSR(0);
+
         //csr address mapping conventions
         for(int i = 0; i < 4096; i++) {
-            if((i >> 10) < 0x3) {
-                registers[i] = new CSR_RW(0);
+            if(registers[i] == null) {
+                if ((i >> 10) < 0x3) {
+                    registers[i] = new CSR_RW(0);
+                } else registers[i] = new CSR_R(0);
             }
-            else registers[i] = new CSR_R(0);
         }
     }
 
