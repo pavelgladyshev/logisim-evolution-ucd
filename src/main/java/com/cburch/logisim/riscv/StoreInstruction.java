@@ -26,7 +26,7 @@ public class StoreInstruction {
         }
 
         if (hartData.getOutputDataWidth() == 4) {
-            if (get2LSB(hartData) != 0 && !(hartData.getLastAddress() == 0xFFFF0C01L)) {
+            if (get2LSB(hartData) != 0) {
                 hartData.halt();
                 hartData.setMemWrite(Value.FALSE);
                 return;
@@ -70,11 +70,7 @@ public class StoreInstruction {
                 break;
 
             case 4:
-                if (hartData.getLastAddress() == 0xFFFF0C01L) {
-                    hartData.setOutputData(Value.createKnown(32, data + hartData.getLastDataIn()));
-                } else {
-                    hartData.setOutputData(Value.createKnown(32, hartData.getLastDataIn()));
-                }
+                hartData.setOutputData(Value.createKnown(32, hartData.getLastDataIn()));
                 break;
         }
     }
