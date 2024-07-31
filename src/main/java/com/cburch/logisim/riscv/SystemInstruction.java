@@ -1,7 +1,7 @@
 package com.cburch.logisim.riscv;
 
 import static com.cburch.logisim.riscv.MMCSR.*;
-public class CSRInstruction {
+public class SystemInstruction {
     public static void execute(rv32imData state) {
         int funct3 = state.getIR().func3();
         int csr = state.getIR().csr();
@@ -40,7 +40,7 @@ public class CSRInstruction {
                     // PC = sepc
                 } else if (rs1 == 0 && rd == 0 && csr == 0x302) {
                     // mret
-                    state.getPC().set(MMCSR.getValue(state, MEPC) - 4);
+                    state.getPC().set(MMCSR.getValue(state, MEPC));
                     mstatus.MIE.set(mstatus.MPIE.get());
                     mstatus.MPIE.set(1);
                     // set MPP to user mode if implemented
