@@ -14,6 +14,10 @@ import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
 
+import static com.cburch.logisim.riscv.MMCSR.MSTATUS;
+import static com.cburch.logisim.riscv.MMCSR.MIP;
+import static com.cburch.logisim.riscv.MMCSR.MIE;
+
 /** Represents the state of a cpu. */
 class rv32imData implements InstanceData, Cloneable {
 
@@ -49,8 +53,7 @@ class rv32imData implements InstanceData, Cloneable {
   private CPUState cpuState;
   public enum CPUState {
     OPERATIONAL,
-    HALTED,
-    INTERRUPTED
+    HALTED
   }
 
   // More To Do
@@ -137,9 +140,9 @@ class rv32imData implements InstanceData, Cloneable {
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
-    if (cpuState == CPUState.INTERRUPTED) {
+    if (isInterruptPending()) {
           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
-          cpuState = CPUState.OPERATIONAL;fetchNextInstruction();
+          cpuState = CPUState.OPERATIONAL; fetchNextInstruction();
           return;
     }
 
@@ -211,6 +214,17 @@ class rv32imData implements InstanceData, Cloneable {
   public void skipInstruction() {
     pc.increment();
     fetchNextInstruction();
+  }
+
+  public boolean isInterruptPending() {
+    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+    CSR mip =  MMCSR.getCSR(this, MIP);
+    CSR mie = MMCSR.getCSR(this, MIE);
+
+    boolean mieBitEnabled = (mstatus.MIE.get() != 0);
+    boolean mtipBitEnabled = ( (mip.read() & 0x80) != 0);
+    boolean mtieBitEnabled = ( (mie.read() & 0x80) != 0);
+    return (mieBitEnabled && mtipBitEnabled && mtieBitEnabled);
   }
 
   /** getters and setters*/

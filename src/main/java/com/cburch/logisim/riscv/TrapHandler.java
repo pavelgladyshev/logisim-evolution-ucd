@@ -40,6 +40,9 @@ public class TrapHandler {
         mstatus.MIE.set(0);
         // privilege mode = MACHINE ( 0b11 )
         mstatus.MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
+
+        MMCSR.getCSR(hartData, MIP).write(MMCSR.getCSR(hartData, MIP).read() & (~0x80));
+        MMCSR.getCSR(hartData, MIE).write(MMCSR.getCSR(hartData, MIE).read() & (~0x80));
     }
 
     public static void throwIllegalInstructionException(rv32imData hartData) {

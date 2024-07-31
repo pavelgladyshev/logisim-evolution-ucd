@@ -16,6 +16,8 @@ import com.cburch.logisim.util.GraphicsUtil;
 import java.awt.*;
 
 import static com.cburch.logisim.riscv.CpuDrawSupport.*;
+import static com.cburch.logisim.riscv.MMCSR.MIE;
+import static com.cburch.logisim.riscv.MMCSR.MIP;
 import static com.cburch.logisim.std.Strings.S;
 
 /**
@@ -191,8 +193,15 @@ class rv32im extends InstanceFactory {
   }
 
   private void checkInterrupt(InstanceState state, rv32imData cur) {
-    if (state.getPortValue(INTERRUPT_IN) == Value.TRUE) {
-      cur.setCpuState(rv32imData.CPUState.INTERRUPTED);
+    if (state.getPortValue(INTERRUPT_IN) == Value.TRUE &&
+            !cur.isInterruptPending()) {
+      MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(cur, MMCSR.MSTATUS);
+      CSR mip =  MMCSR.getCSR(cur, MIP);
+      CSR mie = MMCSR.getCSR(cur, MIE);
+
+      mstatus.MIE.set(1);
+      mip.write(mip.read() | 0x80);
+      mie.write(mie.read() | 0x80);
     }
   }
 
