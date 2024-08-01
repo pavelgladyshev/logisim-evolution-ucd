@@ -193,16 +193,11 @@ class rv32im extends InstanceFactory {
   }
 
   private void checkInterrupt(InstanceState state, rv32imData cur) {
-    if (state.getPortValue(INTERRUPT_IN) == Value.TRUE &&
-            !cur.isInterruptPending()) {
-      MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(cur, MMCSR.MSTATUS);
+    if (state.getPortValue(INTERRUPT_IN) == Value.TRUE) {
       CSR mip =  MMCSR.getCSR(cur, MIP);
-      CSR mie = MMCSR.getCSR(cur, MIE);
-
-      mstatus.MIE.set(1);
       mip.write(mip.read() | 0x80);
-      mie.write(mie.read() | 0x80);
     }
+    // MEIP for MM interrupts.
   }
 
   private void checkContinuePressed(InstanceState state, rv32imData cur) {

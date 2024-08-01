@@ -88,7 +88,7 @@ public class CounterInterrupt extends InstanceFactory {
         final var cur = CounterInterruptRegisters.get(state);
 
         // Check if clock signal is changing from low/false to high/true
-        final var trigger = cur.updateClock(state.getPortValue(5));
+        final var trigger = cur.updateClock(state.getPortValue(6));
 
         if(state.getPortValue(RESET) == Value.TRUE) {
             cur.setCounter(0);
@@ -99,7 +99,6 @@ public class CounterInterrupt extends InstanceFactory {
                 (state.getPortValue(ADDRESS).toLongValue() == state.getAttributeValue(RISCV_MTIMECMP_ADDR) ))  {
             cur.setCounterComparator(state.getPortValue(DATA_IN).toLongValue());
         }
-
         if (state.getPortValue(LOAD) == Value.TRUE &&
                 (state.getPortValue(ADDRESS).toLongValue() == state.getAttributeValue(RISCV_MTIMECMP_ADDR) ))  {
             state.setPort(DATA_OUT, Value.createKnown(32, cur.getCounter()), 9);
@@ -108,14 +107,11 @@ public class CounterInterrupt extends InstanceFactory {
         }
 
         if (trigger) {
-
-            System.out.println(cur.getCounter() + " " + cur.getCounterComparator());
-
             cur.setCounter(cur.getCounter() + 1);
 
             if (cur.getCounter() >= cur.getCounterComparator()) {
                 state.setPort(INTERRUPT_OUT, Value.TRUE, 9);
-                cur.setCounterComparator(2 * cur.getCounterComparator());
+                cur.setCounterComparator(0xFFFFFFFFL);
             } else {
                 state.setPort(INTERRUPT_OUT, Value.FALSE, 9);
             }
