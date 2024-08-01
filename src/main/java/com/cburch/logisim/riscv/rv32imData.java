@@ -13,8 +13,6 @@ import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
-
-import static com.cburch.logisim.riscv.MMCSR.MSTATUS;
 import static com.cburch.logisim.riscv.MMCSR.MIP;
 import static com.cburch.logisim.riscv.MMCSR.MIE;
 
@@ -142,7 +140,7 @@ class rv32imData implements InstanceData, Cloneable {
 
     if (isInterruptPending()) {
           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
-          cpuState = CPUState.OPERATIONAL; fetchNextInstruction();
+          fetchNextInstruction();
           return;
     }
 
@@ -222,10 +220,10 @@ class rv32imData implements InstanceData, Cloneable {
     CSR mip =  MMCSR.getCSR(this, MIP);
     CSR mie = MMCSR.getCSR(this, MIE);
 
-    boolean mieBitEnabled = (mstatus.MIE.get() != 0);
-    boolean mtipBitEnabled = ( (mip.read() & 0x80) != 0);
-    boolean mtieBitEnabled = ( (mie.read() & 0x80) != 0);
-    return (mieBitEnabled && mtipBitEnabled && mtieBitEnabled);
+    boolean machineInterruptsEnabled = (mstatus.MIE.get() == 1);
+    boolean machineTimerInterruptPending = ( (mip.read() & 0x80) == 0x80);
+    boolean machineTimerInterruptsEnabled = ( (mie.read() & 0x80) == 0x80);
+    return (machineInterruptsEnabled  && machineTimerInterruptsEnabled && machineTimerInterruptPending);
   }
 
   /** getters and setters*/

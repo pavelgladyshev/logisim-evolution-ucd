@@ -40,9 +40,11 @@ public class SystemInstruction {
                     // PC = sepc
                 } else if (rs1 == 0 && rd == 0 && csr == 0x302) {
                     // mret
-                    state.getPC().set(MMCSR.getValue(state, MEPC));
+                    state.getPC().set(MMCSR.getValue(state, MEPC) );
                     mstatus.MIE.set(mstatus.MPIE.get());
                     mstatus.MPIE.set(1);
+                    CSR mip =  MMCSR.getCSR(state, MIP);
+                    mip.write(mip.read() & (~0x80));
                     // set MPP to user mode if implemented
                     mstatus.MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
                 }
