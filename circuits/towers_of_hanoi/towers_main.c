@@ -19,7 +19,7 @@
 
 // This is the number of discs in the puzzle.
 
-#define NUM_DISCS 9 
+#define NUM_DISCS 5 
 
 // debug output
 
@@ -273,6 +273,7 @@ int main( int argc, char* argv[] )
   unsigned int count = COUNTER;
   printstr("Total Clock Ticks = "); printhex(count); printstr("\n"); 
 
+  asm("ebreak");
   return res;
 }
 

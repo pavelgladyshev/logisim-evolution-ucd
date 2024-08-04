@@ -1,0 +1,119 @@
+
+There are no discarded input sections
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+rom              0x00400000         0x00004000         xrl
+ram              0x80000000         0x04000000         w!l
+*default*        0x00000000         0xffffffff
+
+Linker script and memory map
+
+
+.init           0x00400000       0x1c
+ *(.init)
+ .init          0x00400000       0x1c crt0.o
+                0x00400000                _start
+
+.text           0x0040001c      0x47c
+ *(.text)
+ .text          0x0040001c        0x0 crt0.o
+ .text          0x0040001c      0x47c towers_main.o
+                0x0040001c                printstr
+                0x00400044                printhex
+                0x00400098                list_getSize
+                0x004000a0                list_init
+                0x004000ac                list_push
+                0x004000e0                list_pop
+                0x00400118                list_clear
+                0x00400150                towers_init
+                0x004001b4                towers_clear
+                0x004001f8                towers_solve_h
+                0x004002b4                towers_solve
+                0x004002dc                towers_verify
+                0x0040035c                main
+
+.rodata.str1.4  0x00400498       0x49
+ .rodata.str1.4
+                0x00400498       0x49 towers_main.o
+
+.rela.dyn       0x004004e4        0x0
+ .rela.init     0x004004e4        0x0 crt0.o
+
+.data           0x004004e1        0x0
+ .data          0x004004e1        0x0 crt0.o
+ .data          0x004004e1        0x0 towers_main.o
+
+.srodata
+ *(.srodata)
+
+.bss            0x80000000       0x28
+ *(.bss)
+ .bss           0x80000000        0x0 crt0.o
+ .bss           0x80000000       0x28 towers_main.o
+                0x80000000                g_nodePool
+ *(COMMON)
+                0x83fffffc                        PROVIDE (__stack_init = ((ORIGIN (ram) + LENGTH (ram)) - 0x4))
+LOAD crt0.o
+LOAD towers_main.o
+OUTPUT(towers elf32-littleriscv)
+
+.sbss           0x80000028        0x8
+ .sbss          0x80000028        0x8 towers_main.o
+                0x80000028                g_nodeFreeList
+
+.riscv.attributes
+                0x00000000       0x2a
+ .riscv.attributes
+                0x00000000       0x28 crt0.o
+ .riscv.attributes
+                0x00000028       0x2a towers_main.o
+
+.comment        0x00000000       0x22
+ .comment       0x00000000       0x22 towers_main.o
+                                 0x23 (size before relaxing)
+
+.debug_line     0x00000000      0x8a3
+ .debug_line    0x00000000       0x64 crt0.o
+ .debug_line    0x00000064      0x83f towers_main.o
+
+.debug_line_str
+                0x00000000       0x5a
+ .debug_line_str
+                0x00000000       0x5a crt0.o
+                                 0x4c (size before relaxing)
+ .debug_line_str
+                0x0000005a       0xb4 towers_main.o
+
+.debug_info     0x00000000      0x7d4
+ .debug_info    0x00000000       0x24 crt0.o
+ .debug_info    0x00000024      0x7b0 towers_main.o
+
+.debug_abbrev   0x00000000      0x249
+ .debug_abbrev  0x00000000       0x14 crt0.o
+ .debug_abbrev  0x00000014      0x235 towers_main.o
+
+.debug_aranges  0x00000000       0x40
+ .debug_aranges
+                0x00000000       0x20 crt0.o
+ .debug_aranges
+                0x00000020       0x20 towers_main.o
+
+.debug_str      0x00000000      0x1f3
+ .debug_str     0x00000000      0x1f3 crt0.o
+                                 0x58 (size before relaxing)
+ .debug_str     0x000001f3      0x1b2 towers_main.o
+
+.debug_loclists
+                0x00000000      0x393
+ .debug_loclists
+                0x00000000      0x393 towers_main.o
+
+.debug_rnglists
+                0x00000000       0x17
+ .debug_rnglists
+                0x00000000       0x17 towers_main.o
+
+.debug_frame    0x00000000      0x168
+ .debug_frame   0x00000000      0x168 towers_main.o
