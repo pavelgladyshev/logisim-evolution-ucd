@@ -217,8 +217,8 @@ class rv32imData implements InstanceData, Cloneable {
 
   public boolean isInterruptPending() {
     MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
-    CSR mip =  MMCSR.getCSR(this, MIP);
-    CSR mie = MMCSR.getCSR(this, MIE);
+    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
+    MIE_CSR mie = (MIE_CSR) MMCSR.getCSR(this, MIE);
 
     boolean machineInterruptsEnabled = (mstatus.MIE.get() == 1);
     boolean machineTimerInterruptPending = ( (mip.read() & 0x80) == 0x80);

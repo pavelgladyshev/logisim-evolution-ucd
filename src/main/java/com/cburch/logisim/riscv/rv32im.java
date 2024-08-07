@@ -194,7 +194,7 @@ class rv32im extends InstanceFactory {
 
   private void checkInterrupt(InstanceState state, rv32imData cur) {
     if (state.getPortValue(INTERRUPT_IN) == Value.TRUE) {
-      CSR mip =  MMCSR.getCSR(cur, MIP);
+      MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(cur, MIP);
       mip.write(mip.read() | 0x80);
     }
     // MEIP for MM interrupts.
