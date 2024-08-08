@@ -1,6 +1,7 @@
 package com.cburch.logisim.riscv;
 
 import com.cburch.logisim.data.*;
+import com.cburch.logisim.riscv.cpu.rv32imData;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 

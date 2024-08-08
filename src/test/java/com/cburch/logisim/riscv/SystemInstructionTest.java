@@ -1,10 +1,13 @@
 package com.cburch.logisim.riscv;
 
 import com.cburch.logisim.data.Value;
+import com.cburch.logisim.riscv.cpu.SystemInstruction;
+import com.cburch.logisim.riscv.cpu.csrs.MMCSR;
+import com.cburch.logisim.riscv.cpu.rv32imData;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static com.cburch.logisim.riscv.MMCSR.*;
+import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class SystemInstructionTest {

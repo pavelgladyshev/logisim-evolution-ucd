@@ -1,6 +1,7 @@
 package com.cburch.logisim.riscv;
 
 import com.cburch.logisim.data.Value;
+import com.cburch.logisim.riscv.cpu.rv32imData;
 import org.junit.jupiter.api.*;
 import static com.cburch.logisim.riscv.rv32imDataTest.verifyRegisterRange;
 import static org.junit.jupiter.api.Assertions.assertEquals;
