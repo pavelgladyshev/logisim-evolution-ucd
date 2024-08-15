@@ -1,9 +1,9 @@
-package com.cburch.logisim.riscv;
+package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;
 
-import static com.cburch.logisim.riscv.rv32imData.HiZ32;
+import static com.cburch.logisim.riscv.cpu.rv32imData.HiZ32;
 
 public class LoadInstruction {
 

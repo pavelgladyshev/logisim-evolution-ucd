@@ -1,4 +1,4 @@
-package com.cburch.logisim.riscv;
+package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;

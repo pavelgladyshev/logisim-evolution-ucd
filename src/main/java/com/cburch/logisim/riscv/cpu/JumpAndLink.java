@@ -1,4 +1,4 @@
-package com.cburch.logisim.riscv;
+package com.cburch.logisim.riscv.cpu;
 
 public class JumpAndLink {
     public static void link(rv32imData hartData) {

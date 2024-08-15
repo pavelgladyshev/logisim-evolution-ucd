@@ -7,15 +7,19 @@
  * This is free software released under GNU GPLv3 license
  */
 
-package com.cburch.logisim.riscv;
+package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
+import com.cburch.logisim.riscv.cpu.csrs.*;
+
+import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
+import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
 
 /** Represents the state of a cpu. */
-class rv32imData implements InstanceData, Cloneable {
+public class rv32imData implements InstanceData, Cloneable {
 
   /** The last values observed. */
   private Value lastClock;
@@ -42,6 +46,9 @@ class rv32imData implements InstanceData, Cloneable {
   private final InstructionRegister ir;
   private final IntegerRegisters x;
 
+  /** CSR registers */
+  private final ControlAndStatusRegisters csr;
+
   /** Enum representing CPU states */
   private CPUState cpuState;
   public enum CPUState {
@@ -59,6 +66,7 @@ class rv32imData implements InstanceData, Cloneable {
     this.pc = new ProgramCounter(resetAddress);
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
+    this.csr = new ControlAndStatusRegisters();
     this.cpuState = CPUState.OPERATIONAL;
     this.intermixFlag = false;
     this.pressedContinue = false;
@@ -132,6 +140,12 @@ class rv32imData implements InstanceData, Cloneable {
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
+    if (isInterruptPending()) {
+          TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
+          fetchNextInstruction();
+          return;
+    }
+
     if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
 
     switch(ir.opcode()) {
@@ -183,8 +197,13 @@ class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x73:  // System instructions
-      default: // Unknown instruction: halts CPU
-        halt();
+        SystemInstruction.execute(this);
+        if(ir.func3() != 0x0) pc.increment();
+        fetchNextInstruction();
+
+        break;
+      default:  // Unknown instruction
+        TrapHandler.throwIllegalInstructionException(this);
     }
   }
 
@@ -196,6 +215,17 @@ class rv32imData implements InstanceData, Cloneable {
   public void skipInstruction() {
     pc.increment();
     fetchNextInstruction();
+  }
+
+  public boolean isInterruptPending() {
+    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
+    MIE_CSR mie = (MIE_CSR) MMCSR.getCSR(this, MIE);
+
+    boolean machineInterruptsEnabled = (mstatus.MIE.get() == 1);
+    boolean machineTimerInterruptPending = ( (mip.read() & 0x80) == 0x80);
+    boolean machineTimerInterruptsEnabled = ( (mie.read() & 0x80) == 0x80);
+    return (machineInterruptsEnabled  && machineTimerInterruptsEnabled && machineTimerInterruptPending);
   }
 
   /** getters and setters*/
@@ -215,6 +245,9 @@ class rv32imData implements InstanceData, Cloneable {
   public boolean getAddressing() { return addressing; }
   public boolean getIntermixFlag() { return intermixFlag; }
   public boolean getPressedContinue() { return pressedContinue; }
+  public long getCSRValue(int csr) {return this.csr.read(this, csr);}
+  public CSR getCSR(int csr) { return this.csr.get(csr); }
+
 
   public void setLastDataIn(long value) { lastDataIn = value; }
   public void setLastAddress(long value) { lastAddress = value; }
@@ -229,4 +262,5 @@ class rv32imData implements InstanceData, Cloneable {
   public void setIsSync(Value value) { isSync = value; }
   public void setIntermixFlag(boolean value) { intermixFlag = value; }
   public void setPressedContinue(boolean value) { pressedContinue = value; }
+  public void setCSR(int csr, long value) { this.csr.write(this, csr, value); }
 }

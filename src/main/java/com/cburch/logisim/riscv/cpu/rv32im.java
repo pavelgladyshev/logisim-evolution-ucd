@@ -7,15 +7,18 @@
  * This is free software released under GNU GPLv3 license
  */
 
-package com.cburch.logisim.riscv;
+package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.*;
+import com.cburch.logisim.riscv.cpu.csrs.MIP_CSR;
+import com.cburch.logisim.riscv.cpu.csrs.MMCSR;
 import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
 
-import static com.cburch.logisim.riscv.CpuDrawSupport.*;
+import static com.cburch.logisim.riscv.cpu.CpuDrawSupport.*;
+import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.std.Strings.S;
 
 /**
@@ -40,6 +43,7 @@ class rv32im extends InstanceFactory {
   public static final int MEMWRITE = 6;
   public static final int SYNC = 7;
   public static final int CONTINUE = 8;
+  public static final int INTERRUPT_IN = 9;
 
   public static final Attribute<Long> ATTR_RESET_ADDR =
           Attributes.forHexLong("resetAddress", S.getter("rv32imResetAddress"));
@@ -56,7 +60,7 @@ class rv32im extends InstanceFactory {
     super(_ID);
     setOffsetBounds(Bounds.create(-60, -20, 180, 675));
 
-    Port ps[] = new Port[9];
+    Port ps[] = new Port[10];
 
     ps[CLOCK] = new Port(-60, -10, Port.INPUT, 1);
     ps[RESET] = new Port(-60, 60, Port.INPUT, 1);
@@ -67,6 +71,7 @@ class rv32im extends InstanceFactory {
     ps[MEMWRITE] = new Port(120, 90, Port.OUTPUT, 1);
     ps[SYNC] = new Port(120, 120, Port.INPUT, 1);
     ps[CONTINUE] = new Port(120, 140, Port.INPUT, 1);
+    ps[INTERRUPT_IN] = new Port(-60, 140, Port.INPUT, 1);
 
     ps[CLOCK].setToolTip(S.getter("rv32imClock"));
     ps[RESET].setToolTip(S.getter("rv32imReset"));
@@ -77,6 +82,7 @@ class rv32im extends InstanceFactory {
     ps[MEMWRITE].setToolTip(S.getter("rv32imMemWrite"));
     ps[SYNC].setToolTip(S.getter("rv32imSynchronizer"));
     ps[CONTINUE].setToolTip(S.getter("rv32imContinue"));
+    ps[INTERRUPT_IN].setToolTip(S.getter("rv32imInterruptIn"));
 
     setPorts(ps);
 
@@ -111,6 +117,7 @@ class rv32im extends InstanceFactory {
     painter.drawPort(6); // draw port 6 as just a dot
     painter.drawPort(7); // draw port 7 as just a dot
     painter.drawPort(8); // draw port 8 as just a dot
+    painter.drawPort(9); // draw port 9 as just a dot
 
     // Display the current state.
     // If the context says not to show state (as when generating
@@ -145,6 +152,9 @@ class rv32im extends InstanceFactory {
     // Check if continue button is pressed and mark flag to change CPU state on rising edge
     // of clock cycle
     checkContinuePressed(state, cur);
+
+    // Check if interrupt is risen
+    checkInterrupt(state, cur);
 
     // Check if intermixing data before 2nd clock cycle and
     // store intermix data when needed
@@ -181,6 +191,14 @@ class rv32im extends InstanceFactory {
     if (state.getPortValue(RESET) == Value.TRUE) {
       state.setData(null);
     }
+  }
+
+  private void checkInterrupt(InstanceState state, rv32imData cur) {
+    if (state.getPortValue(INTERRUPT_IN) == Value.TRUE) {
+      MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(cur, MIP);
+      mip.write(mip.read() | 0x80);
+    }
+    // MEIP for MM interrupts.
   }
 
   private void checkContinuePressed(InstanceState state, rv32imData cur) {

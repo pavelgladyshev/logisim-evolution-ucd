@@ -1,4 +1,4 @@
-package com.cburch.logisim.riscv;
+package com.cburch.logisim.riscv.videoram;
 
 import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.InstanceData;

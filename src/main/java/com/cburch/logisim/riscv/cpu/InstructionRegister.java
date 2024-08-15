@@ -1,4 +1,4 @@
-package com.cburch.logisim.riscv;
+package com.cburch.logisim.riscv.cpu;
 
 public class InstructionRegister {
     long value;
@@ -31,6 +31,9 @@ public class InstructionRegister {
         res = (res ^ 0x800) - 0x800; // sign-extend 12 bit integer.
         return res;
     }
+
+    public int csr() { return (int)((value >> 20) & 0xFFF);}
+
 
     // S-type additional fields
     public long imm_S() { return ( ( (func7() << 5) | rd() ) ^ 0x800) - 0x800; }      // value[31:25].value[11:7]

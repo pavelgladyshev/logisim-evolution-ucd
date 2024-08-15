@@ -7,8 +7,10 @@
  * This is free software released under GNU GPLv3 license
  */
 
-package com.cburch.logisim.riscv;
+package com.cburch.logisim.riscv.cpu;
 
+import com.cburch.logisim.riscv.timer.Timer;
+import com.cburch.logisim.riscv.videoram.MonochromeVideoram;
 import com.cburch.logisim.tools.AddTool;
 import com.cburch.logisim.tools.Library;
 
@@ -41,7 +43,8 @@ public class RiscvComponents extends Library {
     tools =
         Arrays.asList(
             new AddTool(new rv32im()),
-            new AddTool(new MonochromeVideoram()));
+            new AddTool(new MonochromeVideoram()),
+            new AddTool(new Timer()));
   }
 
   /** Returns the name of the library that the user will see. */
