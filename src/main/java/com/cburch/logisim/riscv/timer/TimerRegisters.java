@@ -4,13 +4,13 @@ import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
 
-public class CounterInterruptRegisters implements InstanceData, Cloneable {
+public class TimerRegisters implements InstanceData, Cloneable {
 
     private Value lastClock;
     private long counter;
     private long counterComparator;
 
-    public CounterInterruptRegisters(Value lastClock) {
+    public TimerRegisters(Value lastClock) {
         this.lastClock = lastClock;
         this.counter = 0;
     }
@@ -24,10 +24,10 @@ public class CounterInterruptRegisters implements InstanceData, Cloneable {
         }
     }
 
-    public static CounterInterruptRegisters get(InstanceState state) {
-        CounterInterruptRegisters ret = (CounterInterruptRegisters) state.getData();
+    public static TimerRegisters get(InstanceState state) {
+        TimerRegisters ret = (TimerRegisters) state.getData();
         if (ret == null) {
-            ret = new CounterInterruptRegisters(Value.FALSE);
+            ret = new TimerRegisters(Value.FALSE);
             state.setData(ret);
         }
         return ret;
