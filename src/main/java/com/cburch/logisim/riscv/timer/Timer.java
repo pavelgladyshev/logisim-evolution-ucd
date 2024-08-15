@@ -8,7 +8,7 @@ import java.awt.*;
 
 import static com.cburch.logisim.std.Strings.S;
 
-public class CounterInterrupt extends InstanceFactory {
+public class Timer extends InstanceFactory {
 
     /**
      * Unique identifier of the tool, used as reference in project files. Do NOT change as it will
@@ -34,7 +34,7 @@ public class CounterInterrupt extends InstanceFactory {
 
     static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
 
-    public CounterInterrupt() {
+    public Timer() {
         super(_ID);
         setOffsetBounds(Bounds.create(-30, -10, 60, 60));
 
@@ -85,7 +85,7 @@ public class CounterInterrupt extends InstanceFactory {
     @Override
     public void propagate(InstanceState state) {
 
-        final var cur = CounterInterruptRegisters.get(state);
+        final var cur = TimerRegisters.get(state);
 
         // Check if clock signal is changing from low/false to high/true
         final var trigger = cur.updateClock(state.getPortValue(6));

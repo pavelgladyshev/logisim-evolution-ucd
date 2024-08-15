@@ -54,7 +54,7 @@ public class SystemInstructionTest {
         cpu.update(0x3002b573); // csrrc x0, mstatus, x1 (0x300210f3)
 
         assertEquals(0, cpu.getX(0)); // rd should contain old CSR value
-        assertEquals(1800, MMCSR.getValue(cpu, MSTATUS)); // CSR should be AND-ed with NOT(rs1) value
+        assertEquals(6144, MMCSR.getValue(cpu, MSTATUS)); // CSR should be AND-ed with NOT(rs1) value
     }
 
     @Test
