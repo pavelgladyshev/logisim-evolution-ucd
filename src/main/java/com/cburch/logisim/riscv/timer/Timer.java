@@ -16,7 +16,7 @@ public class Timer extends InstanceFactory {
      *
      * <p>Identifier value must MUST be unique string among all tools.
      */
-    public static final String _ID = "counter_interrupt";
+    public static final String _ID = "Timer";
 
     public static final int ADDRESS = 0;
     public static final int STORE = 1;
@@ -38,24 +38,24 @@ public class Timer extends InstanceFactory {
         super(_ID);
         setOffsetBounds(Bounds.create(-30, -10, 60, 60));
 
-        Port ps[] = new Port[8];
+        Port[] ps = new Port[8];
         ps[ADDRESS] = new Port(-30, 10, Port.INPUT, 32);
         ps[STORE] = new Port(-30, 20, Port.INPUT, 1);
         ps[LOAD] = new Port(-30, 30, Port.INPUT, 1);
         ps[DATA_IN] = new Port(-30, 40, Port.INPUT, 32);
-        ps[INTERRUPT_OUT] = new Port(50, 20, Port.INPUT, 1);
+        ps[INTERRUPT_OUT] = new Port(30, 20, Port.OUTPUT, 1);
         ps[RESET] = new Port(-10, 50, Port.INPUT, 1);
         ps[CLOCK] = new Port(10, 50, Port.INPUT, 1);
-        ps[DATA_OUT] = new Port(0, -10, Port.INPUT, 32);
+        ps[DATA_OUT] = new Port(0, -10, Port.OUTPUT, 32);
 
-        ps[ADDRESS].setToolTip(S.getter("counterInterruptAddress"));
-        ps[STORE].setToolTip(S.getter("counterInterruptStore"));
-        ps[LOAD].setToolTip(S.getter("counterInterruptLoad"));
-        ps[DATA_IN].setToolTip(S.getter("counterInterruptDataIn"));
-        ps[INTERRUPT_OUT].setToolTip(S.getter("counterInterruptOut"));
-        ps[RESET].setToolTip(S.getter("counterInterruptReset"));
-        ps[CLOCK].setToolTip(S.getter("counterInterruptClock"));
-        ps[DATA_OUT].setToolTip(S.getter("counterDataOut"));
+        ps[ADDRESS].setToolTip(S.getter("timerAddressIn"));
+        ps[STORE].setToolTip(S.getter("timerStore"));
+        ps[LOAD].setToolTip(S.getter("timerLoad"));
+        ps[DATA_IN].setToolTip(S.getter("timerDataIn"));
+        ps[INTERRUPT_OUT].setToolTip(S.getter("timerInterruptRequestOut"));
+        ps[RESET].setToolTip(S.getter("timerReset"));
+        ps[CLOCK].setToolTip(S.getter("timerClock"));
+        ps[DATA_OUT].setToolTip(S.getter("timerDataOut"));
         setPorts(ps);
 
         setAttributes(
@@ -76,8 +76,7 @@ public class Timer extends InstanceFactory {
 
             Font font = new Font("Serif", Font.BOLD, 11); // Changed font size to 12
 
-            GraphicsUtil.drawText(graphics, font, "Counter", posX+20, posY-25, 0, 0, Color.black, Color.WHITE);
-            GraphicsUtil.drawText(graphics, font, "Interrupt", posX+20, posY-15, 0, 0, Color.black, Color.WHITE);
+            GraphicsUtil.drawText(graphics, font, "Timer", posX+20, posY-25, 0, 0, Color.black, Color.WHITE);
         }
     }
 

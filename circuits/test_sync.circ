@@ -125,7 +125,7 @@
       <a name="label" val="Sync"/>
     </comp>
     <comp lib="1" loc="(190,120)" name="AND Gate"/>
-    <comp lib="11" loc="(260,140)" name="rv_32_im">
+    <comp lib="11" loc="(260,140)" name="RV32IM CPU">
       <a name="label" val="CPU1"/>
       <a name="labelfont" val="SansSerif bold 13"/>
       <a name="resetAddress" val="0x400000"/>

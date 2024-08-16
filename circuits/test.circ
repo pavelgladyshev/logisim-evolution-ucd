@@ -93,7 +93,7 @@
       <a name="fanout" val="1"/>
       <a name="incoming" val="32"/>
     </comp>
-    <comp lib="11" loc="(260,140)" name="rv_32_im">
+    <comp lib="11" loc="(260,140)" name="RV32IM CPU">
       <a name="label" val="CPU1"/>
       <a name="labelfont" val="SansSerif bold 13"/>
       <a name="resetAddress" val="0x400000"/>

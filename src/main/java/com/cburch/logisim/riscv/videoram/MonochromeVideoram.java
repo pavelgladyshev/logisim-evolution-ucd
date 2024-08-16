@@ -15,7 +15,7 @@ public class MonochromeVideoram extends InstanceFactory {
      *
      * <p>Identifier value must MUST be unique string among all tools.
      */
-    public static final String _ID = "monochrome_videoram";
+    public static final String _ID = "Monochrome VideoRAM";
 
     public static final int STORE = 0;
     public static final int ADDRESS = 1;
@@ -31,7 +31,7 @@ public class MonochromeVideoram extends InstanceFactory {
         super(_ID);
         setOffsetBounds(Bounds.create(-30, -10, 30, 330));
 
-        Port ps[] = new Port[39];
+        Port[] ps = new Port[39];
         ps[STORE] = new Port(-30, 140, Port.INPUT, 1);
         ps[ADDRESS] = new Port(-30, 150, Port.INPUT, 5);
         ps[DATA_IN] = new Port(-30, 160, Port.INPUT, 32);

@@ -7,8 +7,9 @@
  * This is free software released under GNU GPLv3 license
  */
 
-package com.cburch.logisim.riscv.cpu;
+package com.cburch.logisim.riscv;
 
+import com.cburch.logisim.riscv.cpu.rv32im;
 import com.cburch.logisim.riscv.timer.Timer;
 import com.cburch.logisim.riscv.videoram.MonochromeVideoram;
 import com.cburch.logisim.tools.AddTool;
