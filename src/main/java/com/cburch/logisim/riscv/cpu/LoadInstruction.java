@@ -27,12 +27,19 @@ public class LoadInstruction {
             case 0x5:  // lhu rd, imm(rs1)
                 hartData.setX(ir.rd(), getUnsignedDataHalf(data, address));
                 break;
-            default:
-                hartData.halt();
         }
+        hartData.getPC().increment();
     }
 
     public static void performAddressing(rv32imData hartData) {
+
+        //never reach latch step if instruction is invalid
+        InstructionRegister ir = hartData.getIR();
+        if(!(ir.func3() == 0x0 || ir.func3() == 0x1 || ir.func3() == 0x2 || ir.func3() == 0x4 || ir.func3() == 0x5)) {
+            TrapHandler.throwIllegalInstructionException(hartData);
+            return;
+        }
+
         hartData.setFetching(false);
         hartData.setAddressing(true);
 
