@@ -360,7 +360,7 @@
     <comp lib="1" loc="(940,940)" name="Controlled Buffer">
       <a name="width" val="32"/>
     </comp>
-    <comp lib="11" loc="(220,90)" name="rv_32_im">
+    <comp lib="11" loc="(220,90)" name="RV32IM CPU">
       <a name="hexRegisters" val="true"/>
       <a name="resetAddress" val="0x400000"/>
     </comp>

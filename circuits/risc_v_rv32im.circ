@@ -497,7 +497,7 @@
       <a name="facing" val="east"/>
       <a name="label" val="MemRead"/>
     </comp>
-    <comp lib="0" loc="(720,1220)" name="Tunnel">
+    <comp lib="0" loc="(700,1230)" name="Tunnel">
       <a name="facing" val="north"/>
       <a name="label" val="RST"/>
     </comp>
@@ -505,6 +505,9 @@
       <a name="appear" val="center"/>
       <a name="fanout" val="8"/>
       <a name="incoming" val="8"/>
+    </comp>
+    <comp lib="0" loc="(740,1230)" name="Clock">
+      <a name="facing" val="north"/>
     </comp>
     <comp lib="0" loc="(750,360)" name="Clock"/>
     <comp lib="0" loc="(750,570)" name="Tunnel">
@@ -637,10 +640,10 @@
     <comp lib="1" loc="(840,450)" name="AND Gate">
       <a name="size" val="30"/>
     </comp>
-    <comp lib="11" loc="(260,70)" name="rv_32_im">
+    <comp lib="11" loc="(260,70)" name="RV32IM CPU">
       <a name="resetAddress" val="0x400000"/>
     </comp>
-    <comp lib="11" loc="(740,890)" name="monochrome_videoram"/>
+    <comp lib="11" loc="(740,890)" name="Monochrome VideoRAM"/>
     <comp lib="3" loc="(1210,310)" name="Comparator">
       <a name="width" val="32"/>
     </comp>
@@ -1030,6 +1033,8 @@ ffff82b7 2000313 52383 72a023 428293 450513 fff30313 fe0316e3
     <wire from="(690,410)" to="(690,430)"/>
     <wire from="(690,430)" to="(710,430)"/>
     <wire from="(690,950)" to="(690,1040)"/>
+    <wire from="(700,1220)" to="(700,1230)"/>
+    <wire from="(700,1220)" to="(720,1220)"/>
     <wire from="(700,320)" to="(700,370)"/>
     <wire from="(700,320)" to="(720,320)"/>
     <wire from="(700,370)" to="(700,410)"/>
@@ -1045,6 +1050,8 @@ ffff82b7 2000313 52383 72a023 428293 450513 fff30313 fe0316e3
     <wire from="(720,730)" to="(730,730)"/>
     <wire from="(720,850)" to="(1070,850)"/>
     <wire from="(720,850)" to="(720,880)"/>
+    <wire from="(730,1210)" to="(730,1220)"/>
+    <wire from="(730,1220)" to="(740,1220)"/>
     <wire from="(740,1000)" to="(760,1000)"/>
     <wire from="(740,1010)" to="(760,1010)"/>
     <wire from="(740,1020)" to="(760,1020)"/>
@@ -1066,6 +1073,7 @@ ffff82b7 2000313 52383 72a023 428293 450513 fff30313 fe0316e3
     <wire from="(740,1180)" to="(760,1180)"/>
     <wire from="(740,1190)" to="(760,1190)"/>
     <wire from="(740,1200)" to="(760,1200)"/>
+    <wire from="(740,1220)" to="(740,1230)"/>
     <wire from="(740,200)" to="(760,200)"/>
     <wire from="(740,440)" to="(750,440)"/>
     <wire from="(740,890)" to="(760,890)"/>

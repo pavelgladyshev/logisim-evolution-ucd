@@ -56,7 +56,6 @@
   <lib desc="#BFH-Praktika" name="9"/>
   <lib desc="#Input/Output-Extra" name="10"/>
   <lib desc="#riscv" name="11"/>
-  <lib desc="file#../../../Desktop/assembler/risc_v_rv32im_adv.circ" name="12"/>
   <main name="System_JAVA"/>
   <options>
     <a name="gateUndefined" val="ignore"/>
@@ -751,12 +750,12 @@
       <a name="Direction" val="right_to_left"/>
       <a name="width" val="5"/>
     </comp>
-    <comp lib="11" loc="(150,190)" name="counter_interrupt"/>
-    <comp lib="11" loc="(260,70)" name="rv_32_im">
+    <comp lib="11" loc="(150,190)" name="Timer"/>
+    <comp lib="11" loc="(260,70)" name="RV32IM CPU">
       <a name="hexRegisters" val="true"/>
       <a name="resetAddress" val="0x400000"/>
     </comp>
-    <comp lib="11" loc="(740,890)" name="monochrome_videoram"/>
+    <comp lib="11" loc="(740,890)" name="Monochrome VideoRAM"/>
     <comp lib="3" loc="(1210,310)" name="Comparator">
       <a name="width" val="32"/>
     </comp>

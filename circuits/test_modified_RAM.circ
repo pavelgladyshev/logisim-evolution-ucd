@@ -214,7 +214,7 @@
     <comp lib="1" loc="(930,270)" name="AND Gate">
       <a name="size" val="30"/>
     </comp>
-    <comp lib="11" loc="(310,140)" name="rv_32_im">
+    <comp lib="11" loc="(310,140)" name="RV32IM CPU">
       <a name="label" val="CPU1"/>
       <a name="labelfont" val="SansSerif bold 13"/>
       <a name="resetAddress" val="0x400000"/>

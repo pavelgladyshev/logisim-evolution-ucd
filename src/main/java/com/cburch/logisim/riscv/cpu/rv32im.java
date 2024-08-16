@@ -25,14 +25,14 @@ import static com.cburch.logisim.std.Strings.S;
  * Initial stab at RISC-V rv32im cpu component. All of the code relevant to state, though,
  * appears in rv32imData class.
  */
-class rv32im extends InstanceFactory {
+public class rv32im extends InstanceFactory {
   /**
    * Unique identifier of the tool, used as reference in project files. Do NOT change as it will
    * prevent project files from loading.
    *
    * <p>Identifier value must MUST be unique string among all tools.
    */
-  public static final String _ID = "rv_32_im";
+  public static final String _ID = "RV32IM CPU";
 
   public static final int CLOCK = 0;
   public static final int RESET = 1;
@@ -43,7 +43,7 @@ class rv32im extends InstanceFactory {
   public static final int MEMWRITE = 6;
   public static final int SYNC = 7;
   public static final int CONTINUE = 8;
-  public static final int INTERRUPT_IN = 9;
+  public static final int TIMER_INTERRUPT_REQUEST = 9;
 
   public static final Attribute<Long> ATTR_RESET_ADDR =
           Attributes.forHexLong("resetAddress", S.getter("rv32imResetAddress"));
@@ -60,7 +60,7 @@ class rv32im extends InstanceFactory {
     super(_ID);
     setOffsetBounds(Bounds.create(-60, -20, 180, 675));
 
-    Port ps[] = new Port[10];
+    Port[] ps = new Port[10];
 
     ps[CLOCK] = new Port(-60, -10, Port.INPUT, 1);
     ps[RESET] = new Port(-60, 60, Port.INPUT, 1);
@@ -71,7 +71,7 @@ class rv32im extends InstanceFactory {
     ps[MEMWRITE] = new Port(120, 90, Port.OUTPUT, 1);
     ps[SYNC] = new Port(120, 120, Port.INPUT, 1);
     ps[CONTINUE] = new Port(120, 140, Port.INPUT, 1);
-    ps[INTERRUPT_IN] = new Port(-60, 140, Port.INPUT, 1);
+    ps[TIMER_INTERRUPT_REQUEST] = new Port(-60, 140, Port.INPUT, 1);
 
     ps[CLOCK].setToolTip(S.getter("rv32imClock"));
     ps[RESET].setToolTip(S.getter("rv32imReset"));
@@ -82,7 +82,7 @@ class rv32im extends InstanceFactory {
     ps[MEMWRITE].setToolTip(S.getter("rv32imMemWrite"));
     ps[SYNC].setToolTip(S.getter("rv32imSynchronizer"));
     ps[CONTINUE].setToolTip(S.getter("rv32imContinue"));
-    ps[INTERRUPT_IN].setToolTip(S.getter("rv32imInterruptIn"));
+    ps[TIMER_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imTimerInterruptRequestIn"));
 
     setPorts(ps);
 
@@ -133,7 +133,7 @@ class rv32im extends InstanceFactory {
       GraphicsUtil.drawText(graphics, font,"RISC-V RV32IM", posX+80, posY-127,0,0, Color.black, Color.WHITE);
 
       drawHexReg(graphics, posX, posY - 40, false, (int) state.getPC().get(), "PC", true);
-      drawHexReg(graphics, posX, posY-80, false, (int) state.getOutputData().toLongValue(), "OUTPUT", true);
+      drawHexReg(graphics, posX, posY-80, false, (int) state.getOutputData().toLongValue(), "Data Out", true);
       drawHexReg(graphics, posX+80, posY-80, false, (int) state.getAddress().toLongValue(), "Addr", true);
       drawRegisters(graphics, posX, posY, false, state, painter.getAttributeValue(ATTR_HEX_REGS));
       drawCpuState(graphics, posX+80, posY-40, false, "CPU state", state.getCpuState());
@@ -194,7 +194,7 @@ class rv32im extends InstanceFactory {
   }
 
   private void checkInterrupt(InstanceState state, rv32imData cur) {
-    if (state.getPortValue(INTERRUPT_IN) == Value.TRUE) {
+    if (state.getPortValue(TIMER_INTERRUPT_REQUEST) == Value.TRUE) {
       MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(cur, MIP);
       mip.write(mip.read() | 0x80);
     }
