@@ -5,6 +5,7 @@ public class BranchInstruction {
     public static void execute(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
         boolean takeBranch = false;
+        boolean illegalInstructionExceptionTriggered = false;
 
         switch (ir.func3()) {
             case 0x0:   // beq rs1, rs2, label
@@ -38,12 +39,16 @@ public class BranchInstruction {
                 }
                 break;
             default:
-                hartData.halt();
+                illegalInstructionExceptionTriggered = true;
         }
 
-        if (takeBranch) {
+        if (illegalInstructionExceptionTriggered) {
+            TrapHandler.throwIllegalInstructionException(hartData);
+        }
+        else if(takeBranch) {
             hartData.getPC().set(hartData.getPC().get() + ir.imm_B());
-        } else {
+        }
+        else {
             hartData.getPC().increment();
         }
     }

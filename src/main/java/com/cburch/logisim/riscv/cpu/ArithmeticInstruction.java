@@ -5,6 +5,8 @@ public class ArithmeticInstruction {
     public static void executeImmediate(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
         long rs1 = hartData.getX(ir.rs1());
+        boolean illegalInstructionExceptionTriggered = false;
+
         switch (ir.func3()) {
             case 0x0:   // addi rd,rs1,imm_I
                 hartData.setX(ir.rd(), rs1 + ir.imm_I());
@@ -30,7 +32,7 @@ public class ArithmeticInstruction {
                         hartData.setX(ir.rd(), rs1 >> ir.rs2());
                         break;
                     default:
-                        hartData.halt();
+                        illegalInstructionExceptionTriggered = true;
                 }
                 break;
             case 0x6:   // ori rd,rs1,imm_I
@@ -40,14 +42,19 @@ public class ArithmeticInstruction {
                 hartData.setX(ir.rd(), rs1 & ir.imm_I());
                 break;
             default:
-                hartData.halt();
+                illegalInstructionExceptionTriggered = true;
         }
+
+        if(illegalInstructionExceptionTriggered)TrapHandler.throwIllegalInstructionException(hartData);
+        else hartData.getPC().increment();
     }
 
     private static void executeArithmetic(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
         long rs1 = hartData.getX(ir.rs1());
         long rs2 = hartData.getX(ir.rs2());
+        boolean illegalInstructionExceptionTriggered = false;
+
         switch (ir.func3()) {
             case 0x0:
                 switch (ir.func7()) {
@@ -58,7 +65,7 @@ public class ArithmeticInstruction {
                         hartData.setX(ir.rd(), (int) (rs1 - rs2));
                         break;
                     default:
-                        hartData.halt();
+                        illegalInstructionExceptionTriggered = true;
                 }
                 break;
             case 0x1:   // sll rd,rs1,rs2
@@ -82,7 +89,7 @@ public class ArithmeticInstruction {
                         hartData.setX(ir.rd(), (int) rs1 >> (rs2 & 0x1f));
                         break;
                     default:
-                        hartData.halt();
+                        illegalInstructionExceptionTriggered = true;
                 }
                 break;
             case 0x6:   // or rd,rs1,rs2
@@ -92,15 +99,18 @@ public class ArithmeticInstruction {
                 hartData.setX(ir.rd(),rs1 & rs2);
                 break;
             default:
-                hartData.halt();
+                illegalInstructionExceptionTriggered = true;
         }
+
+        if(illegalInstructionExceptionTriggered)TrapHandler.throwIllegalInstructionException(hartData);
+        else hartData.getPC().increment();
     }
 
     private static void executeMultiplicationDivision(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
         long rs1 = hartData.getX(ir.rs1());
         long rs2 = hartData.getX(ir.rs2());
-
+        boolean illegalInstructionExceptionTriggered = false;
         // Refer to specification for division/mod by zero:
         // https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf
         // (page 36)
@@ -163,8 +173,10 @@ public class ArithmeticInstruction {
                 hartData.setX(ir.rd(), Integer.remainderUnsigned((int)rs1,(int)rs2));
                 break;
             default:
-                hartData.halt();
+                illegalInstructionExceptionTriggered = true;
         }
+        if(illegalInstructionExceptionTriggered)TrapHandler.throwIllegalInstructionException(hartData);
+        else hartData.getPC().increment();
     }
     public static void executeRegister(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
