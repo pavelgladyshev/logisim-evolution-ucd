@@ -151,12 +151,10 @@ public class rv32imData implements InstanceData, Cloneable {
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
         ArithmeticInstruction.executeImmediate(this);
-        pc.increment();
         fetchNextInstruction();
         break;
       case 0x33:  // R-type arithmetic & multiplication and division instructions
         ArithmeticInstruction.executeRegister(this);
-        pc.increment();
         fetchNextInstruction();
         break;
       case 0x03:  // load instruction (I-type)
@@ -164,13 +162,12 @@ public class rv32imData implements InstanceData, Cloneable {
           LoadInstruction.performAddressing(this);
         } else {
           LoadInstruction.latch(this, dataIn);
-          pc.increment();
           fetchNextInstruction();
         }
         break;
       case 0x23:  // storing instruction (S-type)
         StoreInstruction.performAddressing(this);
-        intermixFlag = (cpuState == CPUState.OPERATIONAL);  // WE ARE MIXING DATA ONLY WHEN INSTRUCTION DOESN'T HALT CPU!
+        intermixFlag = (addressing);
         break;
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
@@ -198,9 +195,7 @@ public class rv32imData implements InstanceData, Cloneable {
         break;
       case 0x73:  // System instructions
         SystemInstruction.execute(this);
-        if(ir.func3() != 0x0) pc.increment();
         fetchNextInstruction();
-
         break;
       default:  // Unknown instruction
         TrapHandler.throwIllegalInstructionException(this);

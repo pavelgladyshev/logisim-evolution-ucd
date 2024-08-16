@@ -6,6 +6,13 @@ import com.cburch.logisim.data.Value;
 public class StoreInstruction {
 
     public static void performAddressing(rv32imData hartData) {
+
+        InstructionRegister ir = hartData.getIR();
+        if(!(ir.func3() == 0x0 || ir.func3() == 0x1 || ir.func3() == 0x2)) {
+            TrapHandler.throwIllegalInstructionException(hartData);
+            return;
+        }
+
         hartData.setFetching(false);
         hartData.setAddressing(true);
 
@@ -13,26 +20,7 @@ public class StoreInstruction {
         hartData.setLastAddress(getAddress(hartData).toLongValue());
 
         // Values for outputs fetching data
-        hartData.setAddress(Value.createKnown(
-                32, hartData.getLastAddress() - get2LSB(hartData) ) );
-
-        // Check for correct offset
-        if (hartData.getOutputDataWidth() == 2) {
-            if (get2LSB(hartData) != 0 && get2LSB(hartData) != 2) {
-                hartData.halt();
-                hartData.setMemWrite(Value.FALSE);
-                return;
-            }
-        }
-
-        if (hartData.getOutputDataWidth() == 4) {
-            if (get2LSB(hartData) != 0) {
-                hartData.halt();
-                hartData.setMemWrite(Value.FALSE);
-                return;
-            }
-        }
-
+        hartData.setAddress(Value.createKnown(32, hartData.getLastAddress() - get2LSB(hartData)));
         hartData.setMemRead(Value.TRUE);
         hartData.setMemWrite(Value.TRUE);
         hartData.setIsSync(Value.TRUE);
@@ -96,8 +84,6 @@ public class StoreInstruction {
                 hartData.setOutputDataWidth(4);
                 result = Value.createKnown(BitWidth.create(32), (data ^ 0x80000000L) - 0x80000000L);
                 break;
-            default:
-                hartData.halt();
         }
 
         return result;
