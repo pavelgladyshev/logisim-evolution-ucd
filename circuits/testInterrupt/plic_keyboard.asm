@@ -6,9 +6,9 @@ main:
  	la s0,trap_handler
  	csrw s0,mtvec       # set mtvec = address of the handler
 
- 	# enable processing of interrup requests from timer
- 	li s1,0x80
- 	csrw s1,mie         # set mie = 0x80
+ 	# enable processing of interrup requests from PLIC
+ 	li s1,0x800
+ 	csrw s1,mie         # set mie = 0x800
 
  	# enable interrupts in CPU
  	csrsi mstatus,8    # set interrupt enable bit in mstatus (0)
@@ -28,7 +28,8 @@ main:
  	li s1, 2	  # enable keyboard 2 interrupts
  	sw s1, 0(s0)
 
- 	wfi
+loop1:
+	j loop1
 
 trap_handler:
 	li s0, 0x0c000004
@@ -86,7 +87,8 @@ print_keyboard1:
 	li s0, 0x0c200004
 	li s1, 0
 	sw s1, 0(s0)
-	wfi
+loop2:
+	j loop2
 
 print_keyboard2:
 	li s0, 0xffff0104
@@ -97,4 +99,5 @@ print_keyboard2:
 	li s0, 0x0c200004
 	li s1, 0
 	sw s1, 0(s0)
-	wfi
+loop3:
+	j loop3

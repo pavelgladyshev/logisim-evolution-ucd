@@ -201,11 +201,19 @@ public class rv32im extends InstanceFactory {
   }
 
   private void checkInterrupt(InstanceState state, rv32imData cur) {
-    if (state.getPortValue(TIMER_INTERRUPT_REQUEST) == Value.TRUE || state.getPortValue(PLIC_INTERRUPT_REQUEST) == Value.TRUE) {
-      MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(cur, MIP);
-      mip.write(mip.read() | 0x80);
+
+    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(cur, MIP);
+
+    if (state.getPortValue(TIMER_INTERRUPT_REQUEST) == Value.TRUE) {
+      // Set the Machine Timer Interrupt Pending (MTIP) bit in the MIP CSR
+      mip.write(mip.read() | 0x80);   // 0x80 corresponds to MTIP
     }
-    // MEIP for MM interrupts.
+
+    if (state.getPortValue(PLIC_INTERRUPT_REQUEST) == Value.TRUE) {
+      // Set the Machine External Interrupt Pending (MEIP) bit in the MIP CSR
+      mip.write(mip.read() | 0x800);  // 0x800 corresponds to MEIP
+    }
+
   }
 
   private void checkContinuePressed(InstanceState state, rv32imData cur) {
