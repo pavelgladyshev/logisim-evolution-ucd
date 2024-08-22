@@ -144,10 +144,18 @@ public class rv32imData implements InstanceData, Cloneable {
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
-    if (isInterruptPending()) {
+    // Check for timer interrupts
+    if (isTimerInterruptPending()) {
           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
           fetchNextInstruction();
           return;
+    }
+
+    // Check for external interrupts
+    if (isExternalInterruptPending()) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
+      fetchNextInstruction();
+      return;
     }
 
     if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
@@ -220,7 +228,7 @@ public class rv32imData implements InstanceData, Cloneable {
     fetchNextInstruction();
   }
 
-  public boolean isInterruptPending() {
+  public boolean isTimerInterruptPending() {
     MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
     MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
     MIE_CSR mie = (MIE_CSR) MMCSR.getCSR(this, MIE);
@@ -230,6 +238,18 @@ public class rv32imData implements InstanceData, Cloneable {
     boolean machineTimerInterruptsEnabled = ( (mie.read() & 0x80) == 0x80);
     return (machineInterruptsEnabled  && machineTimerInterruptsEnabled && machineTimerInterruptPending);
   }
+
+  public boolean isExternalInterruptPending() {
+    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
+    MIE_CSR mie = (MIE_CSR) MMCSR.getCSR(this, MIE);
+
+    boolean machineInterruptsEnabled = (mstatus.MIE.get() == 1);
+    boolean machineExternalInterruptPending = ((mip.read() & 0x800) == 0x800);
+    boolean machineExternalInterruptsEnabled = ((mie.read() & 0x800) == 0x800);
+    return (machineInterruptsEnabled && machineExternalInterruptsEnabled && machineExternalInterruptPending);
+  }
+
 
   /** getters and setters*/
   public long getLastDataIn() { return lastDataIn; }

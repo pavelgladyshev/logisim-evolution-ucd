@@ -35,7 +35,6 @@ public class PLIC extends InstanceFactory {
             Attributes.forIntegerRange("numSources", S.getter("PLICNumSources"), 1, 52);
 
     static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
-    private int shift = 0;
 
     public PLIC() {
         super(_ID);
@@ -86,7 +85,6 @@ public class PLIC extends InstanceFactory {
             ps[i + 8].setToolTip(S.fixedString("Source " + (i+1)));
         }
 
-        shift = 5 * (numSources - 2);
         instance.setPorts(ps);
     }
 
@@ -108,7 +106,7 @@ public class PLIC extends InstanceFactory {
             final var posY = bds.getY();
 
             Font font = new Font("SansSerif", Font.BOLD, 16);
-            GraphicsUtil.drawText(graphics, font,"PLIC", posX+shift+25, posY+118,0,0, Color.black, Color.WHITE);
+            GraphicsUtil.drawText(graphics, font,"PLIC", posX+5*(painter.getAttributeValue(ATTR_NUM_SOURCES)-2)+25, posY+118,0,0, Color.black, Color.WHITE);
         }
     }
 
