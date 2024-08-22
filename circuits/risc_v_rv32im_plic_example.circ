@@ -796,6 +796,7 @@
     <comp lib="11" loc="(260,70)" name="RV32IM CPU">
       <a name="hexRegisters" val="true"/>
       <a name="resetAddress" val="0x400000"/>
+      <a name="tcpPort" val="8000"/>
     </comp>
     <comp lib="11" loc="(740,890)" name="Monochrome VideoRAM"/>
     <comp lib="3" loc="(1210,310)" name="Comparator">
