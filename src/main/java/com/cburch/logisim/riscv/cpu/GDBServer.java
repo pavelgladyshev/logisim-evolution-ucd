@@ -5,6 +5,7 @@ import com.cburch.logisim.riscv.cpu.gdb.Packet;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Arrays;
 
 public class GDBServer implements Runnable{
 
@@ -27,9 +28,6 @@ public class GDBServer implements Runnable{
         }
     }
 
-    public static final String ACK = "+";
-    public static final String NACK = "-";
-
     @Override
     public void run() {
         while (true) {
@@ -42,29 +40,39 @@ public class GDBServer implements Runnable{
                 out = socket.getOutputStream();
 
                 PrintStream printer = new PrintStream(out,true);
+                Packet packetResponse = new Packet("");
 
                 while (socket.isConnected()) {
 
-                    byte[] packetData = new byte[65536];
+                    byte[] data = new byte[65536];
                     int len;
 
                     // in.read();
-                    len = in.read(packetData);
+                    len = in.read(data);
 
-                    // if (Thread.interrupted()) { do termination stuff followed by return; }
                     if(Thread.interrupted()) {
                         terminate();
                         return;
                     }
 
-                    Packet packet = new Packet(packetData, len);
+                    Packet packetReceived = new Packet(data, len);
+                    //System.out.println("received : " + packetReceived.getPacketData());
 
-                    if(packet.isValidPacketData()) {
+                    if(packetReceived.isValid()) {
                             printer.print("+");
                             // analyse data and manipulate cpu object accordingly
-
+                            String response = handle(packetReceived.getPacketData(), cpu);
                             // send response;
-                            printer.print("$#00");
+                            packetResponse = new Packet(response);
+                            printer.print(packetResponse.wrapped());
+                    }
+                    //if NACK ("-") is received retransmit response
+                    else if(packetReceived.isNACK()){
+                        printer.print(packetResponse.wrapped());
+                    }
+                    //else if checksum is invalid transmit NACK ("-")
+                    else if(!packetReceived.isACK()){
+                        printer.print("-");
                     }
                 }
 
@@ -75,9 +83,55 @@ public class GDBServer implements Runnable{
         }
     }
 
-    public void terminate()
-    {
+    public void terminate() {
         // do any cleanup required
         gdbserver.interrupt();
+    }
+
+    public static String handle(String command, rv32imData cpu) {
+        String[] fields = command.split("[:,;,,]");
+        String response = "";
+
+        String field1 = fields[0];
+
+        System.out.println(command);
+        System.out.println(Arrays.toString(fields));
+
+        if(field1.startsWith("q")){
+            switch(field1.substring(1)){
+                case "Supported" : {
+                    response = "PacketSize=65536;qXfer:features:read+";
+                    break;
+                }
+                case "Xfer" : {
+                    response = "l<target version=\"1.0\"><architecture>riscv:rv32</architecture></target>";
+                    break;
+                }
+                case "Attached" : {
+                    response = "1";
+                    break;
+                }
+            }
+        }
+        else if(field1.startsWith("Q")){
+            switch(field1.substring(1)){
+
+            }
+        }
+        else if(field1.startsWith("v")){
+            switch(field1.substring(1)){
+                case "MustReplyEmpty" : {
+                    response = "";
+                    break;
+                }
+            }
+        }
+        else switch (field1) {
+                case "?" : {
+                    response = "S05";
+                    break;
+                }
+        }
+        return response;
     }
 }
