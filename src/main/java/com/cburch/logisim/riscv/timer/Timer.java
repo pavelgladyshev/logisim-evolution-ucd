@@ -74,9 +74,9 @@ public class Timer extends InstanceFactory {
             final var posX = bds.getX() + 10;
             final var posY = bds.getY() + 50; // Adjusted to fit the text properly within the bounds
 
-            Font font = new Font("Serif", Font.BOLD, 11); // Changed font size to 12
+            Font font = new Font("SansSerif", Font.BOLD, 15);
 
-            GraphicsUtil.drawText(graphics, font, "Timer", posX+20, posY-25, 0, 0, Color.black, Color.WHITE);
+            GraphicsUtil.drawText(graphics, font, "Timer", posX+20, posY-22, 0, 0, Color.black, Color.WHITE);
         }
     }
 
