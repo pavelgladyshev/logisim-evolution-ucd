@@ -52,6 +52,22 @@ public class rv32im extends InstanceFactory {
   public static final Attribute<Boolean> ATTR_HEX_REGS =
           Attributes.forBoolean("hexRegisters", S.getter("rv32imHexRegisters"));
 
+  public static final Attribute<Integer> ATTR_TCP_PORT =
+          Attributes.forIntegerRange("tcpPort", S.getter("rv32imTcpPort"), 0, 65535);
+
+  public static final Attribute<Boolean> ATTR_GDB_SERVER_RUNNING =
+          Attributes.forBoolean("gdbServerRunning", S.getter("rv32imGDBServerRunning"));
+
+  public static final Attribute<AttributeOption> ATTR_CPU_STATE =
+          Attributes.forOption(
+                  "cpuState",
+                  S.getter("rv32imCpuState"),
+                  new AttributeOption[] {
+                          new AttributeOption("Halted", S.getter("cpuStateHalted")),
+                          new AttributeOption("Operational", S.getter("cpuStateOperational"))
+                  });
+
+
   // We don't have any instance variables related to an
   // individual instance's state. We can't put that here, because only one
   // rv32im object is ever created, and its job is to manage all
@@ -92,8 +108,10 @@ public class rv32im extends InstanceFactory {
 
     // Add attributes
     setAttributes(
-            new Attribute[] {ATTR_RESET_ADDR, ATTR_HEX_REGS, StdAttr.LABEL, StdAttr.LABEL_FONT},
-            new Object[] {Long.valueOf(0), false, "", StdAttr.DEFAULT_LABEL_FONT});
+            new Attribute[] {
+                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_CPU_STATE, StdAttr.LABEL, StdAttr.LABEL_FONT
+            },
+            new Object[] {Long.valueOf(0), false, 1234, false, new AttributeOption("Halted", S.getter("cpuStateHalted")), "", StdAttr.DEFAULT_LABEL_FONT});
   }
 
   @Override
