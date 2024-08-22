@@ -51,15 +51,19 @@ public class rv32imData implements InstanceData, Cloneable {
 
   /** Enum representing CPU states */
   private CPUState cpuState;
+
   public enum CPUState {
     OPERATIONAL,
     HALTED
   }
 
+  /** GDB server */
+  private GDBServer server;
+
   // More To Do
 
   /** Constructs a state with the given values. */
-  public rv32imData(Value lastClock, long resetAddress) {
+  public rv32imData(Value lastClock, long resetAddress, int port) {
 
     // initial values for registers
     this.lastClock = lastClock;
@@ -70,7 +74,7 @@ public class rv32imData implements InstanceData, Cloneable {
     this.cpuState = CPUState.OPERATIONAL;
     this.intermixFlag = false;
     this.pressedContinue = false;
-
+    this.server = new GDBServer(port, this);
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -102,7 +106,7 @@ public class rv32imData implements InstanceData, Cloneable {
       // If it doesn't yet exist, then we'll set it up with our default
       // values and put it into the circuit state so it can be retrieved
       // in future propagations.
-      ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR));
+      ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR), 3333);
       state.setData(ret);
     }
     return ret;
@@ -200,6 +204,10 @@ public class rv32imData implements InstanceData, Cloneable {
       default:  // Unknown instruction
         TrapHandler.throwIllegalInstructionException(this);
     }
+  }
+
+  public void stopGDBServer() {
+    server.terminate();
   }
 
   public void halt() {

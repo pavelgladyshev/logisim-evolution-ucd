@@ -48,7 +48,7 @@ public class rv32im extends InstanceFactory {
   public static final Attribute<Long> ATTR_RESET_ADDR =
           Attributes.forHexLong("resetAddress", S.getter("rv32imResetAddress"));
 
-  static final Attribute<Boolean> ATTR_HEX_REGS =
+  public static final Attribute<Boolean> ATTR_HEX_REGS =
           Attributes.forBoolean("hexRegisters", S.getter("rv32imHexRegisters"));
 
   // We don't have any instance variables related to an
@@ -189,6 +189,8 @@ public class rv32im extends InstanceFactory {
   /** Helper functions */
   private void checkReset(InstanceState state) {
     if (state.getPortValue(RESET) == Value.TRUE) {
+      var cur = state.getData();
+      if (null != cur) { ((rv32imData)cur).stopGDBServer(); }
       state.setData(null);
     }
   }
