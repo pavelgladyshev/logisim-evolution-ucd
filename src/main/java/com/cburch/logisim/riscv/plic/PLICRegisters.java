@@ -8,24 +8,22 @@ public class PLICRegisters implements InstanceData, Cloneable {
 
     private Value lastClock;
     private int numSources;
-    private final int numContexts = 1; // This can be configurable if needed
 
     private long[] priorityRegisters;
     private long[] pendingRegisters;
-    private long[][] enableRegisters;
-    private long[] thresholdRegisters;
-    private long[] claimRegisters;
+    private long[] enableRegisters;
+    private long thresholdRegister;
+    private long claimRegister;
 
-    public PLICRegisters(int numSources, Value lastClock) {
+    public PLICRegisters(int numSources, Value lastClock, long thresholdRegister, long claimRegister) {
         this.numSources = numSources;
         this.lastClock = lastClock;
+        this.thresholdRegister = thresholdRegister;
+        this.claimRegister = claimRegister;
 
-        // Initialize the PLIC registers based on numSources
-        priorityRegisters = new long[numSources];
-        pendingRegisters = new long[(numSources + 31) / 32];
-        enableRegisters = new long[numContexts][(numSources + 31) / 32];
-        thresholdRegisters = new long[numContexts];
-        claimRegisters = new long[numContexts];
+        priorityRegisters = new long[52];
+        pendingRegisters = new long[2];
+        enableRegisters = new long[2];
     }
 
     @Override
@@ -35,25 +33,21 @@ public class PLICRegisters implements InstanceData, Cloneable {
             clone.priorityRegisters = priorityRegisters.clone();
             clone.pendingRegisters = pendingRegisters.clone();
             clone.enableRegisters = enableRegisters.clone();
-            clone.thresholdRegisters = thresholdRegisters.clone();
-            clone.claimRegisters = claimRegisters.clone();
+            clone.thresholdRegister = thresholdRegister;
+            clone.claimRegister = claimRegister;
             return clone;
         } catch (CloneNotSupportedException e) {
-            throw new AssertionError(); // Shouldn't happen
+            throw new AssertionError();
         }
     }
 
     public static PLICRegisters get(InstanceState state, int numSources) {
         PLICRegisters ret = (PLICRegisters) state.getData();
         if (ret == null || ret.numSources != numSources) {
-            ret = new PLICRegisters(numSources, null);
+            ret = new PLICRegisters(numSources, null, 0, 0);
             state.setData(ret);
         }
         return ret;
-    }
-
-    public int getNumContexts() {
-        return numContexts;
     }
 
     public long getPriority(int index) {
@@ -67,60 +61,45 @@ public class PLICRegisters implements InstanceData, Cloneable {
     public boolean isPending(int index) {
         int word = index / 32;
         int bit = index % 32;
-        return (pendingRegisters[word] & (1 << bit)) != 0;
+        return (pendingRegisters[word] & (1L << bit)) != 0;
     }
 
     public void setPending(int index) {
         int word = index / 32;
         int bit = index % 32;
-        pendingRegisters[word] |= (1 << bit);
+        pendingRegisters[word] |= (1L << bit);
     }
 
     public void clearPending(int index) {
         int word = index / 32;
         int bit = index % 32;
-        pendingRegisters[word] &= ~(1 << bit);
+        pendingRegisters[word] &= ~(1L << bit);
     }
 
-    public void enableInterrupt(int context, int index) {
+    public void enableInterrupt(int index) {
         int word = index / 32;
         int bit = index % 32;
-        enableRegisters[context][word] |= (1 << bit);
+        enableRegisters[word] |= (1L << bit);
     }
 
-    public void disableInterrupt(int context, int index) {
+    public void disableInterrupt(int index) {
         int word = index / 32;
         int bit = index % 32;
-        enableRegisters[context][word] &= ~(1 << bit);
+        enableRegisters[word] &= ~(1L << bit);
     }
 
-    public boolean isInterruptEnabled(int context, int index) {
+    public boolean isInterruptEnabled(int index) {
         int word = index / 32;
         int bit = index % 32;
-        return (enableRegisters[context][word] & (1 << bit)) != 0;
+        return (enableRegisters[word] & (1L << bit)) != 0;
     }
 
-    public void setThreshold(int context, long threshold) {
-        thresholdRegisters[context] = threshold;
+    public void setThresholdRegister(long threshold) {
+        thresholdRegister = threshold;
     }
 
-    public long getThreshold(int context) {
-        return thresholdRegisters[context];
-    }
-
-    public long claimInterrupt(int context) {
-        for (int i = 0; i < numSources; i++) {
-            if (isPending(i) && priorityRegisters[i] > thresholdRegisters[context]) {
-                clearPending(i);
-                claimRegisters[context] = i;
-                return i;
-            }
-        }
-        return 0; // No interrupt to claim
-    }
-
-    public void completeInterrupt(int context, long irq) {
-        claimRegisters[context] = 0; // Clear claim register after completion
+    public long getThresholdRegister() {
+        return thresholdRegister;
     }
 
     public boolean updateClock(Value value) {
@@ -129,7 +108,20 @@ public class PLICRegisters implements InstanceData, Cloneable {
         return old == Value.FALSE && value == Value.TRUE;
     }
 
-    public long[] getClaimRegisters() {
-        return claimRegisters;
+    public long getClaimRegister() {
+        return claimRegister;
     }
+
+    public void setClaimRegister(long claim) {
+        claimRegister = claim;
+    }
+
+    public long[] getEnableRegisters() {
+        return enableRegisters;
+    }
+
+    public long[] getPendingRegisters() {
+        return pendingRegisters;
+    }
+
 }

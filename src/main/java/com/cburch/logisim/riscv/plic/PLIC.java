@@ -23,6 +23,9 @@ public class PLIC extends InstanceFactory {
     public static final int CLOCK = 7;
 
     public static final long RISCV_PLIC_ADDR_DEFAULT = 0x0c000000;
+    public static final long RISCV_PLIC_OFFSET_PENDING = 0x00001000;
+    public static final long RISCV_PLIC_OFFSET_ENABLES = 0x00002000;
+    public static final long RISCV_PLIC_OFFSET_CLAIM = 0x00200000;
 
     public static final Attribute<Long>  RISCV_PLIC_ADDR =
             Attributes.forHexLong("PLICaddr", S.getter("PLICaddr"));
@@ -129,7 +132,8 @@ public class PLIC extends InstanceFactory {
             for (int i = 0; i < numSources; i++) {
                 plic.setPriority(i, 0);
             }
-            state.setPort(INTERRUPT_OUT, HiZ32, 9);
+            state.setPort(INTERRUPT_OUT, Value.FALSE, 9);
+            state.setPort(DATA_OUT, HiZ32, 9);
             return;
         }
 
@@ -137,14 +141,35 @@ public class PLIC extends InstanceFactory {
         final var trigger = plic.updateClock(state.getPortValue(CLOCK));
 
         // Handle LOAD operation
-        if (state.getPortValue(LOAD) == Value.TRUE) {
+        if (state.getPortValue(LOAD) == Value.TRUE && state.getPortValue(STORE) == Value.FALSE) {
             int address = (int) state.getPortValue(ADDRESS).toLongValue();
-            if (address - state.getAttributeValue(RISCV_PLIC_ADDR) >= 0
-                && address - state.getAttributeValue(RISCV_PLIC_ADDR) < (numSources - 1) * 4L) {
-                state.setPort(DATA_OUT, Value.createKnown(32, plic.getPriority(address)), 9);
+
+            if (address - state.getAttributeValue(RISCV_PLIC_ADDR) >= 4
+                && address - state.getAttributeValue(RISCV_PLIC_ADDR) <= numSources * 4L) {
+                // Source priority
+                state.setPort(DATA_OUT, Value.createKnown(32, plic.getPriority((int) ((address - state.getAttributeValue(RISCV_PLIC_ADDR) - 4)/4))), 9);
+            } else if (address == state.getAttributeValue(RISCV_PLIC_ADDR) + RISCV_PLIC_OFFSET_PENDING) {
+                // First pending word
+                state.setPort(DATA_OUT, Value.createKnown(32, plic.getPendingRegisters()[0]), 9);
+            } else if (address == state.getAttributeValue(RISCV_PLIC_ADDR) + RISCV_PLIC_OFFSET_PENDING + 4) {
+                // Last pending word
+                state.setPort(DATA_OUT, Value.createKnown(32, plic.getPendingRegisters()[1]), 9);
+            } else if (address == state.getAttributeValue(RISCV_PLIC_ADDR) + RISCV_PLIC_OFFSET_ENABLES) {
+                // Interrupt enables[0]
+                state.setPort(DATA_OUT, Value.createKnown(32, plic.getEnableRegisters()[0]), 9);
+            } else if (address == state.getAttributeValue(RISCV_PLIC_ADDR) + RISCV_PLIC_OFFSET_ENABLES + 4) {
+                // Interrupt enables[1]
+                state.setPort(DATA_OUT, Value.createKnown(32, plic.getEnableRegisters()[1]), 9);
+            } else  if (address == state.getAttributeValue(RISCV_PLIC_ADDR) + RISCV_PLIC_OFFSET_CLAIM) {
+                // Threshold
+                state.setPort(DATA_OUT, Value.createKnown(32, plic.getThresholdRegister()), 9);
+            } else if (address == state.getAttributeValue(RISCV_PLIC_ADDR) + RISCV_PLIC_OFFSET_CLAIM + 4) {
+                // Claim
+                state.setPort(DATA_OUT, Value.createKnown(32, plic.getClaimRegister()), 9);
             } else {
-                state.setPort(DATA_OUT, HiZ32, 9); // Handle invalid address
+                state.setPort(DATA_OUT, HiZ32, 9);
             }
+
         } else {
             state.setPort(DATA_OUT, HiZ32, 9);
         }
@@ -154,26 +179,59 @@ public class PLIC extends InstanceFactory {
             int address = (int) state.getPortValue(ADDRESS).toLongValue();
             long dataIn = state.getPortValue(DATA_IN).toLongValue();
 
-            if (address - state.getAttributeValue(RISCV_PLIC_ADDR) >= 0
-                    && address - state.getAttributeValue(RISCV_PLIC_ADDR) < (numSources - 1) * 4L) {
-                plic.setPriority((int) ((address - state.getAttributeValue(RISCV_PLIC_ADDR) ) / 4), dataIn & 0xFFFFFFFFL);
+            // Source priority
+            if (address - state.getAttributeValue(RISCV_PLIC_ADDR) >= 4
+                    && address - state.getAttributeValue(RISCV_PLIC_ADDR) <= numSources * 4L) {
+                plic.setPriority((int) ((address - state.getAttributeValue(RISCV_PLIC_ADDR) - 4) / 4), dataIn & 0xFFFFFFFFL);
             }
 
+            // Interrupt Enables
+            if (address == state.getAttributeValue(RISCV_PLIC_ADDR) + RISCV_PLIC_OFFSET_ENABLES) {
+                if ((dataIn & 0xFFFFFFFFL) == 0) {
+                    throw new IllegalArgumentException("This is RO register");
+                }
+
+                if ((dataIn & 0xFFFFFFFFL) / 32 > 1) {
+                    throw new IllegalArgumentException("Exceeds number of sources");
+                }
+
+                if(plic.isInterruptEnabled((int) (dataIn & 0xFFFFFFFFL))) {
+                    plic.disableInterrupt((int) (dataIn & 0xFFFFFFFFL));
+                } else {
+                    plic.enableInterrupt((int) (dataIn & 0xFFFFFFFFL));
+                }
+            }
+
+            // Threshold
+            if (address == state.getAttributeValue(RISCV_PLIC_ADDR) + RISCV_PLIC_OFFSET_CLAIM) {
+                plic.setThresholdRegister(dataIn & 0xFFFFFFFFL);
+            }
+
+            // Claim
+            if (address == state.getAttributeValue(RISCV_PLIC_ADDR) + RISCV_PLIC_OFFSET_CLAIM + 4) {
+                plic.setClaimRegister(dataIn & 0xFFFFFFFFL);
+            }
 
         }
 
-        // Update pending registers based on interrupt source inputs
         for (int i = 0; i < numSources; i++) {
-            if (state.getPortValue(i + 8) == Value.TRUE) {  // Start checking ports after the first 7 control ports
-                plic.setPending(i);
+            if (state.getPortValue(i + 8) == Value.TRUE) {
+                plic.setPending(i+1);
+            } else {
+                plic.clearPending(i+1);
             }
         }
 
         for(int i = 0; i < numSources; i++) {
-            if (plic.isPending(i) && plic.getClaimRegisters()[0] == 0) {
+            if (plic.isPending(i+1) && plic.getClaimRegister() == 0) {
                 state.setPort(INTERRUPT_OUT, Value.TRUE, 9);
                 break;
             }
+        }
+
+        if(plic.getClaimRegister() != 0) {
+            plic.clearPending((int) plic.getClaimRegister());
+            state.setPort(INTERRUPT_OUT, Value.FALSE, 9);
         }
     }
 }
