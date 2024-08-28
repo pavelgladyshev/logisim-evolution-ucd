@@ -7,26 +7,29 @@ public class MemoryAccessRequest extends Request {
 
     private final TYPE type;
     private final long address;
-    private final long bytes;
-    private long bytesAccessed;
+    private final int bytes;
+    private int bytesAccessed;
     private String data;
-    private StringBuilder dataBuffer;
+    private StringBuffer dataBuffer;
+
+    public static long ROM_START = 0x00400000L;
+    public static long RAM_START = 0x10010000L;
 
     public enum TYPE {
         MEMREAD,
         MEMWRITE,
     }
 
-    public MemoryAccessRequest(TYPE requestType, long address, long bytes){
+    public MemoryAccessRequest(TYPE requestType, long address, int bytes){
         this.type = requestType;
         this.bytes = bytes;
         this.bytesAccessed = 0;
-        this.dataBuffer = new StringBuilder();
+        this.dataBuffer = new StringBuffer();
         this.address = address;
         setStatus(STATUS.WAITING);
     }
 
-    public MemoryAccessRequest(TYPE requestType, long address, long bytes, String data){
+    public MemoryAccessRequest(TYPE requestType, long address, int bytes, String data){
         this.type = requestType;
         this.bytes = bytes;
         this.bytesAccessed = 0;
@@ -44,12 +47,14 @@ public class MemoryAccessRequest extends Request {
     }
 
     public Value getNextAddress() {
-        return Value.createKnown(BitWidth.create(32), address + bytesAccessed);
+        return Value.createKnown(BitWidth.create(32), ROM_START + address + bytesAccessed);
     }
 
     public long getBytes() {
         return bytes;
     }
+
+    public int getBytesAccessed() {return bytesAccessed;}
 
     public Value getNextDataByte() {
         long nextDataByte = Long.parseLong(data.substring(0,1), 16);
@@ -57,7 +62,7 @@ public class MemoryAccessRequest extends Request {
         return Value.createKnown(BitWidth.create(32), nextDataByte);
     }
 
-    public StringBuilder getDataBuffer(){
+    public StringBuffer getDataBuffer(){
         return dataBuffer;
     }
 

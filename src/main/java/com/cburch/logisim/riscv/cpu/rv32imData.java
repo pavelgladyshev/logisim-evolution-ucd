@@ -62,7 +62,13 @@ public class rv32imData implements InstanceData, Cloneable {
 
   /** GDB server */
   private GDBServer server;
-  private Boolean GDBAccessingMemory;
+  private final Object monitor;
+  private Breakpoint breakpoint;
+
+  enum Breakpoint{
+    NONE,
+    SINGLE_STEP
+  }
 
   // More To Do
 
@@ -78,7 +84,9 @@ public class rv32imData implements InstanceData, Cloneable {
     this.cpuState = state;
     this.intermixFlag = false;
     this.pressedContinue = false;
-    this.server = new GDBServer(port, this);
+    this.monitor = new Object();
+    this.server = new GDBServer(port, this, monitor);
+    this.breakpoint = Breakpoint.NONE;
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -98,6 +106,13 @@ public class rv32imData implements InstanceData, Cloneable {
      memRead = Value.TRUE;   // MemRead active
      memWrite = Value.FALSE; // MemWrite not active
      isSync = Value.TRUE;
+
+     if(breakpoint == Breakpoint.SINGLE_STEP) {
+       halt();
+       server.getRequest().setStatus(Request.STATUS.SUCCESS);
+       breakpoint = Breakpoint.NONE;
+       monitor.notify();
+     }
    }
 
   /**
@@ -113,7 +128,6 @@ public class rv32imData implements InstanceData, Cloneable {
       if(state.getAttributeValue(rv32im.ATTR_CPU_STATE).getValue().equals("Halted")) {
         ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR), 3333, CPUState.HALTED);
       } else ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR), 3333, CPUState.OPERATIONAL);
-
       state.setData(ret);
     }
     return ret;
@@ -151,20 +165,17 @@ public class rv32imData implements InstanceData, Cloneable {
   public void processMemoryAccessRequest(MemoryAccessRequest request, long dataIn){
     //check for failure to read memory?   fail request
     //check for failure to write memory?  fail request
-    System.out.println(request.getBytes());
-    System.out.println(request.isAccessComplete());
     if(!request.isAccessComplete()){
-      GDBAccessingMemory = true;
-      resume();
       switch(request.getType()){
         case MEMREAD -> {
           if(!addressing){
             LoadInstruction.performAddressing(this, request.getNextAddress());
           }
           else {
-            long nextByte = LoadInstruction.getUnsignedDataByte(dataIn, request.getNextAddress().toLongValue());
-            request.getDataBuffer().append(String.format("%02X", nextByte));
+            long nextByte =  LoadInstruction.getUnsignedDataByte(dataIn, request.getNextAddress().toLongValue());
+            request.getDataBuffer().append(String.format("%02X",nextByte));
             request.incrementAccessed();
+            fetchNextInstruction();
           }
         }
         case MEMWRITE -> {
@@ -173,47 +184,48 @@ public class rv32imData implements InstanceData, Cloneable {
         }
       }
     }
-    else{
+    if(request.isAccessComplete()) {
       request.setStatus(Request.STATUS.SUCCESS);
-      GDBAccessingMemory = false;
-      halt();
+      monitor.notify();
     }
   }
 
   /** update CPU state (execute) */
   public void update(long dataIn) {
-
-    if(isGDBRequestPending()) {
-      if(server.getRequest() instanceof SingleStepRequest) {
-        long address = ((SingleStepRequest)server.getRequest()).getAddress();
-        if(getPC().get() > address){
+    synchronized (monitor) {
+      if (isGDBRequestPending()) {
+        Request request = server.getRequest();
+        System.out.println(breakpoint.toString());
+        if (Request.isMemoryAccessRequest(request)) {
           halt();
-          server.getRequest().setStatus(Request.STATUS.SUCCESS);
-        }
-        else{
+          processMemoryAccessRequest((MemoryAccessRequest) request, dataIn);
+          System.out.println(breakpoint.toString());
+        } else if (Request.isSingleStepRequest(request)) {
+          breakpoint = Breakpoint.SINGLE_STEP;
           resume();
         }
       }
-      else if(server.getRequest() instanceof MemoryAccessRequest){
-        processMemoryAccessRequest((MemoryAccessRequest) server.getRequest(), dataIn);
-      }
-    }
 
-    if (!isHalted()) {
-      if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
-      // Check for timer interrupts
-      if (isTimerInterruptPending()) {
-           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
-           fetchNextInstruction();
-           return;
+      if (!isHalted()) {
+        if (fetching) {
+          lastDataIn = dataIn;
+          lastAddress = address.toLongValue();
+          ir.set(dataIn);
+        }
+        // Check for timer interrupts
+        if (isTimerInterruptPending()) {
+          TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
+          fetchNextInstruction();
+          return;
+        }
+        // Check for external interrupts
+        if (isExternalInterruptPending()) {
+          TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
+          fetchNextInstruction();
+          return;
+        }
+        handleNextInstruction(dataIn);
       }
-     // Check for external interrupts
-       if(isExternalInterruptPending()) {
-           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
-           fetchNextInstruction();
-           return;
-      }
-      handleNextInstruction(dataIn);
     }
   }
 

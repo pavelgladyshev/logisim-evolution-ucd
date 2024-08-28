@@ -198,17 +198,15 @@ public class rv32im extends InstanceFactory {
         if (cur.getIntermixFlag()) {
           // 2nd clock cycle finishes intermixing:
           // fetches new data, updates PC
-          if(!cur.isHalted())finishIntermixing(cur);
+          finishIntermixing(cur);
+          if(!cur.isHalted())cur.getPC().increment();
         } else {
           // process state update, current values of input ports (e.g Data-In bus value)
           // are passed to update() as parameters
           cur.update(state.getPortValue(DATA_IN).toLongValue());
         }
-
     }
-
     updatePorts(state, cur);
-
   }
 
   /** Helper functions */
@@ -253,7 +251,6 @@ public class rv32im extends InstanceFactory {
 
   // CALL THIS METHOD ON THE RISING EDGE OF THE CLOCK ONLY!
   private void finishIntermixing(rv32imData cur) {
-    cur.getPC().increment();
     cur.fetchNextInstruction();
     cur.setIntermixFlag(false);
   }

@@ -14,12 +14,22 @@ public abstract class Request {
         this.status = status;
     }
 
+    public STATUS getStatus() {return this.status;}
+
     public Boolean isSuccess(){
-        return status.equals(STATUS.SUCCESS);
+        return status == STATUS.SUCCESS;
     }
 
     public Boolean isPending(){
-        return status.equals(STATUS.WAITING);
+        return status == STATUS.WAITING;
+    }
+
+    public static Boolean isSingleStepRequest(Object o){
+        return o.getClass().equals(SingleStepRequest.class);
+    }
+
+    public static Boolean isMemoryAccessRequest(Object o){
+        return o.getClass().equals(MemoryAccessRequest.class);
     }
 
 }
