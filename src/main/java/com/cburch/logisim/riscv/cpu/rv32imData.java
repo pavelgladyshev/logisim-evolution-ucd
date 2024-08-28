@@ -14,6 +14,9 @@ import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
 import com.cburch.logisim.riscv.cpu.csrs.*;
+import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
+import com.cburch.logisim.riscv.cpu.gdb.Request;
+import com.cburch.logisim.riscv.cpu.gdb.SingleStepRequest;
 
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
@@ -59,11 +62,12 @@ public class rv32imData implements InstanceData, Cloneable {
 
   /** GDB server */
   private GDBServer server;
+  private Boolean GDBAccessingMemory;
 
   // More To Do
 
   /** Constructs a state with the given values. */
-  public rv32imData(Value lastClock, long resetAddress, int port) {
+  public rv32imData(Value lastClock, long resetAddress, int port, CPUState state) {
 
     // initial values for registers
     this.lastClock = lastClock;
@@ -71,7 +75,7 @@ public class rv32imData implements InstanceData, Cloneable {
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
     this.csr = new ControlAndStatusRegisters();
-    this.cpuState = CPUState.OPERATIONAL;
+    this.cpuState = state;
     this.intermixFlag = false;
     this.pressedContinue = false;
     this.server = new GDBServer(port, this);
@@ -106,7 +110,10 @@ public class rv32imData implements InstanceData, Cloneable {
       // If it doesn't yet exist, then we'll set it up with our default
       // values and put it into the circuit state so it can be retrieved
       // in future propagations.
-      ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR), 3333);
+      if(state.getAttributeValue(rv32im.ATTR_CPU_STATE).getValue().equals("Halted")) {
+        ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR), 3333, CPUState.HALTED);
+      } else ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR), 3333, CPUState.OPERATIONAL);
+
       state.setData(ret);
     }
     return ret;
@@ -141,25 +148,76 @@ public class rv32imData implements InstanceData, Cloneable {
      pc.set(pcInit);
   }
 
+  public void processMemoryAccessRequest(MemoryAccessRequest request, long dataIn){
+    //check for failure to read memory?   fail request
+    //check for failure to write memory?  fail request
+    System.out.println(request.getBytes());
+    System.out.println(request.isAccessComplete());
+    if(!request.isAccessComplete()){
+      GDBAccessingMemory = true;
+      resume();
+      switch(request.getType()){
+        case MEMREAD -> {
+          if(!addressing){
+            LoadInstruction.performAddressing(this, request.getNextAddress());
+          }
+          else {
+            long nextByte = LoadInstruction.getUnsignedDataByte(dataIn, request.getNextAddress().toLongValue());
+            request.getDataBuffer().append(String.format("%02X", nextByte));
+            request.incrementAccessed();
+          }
+        }
+        case MEMWRITE -> {
+          StoreInstruction.performAddressing(this, request.getNextDataByte(), request.getNextAddress());
+          intermixFlag = (addressing);
+        }
+      }
+    }
+    else{
+      request.setStatus(Request.STATUS.SUCCESS);
+      GDBAccessingMemory = false;
+      halt();
+    }
+  }
+
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
-    // Check for timer interrupts
-    if (isTimerInterruptPending()) {
-          TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
-          fetchNextInstruction();
-          return;
+    if(isGDBRequestPending()) {
+      if(server.getRequest() instanceof SingleStepRequest) {
+        long address = ((SingleStepRequest)server.getRequest()).getAddress();
+        if(getPC().get() > address){
+          halt();
+          server.getRequest().setStatus(Request.STATUS.SUCCESS);
+        }
+        else{
+          resume();
+        }
+      }
+      else if(server.getRequest() instanceof MemoryAccessRequest){
+        processMemoryAccessRequest((MemoryAccessRequest) server.getRequest(), dataIn);
+      }
     }
 
-    // Check for external interrupts
-    if (isExternalInterruptPending()) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
-      fetchNextInstruction();
-      return;
+    if (!isHalted()) {
+      if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
+      // Check for timer interrupts
+      if (isTimerInterruptPending()) {
+           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
+           fetchNextInstruction();
+           return;
+      }
+     // Check for external interrupts
+       if(isExternalInterruptPending()) {
+           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
+           fetchNextInstruction();
+           return;
+      }
+      handleNextInstruction(dataIn);
     }
+  }
 
-    if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
-
+  public void handleNextInstruction(long dataIn){
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
         ArithmeticInstruction.executeImmediate(this);
@@ -223,6 +281,10 @@ public class rv32imData implements InstanceData, Cloneable {
     cpuState = CPUState.HALTED;
   }
 
+  public void resume() {
+    cpuState = CPUState.OPERATIONAL;
+  }
+
   public void skipInstruction() {
     pc.increment();
     fetchNextInstruction();
@@ -248,6 +310,14 @@ public class rv32imData implements InstanceData, Cloneable {
     boolean machineExternalInterruptPending = ((mip.read() & 0x800) == 0x800);
     boolean machineExternalInterruptsEnabled = ((mie.read() & 0x800) == 0x800);
     return (machineInterruptsEnabled && machineExternalInterruptsEnabled && machineExternalInterruptPending);
+  }
+
+  public Boolean isHalted() {
+    return getCpuState() == CPUState.HALTED;
+  }
+
+  public boolean isGDBRequestPending() {
+    return server.isRequestPending();
   }
 
 

@@ -117,6 +117,7 @@ public class rv32im extends InstanceFactory {
   @Override
   protected void configureNewInstance(Instance instance) {
     final var bds = instance.getBounds();
+
     instance.setTextField(
             StdAttr.LABEL,
             StdAttr.LABEL_FONT,
@@ -183,6 +184,7 @@ public class rv32im extends InstanceFactory {
     // store intermix data when needed
     checkIntermixData(state, cur);
 
+
     // Check if clock signal is changing from low/false to high/true
     final var trigger = cur.updateClock(state.getPortValue(0));
 
@@ -196,7 +198,7 @@ public class rv32im extends InstanceFactory {
         if (cur.getIntermixFlag()) {
           // 2nd clock cycle finishes intermixing:
           // fetches new data, updates PC
-          finishIntermixing(cur);
+          if(!cur.isHalted())finishIntermixing(cur);
         } else {
           // process state update, current values of input ports (e.g Data-In bus value)
           // are passed to update() as parameters

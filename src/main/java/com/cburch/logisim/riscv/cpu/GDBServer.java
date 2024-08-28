@@ -1,11 +1,19 @@
 package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.riscv.cpu.gdb.Packet;
+import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
+import com.cburch.logisim.riscv.cpu.gdb.Request;
+import com.cburch.logisim.riscv.cpu.gdb.SingleStepRequest;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
+
+import static com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest.TYPE.MEMREAD;
+import static com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest.TYPE.MEMWRITE;
 
 public class GDBServer implements Runnable{
 
@@ -15,6 +23,7 @@ public class GDBServer implements Runnable{
     private OutputStream out;
     private Thread gdbserver;
     private rv32imData cpu;
+    private Request request;
 
     public GDBServer(int port, rv32imData cpuData) {
         try {
@@ -61,7 +70,7 @@ public class GDBServer implements Runnable{
                     if(packetReceived.isValid()) {
                             printer.print("+");
                             // analyse data and manipulate cpu object accordingly
-                            String response = handle(packetReceived.getPacketData(), cpu);
+                            String response = handle(packetReceived.getPacketData());
                             // send response;
                             packetResponse = new Packet(response);
                             printer.print(packetResponse.wrapped());
@@ -85,10 +94,10 @@ public class GDBServer implements Runnable{
 
     public void terminate() {
         // do any cleanup required
-        gdbserver.interrupt();
+        if(gdbserver != null) gdbserver.interrupt();
     }
 
-    public static String handle(String command, rv32imData cpu) {
+    public String handle(String command) {
         String[] fields = command.split("[:,;,,]");
         String response = "";
 
@@ -98,18 +107,18 @@ public class GDBServer implements Runnable{
         System.out.println(Arrays.toString(fields));
 
         if(field1.startsWith("q")){
-            switch(field1.substring(1)){
-                case "Supported" : {
+            switch (field1.substring(1)) {
+                case "Supported" -> {
                     response = "PacketSize=65536;qXfer:features:read+";
-                    break;
                 }
-                case "Xfer" : {
+                case "Xfer" -> {
                     response = "l<target version=\"1.0\"><architecture>riscv:rv32</architecture></target>";
-                    break;
                 }
-                case "Attached" : {
+                case "Attached" -> {
                     response = "1";
-                    break;
+                }
+                case "Symbol" -> {
+                    response = "OK";
                 }
             }
         }
@@ -119,19 +128,74 @@ public class GDBServer implements Runnable{
             }
         }
         else if(field1.startsWith("v")){
-            switch(field1.substring(1)){
-                case "MustReplyEmpty" : {
-                    response = "";
-                    break;
-                }
+            if (field1.substring(1).equals("MustReplyEmpty")) {
+                response = "";
             }
         }
-        else switch (field1) {
-                case "?" : {
-                    response = "S05";
-                    break;
-                }
+        else if(field1.startsWith("m")){
+            parseMemoryAccessRequest(MEMREAD, fields);
+            System.out.println(request.isSuccess());
+            if (request.isSuccess()) response = ((MemoryAccessRequest) request).getDataBuffer().toString();
         }
+        else if(field1.startsWith("M")){
+            parseMemoryAccessRequest(MEMWRITE, fields);
+            if (request.isSuccess()) response = "OK";
+            //else send error message
+        }
+        else switch (field1) {
+                case "?" -> {
+                    response = "S05";
+                }
+                case "g" -> {
+                    for (int i = 0; i < 32; i++) {
+                        response += bigToLittleEndian(cpu.getX(i));
+                    }
+                    response += bigToLittleEndian(cpu.getPC().get());
+                }
+                case "s" -> {
+                    long address;
+                    if (fields.length == 1) address = cpu.getPC().get();
+                    else address = Long.parseLong(field1.substring(1), 16);
+                    request = new SingleStepRequest(address);
+                    System.out.println("Waiting for CPU to finish stepping through.");
+                    while (request.isPending()) {
+                    }
+                    if (request.isSuccess()) response = "S13";
+                }
+            }
         return response;
+    }
+
+    public Boolean isRequestPending(){
+        if(request == null) return false;
+        else return request.isPending();
+    }
+    public Request getRequest(){
+        return request;
+    }
+
+    private void parseMemoryAccessRequest(MemoryAccessRequest.TYPE type, String[] fields){
+        long address = Long.parseLong(fields[0].substring(1), 16);
+        System.out.println(address);
+        long bytes = Long.parseLong(fields[1], 16);
+        System.out.println(bytes);
+        //create request
+        if(type.equals(MEMWRITE)) {
+            String data = fields[2];
+            request = new MemoryAccessRequest(MEMWRITE, address, bytes, data);
+        }
+        else request = new MemoryAccessRequest(MEMREAD, address, bytes);
+        System.out.println("Waiting for CPU to finish memory access operation.");
+        while(request.isPending()){
+        }
+    }
+
+    public String bigToLittleEndian(long x){
+        int value = (int) x;
+        ByteBuffer buffer = ByteBuffer.allocate(4);
+        buffer.order(ByteOrder.BIG_ENDIAN);
+        buffer.asIntBuffer().put(value);
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        return String.format("%08x",buffer.asIntBuffer().get());
     }
 }

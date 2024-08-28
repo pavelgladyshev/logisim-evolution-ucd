@@ -5,10 +5,17 @@ import com.cburch.logisim.data.Value;
 
 public class StoreInstruction {
 
-    public static void performAddressing(rv32imData hartData) {
+    public static void performAddressing(rv32imData hartData){
+        performAddressing(hartData, getNewData(hartData), getAddress(hartData), hartData.getIR().func3());
+    }
 
-        InstructionRegister ir = hartData.getIR();
-        if(!(ir.func3() == 0x0 || ir.func3() == 0x1 || ir.func3() == 0x2)) {
+    public static void performAddressing(rv32imData hartData, Value data, Value address){
+        performAddressing(hartData, data, address, 0x0);
+    }
+
+    private static void performAddressing(rv32imData hartData, Value data, Value address, long func3) {
+
+        if(!(func3 == 0x0 || func3 == 0x1 || func3 == 0x2)) {
             TrapHandler.throwIllegalInstructionException(hartData);
             return;
         }
@@ -16,8 +23,8 @@ public class StoreInstruction {
         hartData.setFetching(false);
         hartData.setAddressing(true);
 
-        hartData.setLastDataIn(getNewData(hartData).toLongValue());
-        hartData.setLastAddress(getAddress(hartData).toLongValue());
+        hartData.setLastDataIn(data.toLongValue());
+        hartData.setLastAddress(address.toLongValue());
 
         // Values for outputs fetching data
         hartData.setAddress(Value.createKnown(32, hartData.getLastAddress() - get2LSB(hartData)));
@@ -65,11 +72,19 @@ public class StoreInstruction {
 
     private static Value getNewData(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
-        int rs2 = ir.rs2();
-        long data = hartData.getX(rs2);
+        return getNewData(hartData, hartData.getX(ir.rs2()), ir.func3());
+    }
+
+    //GDB
+    private static Value getNewData(rv32imData hartData, long data){
+        return getNewData(hartData, data, 0x0);
+    }
+
+    private static Value getNewData(rv32imData hartData, long data, int func3) {
+        InstructionRegister ir = hartData.getIR();
         Value result = Value.createKnown(32, 0);
 
-        switch (ir.func3()) {
+        switch (func3) {
             case 0x0:  // sb rs2, imm(rs1)
                 hartData.setOutputDataWidth(1);
                 result = Value.createKnown(BitWidth.create(32),
@@ -85,9 +100,9 @@ public class StoreInstruction {
                 result = Value.createKnown(BitWidth.create(32), (data ^ 0x80000000L) - 0x80000000L);
                 break;
         }
-
         return result;
     }
+
 
     private static Value getAddress(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
