@@ -22,4 +22,16 @@ public class IntegerRegisters {
             x[index] = value;
         }
     }
+
+
+    public String readAllRegisters() {
+        StringBuilder builder = new StringBuilder();
+
+        for (long reg : x) {
+            // Convert each register value to an 8-character hex string (32-bit register)
+            builder.append(String.format("%08x", reg));
+        }
+
+        return builder.toString();
+    }
 }

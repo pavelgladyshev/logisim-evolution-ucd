@@ -63,7 +63,7 @@ public class rv32imData implements InstanceData, Cloneable {
   // More To Do
 
   /** Constructs a state with the given values. */
-  public rv32imData(Value lastClock, long resetAddress, int port) {
+  public rv32imData(Value lastClock, long resetAddress, int port, boolean gdbRunning) {
 
     // initial values for registers
     this.lastClock = lastClock;
@@ -74,7 +74,14 @@ public class rv32imData implements InstanceData, Cloneable {
     this.cpuState = CPUState.OPERATIONAL;
     this.intermixFlag = false;
     this.pressedContinue = false;
-    this.server = new GDBServer(port, this);
+
+    if(gdbRunning) {
+      this.server = new GDBServer(port, this);
+    }
+    else {
+      this.server = null;
+    }
+
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -106,7 +113,8 @@ public class rv32imData implements InstanceData, Cloneable {
       // If it doesn't yet exist, then we'll set it up with our default
       // values and put it into the circuit state so it can be retrieved
       // in future propagations.
-      ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR), 3333);
+      ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
+              state.getAttributeValue(rv32im.ATTR_TCP_PORT), state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
       state.setData(ret);
     }
     return ret;
@@ -128,7 +136,6 @@ public class rv32imData implements InstanceData, Cloneable {
       return null;
     }
   }
-
   /** Updates the last clock observed, returning true if triggered. */
   public boolean updateClock(Value value) {
     Value old = lastClock;
@@ -144,18 +151,18 @@ public class rv32imData implements InstanceData, Cloneable {
   /** update CPU state (execute) */
   public void update(long dataIn) {
 
-    // Check for timer interrupts
-    if (isTimerInterruptPending()) {
-          TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
-          fetchNextInstruction();
-          return;
-    }
-
     // Check for external interrupts
     if (isExternalInterruptPending()) {
       TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
       fetchNextInstruction();
       return;
+    }
+
+    // Check for timer interrupts
+    if (isTimerInterruptPending()) {
+          TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
+          fetchNextInstruction();
+          return;
     }
 
     if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
@@ -270,6 +277,7 @@ public class rv32imData implements InstanceData, Cloneable {
   public boolean getPressedContinue() { return pressedContinue; }
   public long getCSRValue(int csr) {return this.csr.read(this, csr);}
   public CSR getCSR(int csr) { return this.csr.get(csr); }
+  public IntegerRegisters getIntegerRegisters() {return this.x;}
 
 
   public void setLastDataIn(long value) { lastDataIn = value; }
@@ -286,4 +294,5 @@ public class rv32imData implements InstanceData, Cloneable {
   public void setIntermixFlag(boolean value) { intermixFlag = value; }
   public void setPressedContinue(boolean value) { pressedContinue = value; }
   public void setCSR(int csr, long value) { this.csr.write(this, csr, value); }
+  public void setServer(int port) {this.server = new GDBServer(port, this);}
 }
