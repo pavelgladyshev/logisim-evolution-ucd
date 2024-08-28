@@ -14,12 +14,12 @@ public class GDBServer implements Runnable{
     private InputStream in;
     private OutputStream out;
     private Thread gdbserver;
-    private rv32imData cpu;
+    private rv32imData cpuData;
 
     public GDBServer(int port, rv32imData cpuData) {
         try {
             serverSocket = new ServerSocket(port);
-            cpu = cpuData;
+            this.cpuData = cpuData;
             gdbserver = new Thread(this);
             gdbserver.start();
         }
@@ -61,7 +61,7 @@ public class GDBServer implements Runnable{
                     if(packetReceived.isValid()) {
                             printer.print("+");
                             // analyse data and manipulate cpu object accordingly
-                            String response = handle(packetReceived.getPacketData(), cpu);
+                            String response = handle(packetReceived.getPacketData(), cpuData);
                             // send response;
                             packetResponse = new Packet(response);
                             printer.print(packetResponse.wrapped());
@@ -124,7 +124,25 @@ public class GDBServer implements Runnable{
                     response = "";
                     break;
                 }
+                case "Cont?" : {
+                    response = "vCont;s;c;";
+                    break;
+                }
             }
+        }
+        else if(field1.startsWith("g")){
+            response = cpu.getIntegerRegisters().readAllRegisters();
+        }
+        else if(field1.startsWith("p")){
+            response = String.format("%08x", cpu.getX(Integer.valueOf(field1.substring(2))));
+        }
+        else if(field1.startsWith("P")){
+            writeRegister(field1.substring(1), cpu);
+        }
+        else if(field1.startsWith("s")){
+            // inst = memRead(pc);
+            // cpu.update(inst);
+            response = "S05";
         }
         else switch (field1) {
                 case "?" : {
@@ -133,5 +151,12 @@ public class GDBServer implements Runnable{
                 }
         }
         return response;
+    }
+
+    private static void writeRegister(String command, rv32imData cpu) {
+        String[] parts = command.split("=");
+        int regNum = Integer.parseInt(parts[0], 16);
+        int regValue = (int) Long.parseLong(parts[1], 16);
+        cpu.setX(regNum, regValue);
     }
 }

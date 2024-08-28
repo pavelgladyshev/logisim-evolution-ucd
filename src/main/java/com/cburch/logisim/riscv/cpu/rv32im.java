@@ -111,7 +111,7 @@ public class rv32im extends InstanceFactory {
             new Attribute[] {
                     ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_CPU_STATE, StdAttr.LABEL, StdAttr.LABEL_FONT
             },
-            new Object[] {Long.valueOf(0), false, 1234, false, new AttributeOption("Halted", S.getter("cpuStateHalted")), "", StdAttr.DEFAULT_LABEL_FONT});
+            new Object[] {Long.valueOf(0), false, 3333, false, new AttributeOption("Halted", S.getter("cpuStateHalted")), "", StdAttr.DEFAULT_LABEL_FONT});
   }
 
   @Override

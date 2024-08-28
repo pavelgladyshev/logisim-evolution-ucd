@@ -213,7 +213,7 @@ public class PLIC extends InstanceFactory {
         }
 
         for (int i = 0; i < numSources; i++) {
-            if (state.getPortValue(i + 8) == Value.TRUE) {
+            if (state.getPortValue(i + 8) == Value.TRUE && plic.isInterruptEnabled(i+1)) {
                 plic.setPending(i+1);
             } else {
                 plic.clearPending(i+1);
