@@ -16,7 +16,6 @@ import com.cburch.logisim.instance.InstanceState;
 import com.cburch.logisim.riscv.cpu.csrs.*;
 import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
 import com.cburch.logisim.riscv.cpu.gdb.Request;
-import com.cburch.logisim.riscv.cpu.gdb.SingleStepRequest;
 
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
@@ -72,9 +71,24 @@ public class rv32imData implements InstanceData, Cloneable {
 
   // More To Do
 
+  public rv32imData(Value lastClock, long resetAddress){
+    // initial values for registers
+    this.lastClock = lastClock;
+    this.pc = new ProgramCounter(resetAddress);
+    this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
+    this.x = new IntegerRegisters();
+    this.csr = new ControlAndStatusRegisters();
+    this.cpuState = CPUState.OPERATIONAL;
+    this.intermixFlag = false;
+    this.pressedContinue = false;
+    this.monitor = new Object();
+    this.breakpoint = Breakpoint.NONE;
+    // In the first clock cycle we are fetching the first instruction
+    fetchNextInstruction();
+  }
+
   /** Constructs a state with the given values. */
   public rv32imData(Value lastClock, long resetAddress, int port, CPUState state) {
-
     // initial values for registers
     this.lastClock = lastClock;
     this.pc = new ProgramCounter(resetAddress);
@@ -109,9 +123,7 @@ public class rv32imData implements InstanceData, Cloneable {
 
      if(breakpoint == Breakpoint.SINGLE_STEP) {
        halt();
-       server.getRequest().setStatus(Request.STATUS.SUCCESS);
        breakpoint = Breakpoint.NONE;
-       monitor.notify();
      }
    }
 
@@ -202,9 +214,12 @@ public class rv32imData implements InstanceData, Cloneable {
           System.out.println(breakpoint.toString());
         } else if (Request.isSingleStepRequest(request)) {
           breakpoint = Breakpoint.SINGLE_STEP;
+          server.getRequest().setStatus(Request.STATUS.SUCCESS);
+          monitor.notify();
           resume();
         }
       }
+    }
 
       if (!isHalted()) {
         if (fetching) {
@@ -227,7 +242,6 @@ public class rv32imData implements InstanceData, Cloneable {
         handleNextInstruction(dataIn);
       }
     }
-  }
 
   public void handleNextInstruction(long dataIn){
     switch(ir.opcode()) {
@@ -294,6 +308,7 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   public void resume() {
+    isSync = Value.TRUE;
     cpuState = CPUState.OPERATIONAL;
   }
 
@@ -329,6 +344,7 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   public boolean isGDBRequestPending() {
+    if(server == null) return false;
     return server.isRequestPending();
   }
 

@@ -17,6 +17,7 @@ import static com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest.TYPE.MEMWRITE
 
 public class GDBServer implements Runnable{
 
+
     private ServerSocket serverSocket;
     private Socket socket;
     private InputStream in;
@@ -158,11 +159,9 @@ public class GDBServer implements Runnable{
                 }
                 case "s" -> {
                     request = new SingleStepRequest();
-                    System.out.println("Waiting for single step...");
                     try{
                         monitor.wait();
-                        if (request.isSuccess()) response.append("S13");
-                        System.out.println("Success!");
+                        if (request.isSuccess()) response.append("S05");
                     }
                     catch(InterruptedException ex){
                         ex.printStackTrace();
@@ -190,9 +189,7 @@ public class GDBServer implements Runnable{
         }
         else request = new MemoryAccessRequest(MEMREAD, address, bytes);
         try{
-            System.out.println("Waiting for CPU to access memory.");
             monitor.wait();
-            System.out.println("Complete!");
         }
         catch(InterruptedException ex){
             ex.printStackTrace();
