@@ -14,7 +14,6 @@ public class MemoryAccessRequest extends Request {
     private String data;
     private StringBuffer dataBuffer;
 
-    public static long ROM_START = 0x00400000L;
     public static long RAM_START = 0x10010000L;
 
     public enum TYPE {
@@ -49,7 +48,7 @@ public class MemoryAccessRequest extends Request {
     }
 
     public Value getNextAddress() {
-        return Value.createKnown(BitWidth.create(32), ROM_START + address + bytesAccessed);
+        return Value.createKnown(BitWidth.create(32), RAM_START + address + bytesAccessed);
     }
 
     public long getBytes() {
