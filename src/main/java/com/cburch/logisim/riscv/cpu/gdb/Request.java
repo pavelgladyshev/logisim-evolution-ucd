@@ -17,19 +17,9 @@ public abstract class Request {
     }
 
     public enum STATUS {
-        WAITING(0),
-        SUCCESS(1),
-        FAILURE(2);
-
-        final int value;
-
-        STATUS(int x){
-            value = x;
-        }
-
-        public int getValue() {
-            return value;
-        }
+        WAITING,
+        SUCCESS,
+        FAILURE;
     }
 
     public STATUS getStatus() {return this.status;}
@@ -54,18 +44,13 @@ public abstract class Request {
         return pos;
     }
 
-    private void setStatus(int i) {
-        if(i == STATUS.WAITING.getValue()) status = STATUS.WAITING;
-        if(i == STATUS.SUCCESS.getValue()) status = STATUS.SUCCESS;
-        if(i == STATUS.FAILURE.getValue()) status = STATUS.FAILURE;
+    private void setStatus(STATUS status) {
+        this.status = status;
     }
 
     public void waitForAcknowledgement() {
         try {
             getInputStream().read();
-            getInputStream().read();
-            getInputStream().read();
-            setStatus(getInputStream().read());
         }catch (IOException ex){
             ex.printStackTrace();
         }
@@ -73,7 +58,8 @@ public abstract class Request {
 
     public void acknowledgeRequest(Request.STATUS status){
         try {
-            getOutputStream().write(status.getValue());
+            getOutputStream().write(1);
+            setStatus(status);
         } catch (IOException ex){
             ex.printStackTrace();
         }

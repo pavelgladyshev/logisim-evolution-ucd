@@ -193,7 +193,6 @@ public class rv32im extends InstanceFactory {
     final var trigger = cur.updateClock(state.getPortValue(0));
 
     if (trigger) {
-
         boolean instructionCompleted = false;
 
         if (cur.getPressedContinue()) {
@@ -211,12 +210,10 @@ public class rv32im extends InstanceFactory {
           finishIntermixing(cur);
         }
         else if(cur.getService() == rv32imData.GDB_SERVICE.MEMORY_ACCESS) {
-            MemoryAccessRequest request = (MemoryAccessRequest) cur.getServer().getRequest();
-            cur.processMemoryAccessRequest(request, state.getPortValue(DATA_IN).toLongValue());
+          MemoryAccessRequest request = (MemoryAccessRequest) cur.getServer().getRequest();
           if(request.isAccessComplete()) {
-            cur.getServer().acknowledgeRequest(Request.STATUS.SUCCESS);
-            cur.setService(rv32imData.GDB_SERVICE.NONE);
-          }
+            completeDebuggerRequest(cur);
+          } else cur.processMemoryAccessRequest(request, state.getPortValue(DATA_IN).toLongValue());
         }
         else{
           // process state update, current values of input ports (e.g Data-In bus value)
@@ -225,11 +222,14 @@ public class rv32im extends InstanceFactory {
         }
 
         if(cur.getService() == rv32imData.GDB_SERVICE.SINGLE_STEP && instructionCompleted){
-          cur.setService(rv32imData.GDB_SERVICE.NONE);
-          cur.getServer().getRequest().acknowledgeRequest(Request.STATUS.SUCCESS);
+          completeDebuggerRequest(cur);
         }
     }
     updatePorts(state, cur);
+
+    if(state.getAttributeValue(ATTR_GDB_SERVER_RUNNING) == Boolean.TRUE && cur.getService() == rv32imData.GDB_SERVICE.NONE){
+      cur.halt();
+    }
   }
 
   /** Helper functions */
@@ -284,6 +284,10 @@ public class rv32im extends InstanceFactory {
       }
     }
   }
+  private static void completeDebuggerRequest(rv32imData cur) {
+    cur.setService(rv32imData.GDB_SERVICE.NONE);
+    cur.getServer().acknowledgeRequest(Request.STATUS.SUCCESS);
+  }
 
   // CALL THIS METHOD ON THE RISING EDGE OF THE CLOCK ONLY!
   private void finishIntermixing(rv32imData cur) {
@@ -302,6 +306,6 @@ public class rv32im extends InstanceFactory {
   private void resumeCPU(rv32imData cur) {
     cur.setPressedContinue(false);
     cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
-    cur.fetchNextInstruction();
+    //cur.fetchNextInstruction();
   }
 }

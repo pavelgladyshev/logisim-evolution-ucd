@@ -171,8 +171,7 @@ public class rv32imData implements InstanceData, Cloneable {
   public void processMemoryAccessRequest(MemoryAccessRequest request, long dataIn){
     //check for failure to read memory?   fail request
     //check for failure to write memory?  fail request
-    if(!request.isAccessComplete()){
-      switch(request.getType()){
+    switch(request.getType()){
         case MEMREAD -> {
           if(!addressing){
             LoadInstruction.performAddressing(this, request.getNextAddress());
@@ -188,7 +187,6 @@ public class rv32imData implements InstanceData, Cloneable {
           StoreInstruction.performAddressing(this, request.getNextDataByte(), request.getNextAddress());
           intermixFlag = (addressing);
         }
-      }
     }
   }
 
