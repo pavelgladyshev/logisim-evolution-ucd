@@ -25,11 +25,9 @@ public class GDBServer implements Runnable{
     private Thread gdbserver;
     private rv32imData cpu;
     private Request request;
-    private Object monitor;
 
-    public GDBServer(int port, rv32imData cpuData, Object monitor) {
+    public GDBServer(int port, rv32imData cpuData) {
         try {
-            this.monitor = monitor;
             serverSocket = new ServerSocket(port);
             cpu = cpuData;
             gdbserver = new Thread(this);
@@ -45,7 +43,6 @@ public class GDBServer implements Runnable{
     public void run() {
         while (true) {
             try {
-                synchronized (monitor) {
                     System.out.println("Waiting for TCP connection");
                     socket = serverSocket.accept();  // wait for incoming connection
                     System.out.println("Accepted incoming TCP connection");
@@ -89,7 +86,6 @@ public class GDBServer implements Runnable{
                             printer.print("-");
                         }
                     }
-                }
             } catch (IOException e) {
                 //TODO inform user / log error info
                 continue; // try again (?)
@@ -147,6 +143,17 @@ public class GDBServer implements Runnable{
             if (request.isSuccess()) response = new StringBuilder("OK");
             //else send error message
         }
+        else if(field1.startsWith("s")){
+            try {
+                request = new SingleStepRequest();
+                System.out.println("Waiting for CPU stepping to complete.");
+                request.waitForAcknowledgement();
+                System.out.println("Completed.");
+            } catch (Exception ex){
+                ex.printStackTrace();
+            }
+            if (request.isSuccess()) response.append("S05");
+        }
         else switch (field1) {
                 case "?" -> {
                     response = new StringBuilder("S05");
@@ -156,16 +163,6 @@ public class GDBServer implements Runnable{
                         response.append(bigToLittleEndian4(cpu.getX(i)));
                     }
                     response.append(bigToLittleEndian4(cpu.getPC().get()));
-                }
-                case "s" -> {
-                    request = new SingleStepRequest();
-                    try{
-                        monitor.wait();
-                        if (request.isSuccess()) response.append("S05");
-                    }
-                    catch(InterruptedException ex){
-                        ex.printStackTrace();
-                    }
                 }
             }
         return response.toString();
@@ -179,20 +176,25 @@ public class GDBServer implements Runnable{
         return request;
     }
 
+    public void acknowledgeRequest(Request.STATUS status){
+        request.acknowledgeRequest(status);
+    }
+
     private void parseMemoryAccessRequest(MemoryAccessRequest.TYPE type, String[] fields) {
         long address = Long.parseLong(fields[0].substring(1), 16);
         int bytes = (int) Long.parseLong(fields[1], 16);
         //create request
-        if(type.equals(MEMWRITE)) {
-            String data = fields[2];
-            request = new MemoryAccessRequest(MEMWRITE, address, bytes, data);
-        }
-        else request = new MemoryAccessRequest(MEMREAD, address, bytes);
         try{
-            monitor.wait();
-        }
-        catch(InterruptedException ex){
-            ex.printStackTrace();
+            if(type.equals(MEMWRITE)) {
+                String data = fields[2];
+                request = new MemoryAccessRequest(MEMWRITE, address, bytes, data);
+            }
+            else request = new MemoryAccessRequest(MEMREAD, address, bytes);
+            System.out.println("Waiting for CPU memory access to complete.");
+            request.waitForAcknowledgement();
+            System.out.println("Completed.");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 

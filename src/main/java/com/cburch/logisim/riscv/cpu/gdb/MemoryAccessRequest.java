@@ -3,6 +3,8 @@ package com.cburch.logisim.riscv.cpu.gdb;
 import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;
 
+import java.io.IOException;
+
 public class MemoryAccessRequest extends Request {
 
     private final TYPE type;
@@ -20,22 +22,22 @@ public class MemoryAccessRequest extends Request {
         MEMWRITE,
     }
 
-    public MemoryAccessRequest(TYPE requestType, long address, int bytes){
+    public MemoryAccessRequest(TYPE requestType, long address, int bytes) throws IOException {
+        super();
         this.type = requestType;
         this.bytes = bytes;
         this.bytesAccessed = 0;
         this.dataBuffer = new StringBuffer();
         this.address = address;
-        setStatus(STATUS.WAITING);
     }
 
-    public MemoryAccessRequest(TYPE requestType, long address, int bytes, String data){
+    public MemoryAccessRequest(TYPE requestType, long address, int bytes, String data) throws IOException {
+        super();
         this.type = requestType;
         this.bytes = bytes;
         this.bytesAccessed = 0;
         this.data = data;
         this.address = address;
-        setStatus(STATUS.WAITING);
     }
 
     public Boolean isAccessComplete(){

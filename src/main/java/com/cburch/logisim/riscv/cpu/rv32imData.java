@@ -59,14 +59,15 @@ public class rv32imData implements InstanceData, Cloneable {
     HALTED
   }
 
+
   /** GDB server */
   private GDBServer server;
-  private final Object monitor;
-  private Breakpoint breakpoint;
+  private GDB_SERVICE service;
 
-  enum Breakpoint{
+  public enum GDB_SERVICE {
     NONE,
-    SINGLE_STEP
+    SINGLE_STEP,
+    MEMORY_ACCESS
   }
 
   // More To Do
@@ -81,8 +82,6 @@ public class rv32imData implements InstanceData, Cloneable {
     this.cpuState = CPUState.OPERATIONAL;
     this.intermixFlag = false;
     this.pressedContinue = false;
-    this.monitor = new Object();
-    this.breakpoint = Breakpoint.NONE;
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -98,9 +97,8 @@ public class rv32imData implements InstanceData, Cloneable {
     this.cpuState = state;
     this.intermixFlag = false;
     this.pressedContinue = false;
-    this.monitor = new Object();
-    this.server = new GDBServer(port, this, monitor);
-    this.breakpoint = Breakpoint.NONE;
+    this.server = new GDBServer(port, this);
+    this.service = GDB_SERVICE.NONE;
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -110,21 +108,16 @@ public class rv32imData implements InstanceData, Cloneable {
    */
    public void fetchNextInstruction()
    {
-     fetching = true;
-     addressing = false;
+       fetching = true;
+       addressing = false;
 
-     // Values for outputs fetching instruction
-     address = Value.createKnown(32,pc.get());
-     outputData = HiZ32;     // The output data bus is in High Z
-     outputDataWidth = 4;    // all 4 bytes of the output
-     memRead = Value.TRUE;   // MemRead active
-     memWrite = Value.FALSE; // MemWrite not active
-     isSync = Value.TRUE;
-
-     if(breakpoint == Breakpoint.SINGLE_STEP) {
-       halt();
-       breakpoint = Breakpoint.NONE;
-     }
+       // Values for outputs fetching instruction
+       address = Value.createKnown(32, pc.get());
+       outputData = HiZ32;     // The output data bus is in High Z
+       outputDataWidth = 4;    // all 4 bytes of the output
+       memRead = Value.TRUE;   // MemRead active
+       memWrite = Value.FALSE; // MemWrite not active
+       isSync = Value.TRUE;
    }
 
   /**
@@ -174,6 +167,7 @@ public class rv32imData implements InstanceData, Cloneable {
      pc.set(pcInit);
   }
 
+  /* GDB memory access handling */
   public void processMemoryAccessRequest(MemoryAccessRequest request, long dataIn){
     //check for failure to read memory?   fail request
     //check for failure to write memory?  fail request
@@ -196,54 +190,39 @@ public class rv32imData implements InstanceData, Cloneable {
         }
       }
     }
-    if(request.isAccessComplete()) {
-      request.setStatus(Request.STATUS.SUCCESS);
-      monitor.notify();
-    }
   }
 
   /** update CPU state (execute) */
-  public void update(long dataIn) {
-    synchronized (monitor) {
-      if (isGDBRequestPending()) {
-        Request request = server.getRequest();
-        System.out.println(breakpoint.toString());
-        if (Request.isMemoryAccessRequest(request)) {
-          halt();
-          processMemoryAccessRequest((MemoryAccessRequest) request, dataIn);
-          System.out.println(breakpoint.toString());
-        } else if (Request.isSingleStepRequest(request)) {
-          breakpoint = Breakpoint.SINGLE_STEP;
-          server.getRequest().setStatus(Request.STATUS.SUCCESS);
-          monitor.notify();
-          resume();
-        }
+  public boolean update(long dataIn) {
+      boolean instructionCompleted = false;
+
+      if (fetching) {
+        lastDataIn = dataIn;
+        lastAddress = address.toLongValue();
+        ir.set(dataIn);
       }
-    }
 
       if (!isHalted()) {
-        if (fetching) {
-          lastDataIn = dataIn;
-          lastAddress = address.toLongValue();
-          ir.set(dataIn);
-        }
         // Check for timer interrupts
         if (isTimerInterruptPending()) {
           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
           fetchNextInstruction();
-          return;
         }
         // Check for external interrupts
-        if (isExternalInterruptPending()) {
+        else if (isExternalInterruptPending()) {
           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
           fetchNextInstruction();
-          return;
         }
-        handleNextInstruction(dataIn);
+        else {
+          instructionCompleted = handleNextInstruction(dataIn);
+        }
       }
+      return instructionCompleted;
     }
 
-  public void handleNextInstruction(long dataIn){
+  // Boolean flag indicates whether an instruction was completed in this cycle.
+  public boolean handleNextInstruction(long dataIn){
+    boolean instructionCompleted = true;
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
         ArithmeticInstruction.executeImmediate(this);
@@ -256,6 +235,7 @@ public class rv32imData implements InstanceData, Cloneable {
       case 0x03:  // load instruction (I-type)
         if(!addressing) {
           LoadInstruction.performAddressing(this);
+          instructionCompleted = false;
         } else {
           LoadInstruction.latch(this, dataIn);
           fetchNextInstruction();
@@ -264,6 +244,7 @@ public class rv32imData implements InstanceData, Cloneable {
       case 0x23:  // storing instruction (S-type)
         StoreInstruction.performAddressing(this);
         intermixFlag = (addressing);
+        instructionCompleted = false;
         break;
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
@@ -296,6 +277,7 @@ public class rv32imData implements InstanceData, Cloneable {
       default:  // Unknown instruction
         TrapHandler.throwIllegalInstructionException(this);
     }
+    return instructionCompleted;
   }
 
   public void stopGDBServer() {
@@ -307,15 +289,6 @@ public class rv32imData implements InstanceData, Cloneable {
     cpuState = CPUState.HALTED;
   }
 
-  public void resume() {
-    isSync = Value.TRUE;
-    cpuState = CPUState.OPERATIONAL;
-  }
-
-  public void skipInstruction() {
-    pc.increment();
-    fetchNextInstruction();
-  }
 
   public boolean isTimerInterruptPending() {
     MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
@@ -348,7 +321,6 @@ public class rv32imData implements InstanceData, Cloneable {
     return server.isRequestPending();
   }
 
-
   /** getters and setters*/
   public long getLastDataIn() { return lastDataIn; }
   public long getLastAddress() { return lastAddress; }
@@ -368,7 +340,12 @@ public class rv32imData implements InstanceData, Cloneable {
   public boolean getPressedContinue() { return pressedContinue; }
   public long getCSRValue(int csr) {return this.csr.read(this, csr);}
   public CSR getCSR(int csr) { return this.csr.get(csr); }
-
+  public GDBServer getServer() {
+    return server;
+  }
+  public GDB_SERVICE getService() {
+    return service;
+  }
 
   public void setLastDataIn(long value) { lastDataIn = value; }
   public void setLastAddress(long value) { lastAddress = value; }
@@ -384,4 +361,6 @@ public class rv32imData implements InstanceData, Cloneable {
   public void setIntermixFlag(boolean value) { intermixFlag = value; }
   public void setPressedContinue(boolean value) { pressedContinue = value; }
   public void setCSR(int csr, long value) { this.csr.write(this, csr, value); }
+
+  public void setService(GDB_SERVICE service) {this.service = service;}
 }

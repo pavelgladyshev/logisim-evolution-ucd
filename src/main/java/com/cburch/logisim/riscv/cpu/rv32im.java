@@ -13,6 +13,8 @@ import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.*;
 import com.cburch.logisim.riscv.cpu.csrs.MIP_CSR;
 import com.cburch.logisim.riscv.cpu.csrs.MMCSR;
+import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
+import com.cburch.logisim.riscv.cpu.gdb.Request;
 import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
@@ -184,11 +186,15 @@ public class rv32im extends InstanceFactory {
     // store intermix data when needed
     checkIntermixData(state, cur);
 
+    // Check for GDB request
+    checkGDB(state, cur);
 
     // Check if clock signal is changing from low/false to high/true
     final var trigger = cur.updateClock(state.getPortValue(0));
 
     if (trigger) {
+
+        boolean instructionCompleted = false;
 
         if (cur.getPressedContinue()) {
           resumeCPU(cur);
@@ -198,12 +204,29 @@ public class rv32im extends InstanceFactory {
         if (cur.getIntermixFlag()) {
           // 2nd clock cycle finishes intermixing:
           // fetches new data, updates PC
+          if(!(cur.getService() == rv32imData.GDB_SERVICE.MEMORY_ACCESS)){
+            cur.getPC().increment();
+            instructionCompleted = true;
+          }
           finishIntermixing(cur);
-          if(!cur.isHalted())cur.getPC().increment();
-        } else {
+        }
+        else if(cur.getService() == rv32imData.GDB_SERVICE.MEMORY_ACCESS) {
+            MemoryAccessRequest request = (MemoryAccessRequest) cur.getServer().getRequest();
+            cur.processMemoryAccessRequest(request, state.getPortValue(DATA_IN).toLongValue());
+          if(request.isAccessComplete()) {
+            cur.getServer().acknowledgeRequest(Request.STATUS.SUCCESS);
+            cur.setService(rv32imData.GDB_SERVICE.NONE);
+          }
+        }
+        else{
           // process state update, current values of input ports (e.g Data-In bus value)
           // are passed to update() as parameters
-          cur.update(state.getPortValue(DATA_IN).toLongValue());
+          instructionCompleted = cur.update(state.getPortValue(DATA_IN).toLongValue());
+        }
+
+        if(cur.getService() == rv32imData.GDB_SERVICE.SINGLE_STEP && instructionCompleted){
+          cur.setService(rv32imData.GDB_SERVICE.NONE);
+          cur.getServer().getRequest().acknowledgeRequest(Request.STATUS.SUCCESS);
         }
     }
     updatePorts(state, cur);
@@ -249,6 +272,19 @@ public class rv32im extends InstanceFactory {
     }
   }
 
+  private void checkGDB(InstanceState state, rv32imData cur){
+    if (cur.isGDBRequestPending()) {
+      Request request = cur.getServer().getRequest();
+      if (Request.isMemoryAccessRequest(request)) {
+        cur.setService(rv32imData.GDB_SERVICE.MEMORY_ACCESS);
+        resumeCPU(cur);
+      } else if (Request.isSingleStepRequest(request)) {
+        cur.setService(rv32imData.GDB_SERVICE.SINGLE_STEP);
+        resumeCPU(cur);
+      }
+    }
+  }
+
   // CALL THIS METHOD ON THE RISING EDGE OF THE CLOCK ONLY!
   private void finishIntermixing(rv32imData cur) {
     cur.fetchNextInstruction();
@@ -266,6 +302,6 @@ public class rv32im extends InstanceFactory {
   private void resumeCPU(rv32imData cur) {
     cur.setPressedContinue(false);
     cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
-    cur.skipInstruction();
+    cur.fetchNextInstruction();
   }
 }
