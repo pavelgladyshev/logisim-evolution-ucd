@@ -131,7 +131,7 @@ public class GDBServer implements Runnable{
             }
         }
         else if(field1.startsWith("g")){
-            response = cpu.getIntegerRegisters().readAllRegisters();
+            response = cpu.getIntegerRegisters().readAllRegisters((int) cpu.getPC().get());
         }
         else if(field1.startsWith("p")){
             response = String.format("%08x", cpu.getX(Integer.valueOf(field1.substring(2))));

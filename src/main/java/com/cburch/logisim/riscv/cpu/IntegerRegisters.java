@@ -1,5 +1,7 @@
 package com.cburch.logisim.riscv.cpu;
 
+import java.util.Arrays;
+
 public class IntegerRegisters {
 
     public static final String[] registerABINames = {
@@ -24,14 +26,28 @@ public class IntegerRegisters {
     }
 
 
-    public String readAllRegisters() {
-        StringBuilder builder = new StringBuilder();
-
-        for (long reg : x) {
-            // Convert each register value to an 8-character hex string (32-bit register)
-            builder.append(String.format("%08x", reg));
+    public String readAllRegisters(int pc) {
+        StringBuilder ret = new StringBuilder();
+        for(int i = 0; i < x.length; i++) {
+            char[] newReg = String.format("%08x", x[i]).toCharArray();
+            System.out.println(newReg);
+            reverseNibbles(ret, newReg);
         }
 
-        return builder.toString();
+        char[] pcStr = String.format("%08x", pc).toCharArray();
+        reverseNibbles(ret, pcStr);
+
+        return ret.toString();
     }
+
+    private void reverseNibbles(StringBuilder ret, char[] pcStr) {
+        for(int j = 0; j < 8; j += 2) {
+            char temp = pcStr[j];
+            pcStr[j] = pcStr[j+1];
+            pcStr[j+1] = temp;
+        }
+        String reversedPC = new StringBuilder(new String(pcStr)).reverse().toString();
+        ret.append(reversedPC);
+    }
+
 }
