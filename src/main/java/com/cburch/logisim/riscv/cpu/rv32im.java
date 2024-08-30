@@ -15,6 +15,7 @@ import com.cburch.logisim.riscv.cpu.csrs.MIP_CSR;
 import com.cburch.logisim.riscv.cpu.csrs.MMCSR;
 import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
 import com.cburch.logisim.riscv.cpu.gdb.Request;
+import com.cburch.logisim.riscv.cpu.gdb.StepRequest;
 import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
@@ -47,6 +48,7 @@ public class rv32im extends InstanceFactory {
   public static final int CONTINUE = 8;
   public static final int TIMER_INTERRUPT_REQUEST = 9;
   public static final int PLIC_INTERRUPT_REQUEST = 10;
+  public static final int WAKEUP_CLOCK = 11; // QUICK FIX FOR propogate() not calling when ports are not updated (i.e SYNC DISABLED)
 
   public static final Attribute<Long> ATTR_RESET_ADDR =
           Attributes.forHexLong("resetAddress", S.getter("rv32imResetAddress"));
@@ -92,6 +94,7 @@ public class rv32im extends InstanceFactory {
     ps[CONTINUE] = new Port(120, 140, Port.INPUT, 1);
     ps[TIMER_INTERRUPT_REQUEST] = new Port(-60, 140, Port.INPUT, 1);
     ps[PLIC_INTERRUPT_REQUEST] = new Port(-60, 190, Port.INPUT, 1);
+    ps[WAKEUP_CLOCK] = new Port(-60, 20, Port.INPUT, 1);
 
     ps[CLOCK].setToolTip(S.getter("rv32imClock"));
     ps[RESET].setToolTip(S.getter("rv32imReset"));
@@ -104,7 +107,6 @@ public class rv32im extends InstanceFactory {
     ps[CONTINUE].setToolTip(S.getter("rv32imContinue"));
     ps[TIMER_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imTimerInterruptRequestIn"));
     ps[PLIC_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imPLICInterruptRequestIn"));
-
 
     setPorts(ps);
 
@@ -144,6 +146,7 @@ public class rv32im extends InstanceFactory {
     painter.drawPort(8); // draw port 8 as just a dot
     painter.drawPort(9); // draw port 9 as just a dot
     painter.drawPort(10); // draw port 10 as just a dot
+    painter.drawClock(11, Direction.EAST);
 
     // Display the current state.
     // If the context says not to show state (as when generating
@@ -187,7 +190,7 @@ public class rv32im extends InstanceFactory {
     checkIntermixData(state, cur);
 
     // Check for GDB request
-    checkGDB(state, cur);
+    checkGDB(cur);
 
     // Check if clock signal is changing from low/false to high/true
     final var trigger = cur.updateClock(state.getPortValue(0));
@@ -211,7 +214,7 @@ public class rv32im extends InstanceFactory {
         }
         else if(cur.getService() == rv32imData.GDB_SERVICE.MEMORY_ACCESS) {
           MemoryAccessRequest request = (MemoryAccessRequest) cur.getServer().getRequest();
-          if(request.isAccessComplete()) {
+          if(request.isComplete()) {
             completeDebuggerRequest(cur);
           } else cur.processMemoryAccessRequest(request, state.getPortValue(DATA_IN).toLongValue());
         }
@@ -221,15 +224,14 @@ public class rv32im extends InstanceFactory {
           instructionCompleted = cur.update(state.getPortValue(DATA_IN).toLongValue());
         }
 
-        if(cur.getService() == rv32imData.GDB_SERVICE.SINGLE_STEP && instructionCompleted){
-          completeDebuggerRequest(cur);
+        if(cur.getService() == rv32imData.GDB_SERVICE.STEPPING && instructionCompleted){
+          StepRequest request = (StepRequest) cur.getServer().getRequest();
+          if(request.isComplete()) {
+            completeDebuggerRequest(cur);
+          } else request.incrementStepsTaken();
         }
     }
     updatePorts(state, cur);
-
-    if(state.getAttributeValue(ATTR_GDB_SERVER_RUNNING) == Boolean.TRUE && cur.getService() == rv32imData.GDB_SERVICE.NONE){
-      cur.halt();
-    }
   }
 
   /** Helper functions */
@@ -272,21 +274,29 @@ public class rv32im extends InstanceFactory {
     }
   }
 
-  private void checkGDB(InstanceState state, rv32imData cur){
+  private void checkGDB(rv32imData cur){
     if (cur.isGDBRequestPending()) {
       Request request = cur.getServer().getRequest();
       if (Request.isMemoryAccessRequest(request)) {
         cur.setService(rv32imData.GDB_SERVICE.MEMORY_ACCESS);
         resumeCPU(cur);
       } else if (Request.isSingleStepRequest(request)) {
-        cur.setService(rv32imData.GDB_SERVICE.SINGLE_STEP);
+        cur.setService(rv32imData.GDB_SERVICE.STEPPING);
         resumeCPU(cur);
+      } else if (request.isStale()){
+        failDebuggerRequest(cur);
       }
     }
+    if(cur.isGDBRunning() && cur.getService() == rv32imData.GDB_SERVICE.NONE) cur.halt();
   }
   private static void completeDebuggerRequest(rv32imData cur) {
     cur.setService(rv32imData.GDB_SERVICE.NONE);
     cur.getServer().acknowledgeRequest(Request.STATUS.SUCCESS);
+  }
+
+  private static void failDebuggerRequest(rv32imData cur) {
+    cur.setService(rv32imData.GDB_SERVICE.NONE);
+    cur.getServer().acknowledgeRequest(Request.STATUS.FAILURE);
   }
 
   // CALL THIS METHOD ON THE RISING EDGE OF THE CLOCK ONLY!
@@ -306,6 +316,6 @@ public class rv32im extends InstanceFactory {
   private void resumeCPU(rv32imData cur) {
     cur.setPressedContinue(false);
     cur.setCpuState(rv32imData.CPUState.OPERATIONAL);
-    //cur.fetchNextInstruction();
+    cur.setIsSync(Value.TRUE);
   }
 }

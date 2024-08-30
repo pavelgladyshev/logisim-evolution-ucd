@@ -9,8 +9,8 @@ public class StoreInstruction {
         performAddressing(hartData, getNewData(hartData), getAddress(hartData), hartData.getIR().func3());
     }
 
-    public static void performAddressing(rv32imData hartData, Value data, Value address){
-        performAddressing(hartData, data, address, 0x0);
+    public static void performAddressing(rv32imData hartData, long data, Value address){
+        performAddressing(hartData, getNewData(hartData, data), address, 0x0);
     }
 
     private static void performAddressing(rv32imData hartData, Value data, Value address, long func3) {

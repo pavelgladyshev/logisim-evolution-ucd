@@ -1,9 +1,6 @@
 package com.cburch.logisim.riscv.cpu;
 
-import com.cburch.logisim.riscv.cpu.gdb.Packet;
-import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
-import com.cburch.logisim.riscv.cpu.gdb.Request;
-import com.cburch.logisim.riscv.cpu.gdb.SingleStepRequest;
+import com.cburch.logisim.riscv.cpu.gdb.*;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -101,6 +98,7 @@ public class GDBServer implements Runnable{
     public String handle(String command) {
         String[] fields = command.split("[:,;,,]");
         StringBuilder response = new StringBuilder();
+        String errorMessage;
 
         String field1 = fields[0];
 
@@ -118,9 +116,6 @@ public class GDBServer implements Runnable{
                 case "Attached" -> {
                     response.append("1");
                 }
-                case "Symbol" -> {
-                    response.append("OK");
-                }
             }
         }
         else if(field1.startsWith("Q")){
@@ -133,30 +128,34 @@ public class GDBServer implements Runnable{
             }
         }
         else if(field1.startsWith("m")){
-                parseMemoryAccessRequest(MEMREAD, fields);
-                if (request.isSuccess()) {
-                    response.append(((MemoryAccessRequest)request).getDataBuffer());
-                }
+            parseMemoryAccessRequest(MEMREAD, fields);
+            if(!(errorMessage = parseMemoryAccessRequest(MEMREAD, fields)).isBlank()) {
+                response.append(errorMessage);
+            }
+            else if (request.isSuccess()) response.append(((MemoryAccessRequest)request).getDataBuffer());
+            else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
+
         }
         else if(field1.startsWith("M")){
-            parseMemoryAccessRequest(MEMWRITE, fields);
-            if (request.isSuccess()) response = new StringBuilder("OK");
-            //else send error message
+                if(!(errorMessage = parseMemoryAccessRequest(MEMWRITE, fields)).isBlank()) {
+                    response.append(errorMessage);
+                }
+                else if(request.isSuccess()) response.append("OK");
+                else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
         }
         else if(field1.startsWith("s")){
             try {
-                request = new SingleStepRequest();
-                System.out.println("Waiting for CPU stepping to complete.");
+                request = new StepRequest(1);
                 request.waitForAcknowledgement();
-                System.out.println("Completed.");
             } catch (Exception ex){
                 ex.printStackTrace();
             }
-            if (request.isSuccess()) response.append("S05");
+            if (request.isSuccess()) response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
+            else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
         }
         else switch (field1) {
                 case "?" -> {
-                    response = new StringBuilder("S05");
+                    response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
                 }
                 case "g" -> {
                     for (int i = 0; i < 32; i++) {
@@ -172,6 +171,7 @@ public class GDBServer implements Runnable{
         if(request == null) return false;
         else return request.isPending();
     }
+
     public Request getRequest(){
         return request;
     }
@@ -180,22 +180,28 @@ public class GDBServer implements Runnable{
         request.acknowledgeRequest(status);
     }
 
-    private void parseMemoryAccessRequest(MemoryAccessRequest.TYPE type, String[] fields) {
+    private String parseMemoryAccessRequest(MemoryAccessRequest.TYPE type, String[] fields) {
         long address = Long.parseLong(fields[0].substring(1), 16);
         int bytes = (int) Long.parseLong(fields[1], 16);
-        //create request
-        try{
-            if(type.equals(MEMWRITE)) {
+        String errorMessage = "";
+        //check if out of memory bounds
+        if(!((address >= 0x00400000 && address < 0x00404000) || (address >= 0x10010000 && address < 0x10014000))){
+            errorMessage = SIGNAL.GDB_EXC_BAD_ACCESS.getCode();
+        }
+        //else create request
+        else try {
+            if (type.equals(MEMWRITE)) {
                 String data = fields[2];
                 request = new MemoryAccessRequest(MEMWRITE, address, bytes, data);
             }
-            else request = new MemoryAccessRequest(MEMREAD, address, bytes);
-            System.out.println("Waiting for CPU memory access to complete.");
+            else {
+                request = new MemoryAccessRequest(MEMREAD, address, bytes);
+            }
             request.waitForAcknowledgement();
-            System.out.println("Completed.");
         } catch (IOException e) {
-            throw new RuntimeException(e);
+                throw new RuntimeException(e);
         }
+        return errorMessage;
     }
 
     public String bigToLittleEndian4(long x){

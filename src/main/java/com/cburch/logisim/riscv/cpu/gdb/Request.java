@@ -9,27 +9,28 @@ public abstract class Request {
     private STATUS status;
     private final PipedInputStream pis;
     private final PipedOutputStream pos;
+    private final long startTime;
+    private static final long timeoutNano = 5_000_000_000L;
 
     protected Request() throws IOException {
         this.pos = new PipedOutputStream();
         this.pis = new PipedInputStream(pos);
         this.status = STATUS.WAITING;
+        this.startTime = System.nanoTime();
     }
 
     public enum STATUS {
         WAITING,
         SUCCESS,
-        FAILURE;
+        FAILURE
     }
+
+    public abstract boolean isComplete();
 
     public STATUS getStatus() {return this.status;}
 
     public Boolean isSuccess(){
         return status == STATUS.SUCCESS;
-    }
-
-    public Boolean isFailure(){
-        return status == STATUS.FAILURE;
     }
 
     public Boolean isPending(){
@@ -44,7 +45,7 @@ public abstract class Request {
         return pos;
     }
 
-    private void setStatus(STATUS status) {
+    public void setStatus(STATUS status) {
         this.status = status;
     }
 
@@ -66,11 +67,15 @@ public abstract class Request {
     }
 
     public static Boolean isSingleStepRequest(Object o){
-        return o.getClass().equals(SingleStepRequest.class);
+        return o.getClass().equals(StepRequest.class);
     }
 
     public static Boolean isMemoryAccessRequest(Object o){
         return o.getClass().equals(MemoryAccessRequest.class);
+    }
+
+    public boolean isStale(){
+        return System.nanoTime() > (startTime + timeoutNano);
     }
 
 

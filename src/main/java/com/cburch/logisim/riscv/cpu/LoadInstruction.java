@@ -38,7 +38,7 @@ public class LoadInstruction {
 
     // GDB
     public static void performAddressing(rv32imData hartData, Value address){
-        performAddressing(hartData, address, 0x4);
+        performAddressing(hartData, address , 0x4);
     }
 
     private static void performAddressing(rv32imData hartData, Value address, int func3) {

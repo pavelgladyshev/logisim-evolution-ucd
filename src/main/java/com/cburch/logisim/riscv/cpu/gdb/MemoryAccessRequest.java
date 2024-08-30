@@ -14,8 +14,6 @@ public class MemoryAccessRequest extends Request {
     private String data;
     private StringBuffer dataBuffer;
 
-    public static long RAM_START = 0x10010000L;
-
     public enum TYPE {
         MEMREAD,
         MEMWRITE,
@@ -39,7 +37,8 @@ public class MemoryAccessRequest extends Request {
         this.address = address;
     }
 
-    public Boolean isAccessComplete(){
+    @Override
+    public boolean isComplete(){
         return bytes == bytesAccessed;
     }
 
@@ -48,7 +47,7 @@ public class MemoryAccessRequest extends Request {
     }
 
     public Value getNextAddress() {
-        return Value.createKnown(BitWidth.create(32), RAM_START + address + bytesAccessed);
+        return Value.createKnown(BitWidth.create(32), address + bytesAccessed);
     }
 
     public long getBytes() {
@@ -57,10 +56,10 @@ public class MemoryAccessRequest extends Request {
 
     public int getBytesAccessed() {return bytesAccessed;}
 
-    public Value getNextDataByte() {
-        long nextDataByte = Long.parseLong(data.substring(0,1), 16);
+    public long getNextDataByte() {
+        long nextDataByte = Long.parseLong(data.substring(0, 2), 16);
         data = data.substring(2);
-        return Value.createKnown(BitWidth.create(32), nextDataByte);
+        return nextDataByte;
     }
 
     public StringBuffer getDataBuffer(){

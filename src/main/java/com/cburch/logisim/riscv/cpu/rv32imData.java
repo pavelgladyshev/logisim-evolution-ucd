@@ -15,7 +15,6 @@ import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
 import com.cburch.logisim.riscv.cpu.csrs.*;
 import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
-import com.cburch.logisim.riscv.cpu.gdb.Request;
 
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
@@ -66,7 +65,7 @@ public class rv32imData implements InstanceData, Cloneable {
 
   public enum GDB_SERVICE {
     NONE,
-    SINGLE_STEP,
+    STEPPING,
     MEMORY_ACCESS
   }
 
@@ -87,7 +86,7 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   /** Constructs a state with the given values. */
-  public rv32imData(Value lastClock, long resetAddress, int port, CPUState state) {
+  public rv32imData(Value lastClock, long resetAddress, int port, CPUState state, Boolean runGDB) {
     // initial values for registers
     this.lastClock = lastClock;
     this.pc = new ProgramCounter(resetAddress);
@@ -97,8 +96,11 @@ public class rv32imData implements InstanceData, Cloneable {
     this.cpuState = state;
     this.intermixFlag = false;
     this.pressedContinue = false;
-    this.server = new GDBServer(port, this);
     this.service = GDB_SERVICE.NONE;
+    if(runGDB) {
+      this.server = new GDBServer(port, this);
+      this.cpuState = CPUState.HALTED;
+    }
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -130,9 +132,9 @@ public class rv32imData implements InstanceData, Cloneable {
       // If it doesn't yet exist, then we'll set it up with our default
       // values and put it into the circuit state so it can be retrieved
       // in future propagations.
-      if(state.getAttributeValue(rv32im.ATTR_CPU_STATE).getValue().equals("Halted")) {
-        ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR), 3333, CPUState.HALTED);
-      } else ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR), 3333, CPUState.OPERATIONAL);
+      CPUState initialCPUState = state.getAttributeValue(rv32im.ATTR_CPU_STATE).getValue().equals("Halted") ? CPUState.HALTED : CPUState.OPERATIONAL;
+      ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
+              3333, initialCPUState, state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
       state.setData(ret);
     }
     return ret;
@@ -174,9 +176,12 @@ public class rv32imData implements InstanceData, Cloneable {
     switch(request.getType()){
         case MEMREAD -> {
           if(!addressing){
+            System.out.println("addressing at : 0x"+Long.toHexString(request.getNextAddress().toLongValue()));
             LoadInstruction.performAddressing(this, request.getNextAddress());
           }
           else {
+            System.out.println("data in : 0x"+Long.toHexString(dataIn));
+            System.out.println("current address : 0x"+Long.toHexString(request.getNextAddress().toLongValue()));
             long nextByte =  LoadInstruction.getUnsignedDataByte(dataIn, request.getNextAddress().toLongValue());
             request.getDataBuffer().append(String.format("%02X",nextByte));
             request.incrementAccessed();
@@ -184,8 +189,11 @@ public class rv32imData implements InstanceData, Cloneable {
           }
         }
         case MEMWRITE -> {
-          StoreInstruction.performAddressing(this, request.getNextDataByte(), request.getNextAddress());
+          long nextDataByte = request.getNextDataByte();
+          System.out.println("Written : " + nextDataByte);
+          StoreInstruction.performAddressing(this, nextDataByte, request.getNextAddress());
           intermixFlag = (addressing);
+          request.incrementAccessed();
         }
     }
   }
@@ -194,9 +202,10 @@ public class rv32imData implements InstanceData, Cloneable {
   public boolean update(long dataIn) {
       boolean instructionCompleted = false;
 
-      if (fetching) {
-        lastDataIn = dataIn;
-        lastAddress = address.toLongValue();
+    lastDataIn = dataIn;
+    lastAddress = address.toLongValue();
+
+      if(fetching) {
         ir.set(dataIn);
       }
 
@@ -279,7 +288,7 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   public void stopGDBServer() {
-    server.terminate();
+    if(isGDBRunning()) server.terminate();
   }
 
   public void halt() {
@@ -317,6 +326,10 @@ public class rv32imData implements InstanceData, Cloneable {
   public boolean isGDBRequestPending() {
     if(server == null) return false;
     return server.isRequestPending();
+  }
+
+  public boolean isGDBRunning(){
+    return (server != null);
   }
 
   /** getters and setters*/
@@ -359,6 +372,5 @@ public class rv32imData implements InstanceData, Cloneable {
   public void setIntermixFlag(boolean value) { intermixFlag = value; }
   public void setPressedContinue(boolean value) { pressedContinue = value; }
   public void setCSR(int csr, long value) { this.csr.write(this, csr, value); }
-
   public void setService(GDB_SERVICE service) {this.service = service;}
 }
