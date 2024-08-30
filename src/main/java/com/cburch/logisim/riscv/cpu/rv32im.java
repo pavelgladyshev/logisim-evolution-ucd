@@ -226,9 +226,8 @@ public class rv32im extends InstanceFactory {
 
         if(cur.getService() == rv32imData.GDB_SERVICE.STEPPING && instructionCompleted){
           StepRequest request = (StepRequest) cur.getServer().getRequest();
-          if(request.isComplete()) {
-            completeDebuggerRequest(cur);
-          } else request.incrementStepsTaken();
+          request.incrementStepsTaken();;
+          if(request.isComplete()) completeDebuggerRequest(cur);
         }
     }
     updatePorts(state, cur);
@@ -256,7 +255,6 @@ public class rv32im extends InstanceFactory {
       // Set the Machine External Interrupt Pending (MEIP) bit in the MIP CSR
       mip.write(mip.read() | 0x800);  // 0x800 corresponds to MEIP
     }
-
   }
 
   private void checkContinuePressed(InstanceState state, rv32imData cur) {
