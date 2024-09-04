@@ -14,7 +14,11 @@ import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
 import com.cburch.logisim.riscv.cpu.csrs.*;
+import com.cburch.logisim.riscv.cpu.gdb.Breakpoint;
 import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
@@ -69,6 +73,8 @@ public class rv32imData implements InstanceData, Cloneable {
     MEMORY_ACCESS
   }
 
+  private List<Breakpoint> breakpoints;
+
   // More To Do
 
   public rv32imData(Value lastClock, long resetAddress){
@@ -81,6 +87,7 @@ public class rv32imData implements InstanceData, Cloneable {
     this.cpuState = CPUState.OPERATIONAL;
     this.intermixFlag = false;
     this.pressedContinue = false;
+    this.breakpoints = new ArrayList<>();
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -101,6 +108,8 @@ public class rv32imData implements InstanceData, Cloneable {
       this.server = new GDBServer(port, this);
       this.cpuState = CPUState.HALTED;
     }
+    this.breakpoints = new ArrayList<>();
+
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
   }
@@ -134,7 +143,7 @@ public class rv32imData implements InstanceData, Cloneable {
       // in future propagations.
       CPUState initialCPUState = state.getAttributeValue(rv32im.ATTR_CPU_STATE).getValue().equals("Halted") ? CPUState.HALTED : CPUState.OPERATIONAL;
       ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
-              3333, initialCPUState, state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
+              state.getAttributeValue(rv32im.ATTR_TCP_PORT), initialCPUState, state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
       state.setData(ret);
     }
     return ret;
@@ -197,19 +206,39 @@ public class rv32imData implements InstanceData, Cloneable {
         }
     }
   }
+  public boolean addBreakpoint(int breakpointType, long address, int kind) {
+    Breakpoint breakpoint = new Breakpoint(Breakpoint.Type.HARDWARE, address, kind);
+    breakpoints.add(breakpoint);
+    return true;
+  }
+
+  public boolean removeBreakpoint(int breakpointType, long address, int kind) {
+    Breakpoint.Type type = Breakpoint.Type.HARDWARE;
+    return breakpoints.removeIf(bp -> bp.getType() == type && bp.getAddress() == address && bp.getKind() == kind);
+  }
+
+  public boolean checkBreakpoint(long address) {
+    for (Breakpoint bp : breakpoints) {
+      if (bp.getAddress() == address) {
+        System.out.println("Breakpoint hit at address: " + address);
+        return true;
+      }
+    }
+    return false;
+  }
 
   /** update CPU state (execute) */
   public boolean update(long dataIn) {
       boolean instructionCompleted = false;
 
-    lastDataIn = dataIn;
-    lastAddress = address.toLongValue();
+      lastDataIn = dataIn;
+      lastAddress = address.toLongValue();
 
       if(fetching) {
         ir.set(dataIn);
       }
 
-      if (!isHalted()) {
+      if (!isHalted() && !(checkBreakpoint(this.getPC().get()))) {
         // Check for timer interrupts
         if (isTimerInterruptPending()) {
           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);

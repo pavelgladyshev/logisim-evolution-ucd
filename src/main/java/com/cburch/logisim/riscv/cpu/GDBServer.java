@@ -105,6 +105,11 @@ public class GDBServer implements Runnable{
         System.out.println(command);
         System.out.println(Arrays.toString(fields));
 
+        if(cpu.checkBreakpoint(cpu.getPC().get())) {
+            response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
+            return response.toString();
+        }
+
         if(field1.startsWith("q")){
             switch (field1.substring(1)) {
                 case "Supported" -> {
@@ -153,6 +158,13 @@ public class GDBServer implements Runnable{
             if (request.isSuccess()) response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
             else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
         }
+        else if (field1.equals("c")) {
+            cpu.setCpuState(rv32imData.CPUState.OPERATIONAL);
+        }
+        // Handle breakpoint commands
+        else if (field1.startsWith("Z") || field1.startsWith("z")) {
+            response.append(handleBreakpoint(field1, fields));
+        }
         else switch (field1) {
                 case "?" -> {
                     response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
@@ -179,6 +191,32 @@ public class GDBServer implements Runnable{
     public void acknowledgeRequest(Request.STATUS status){
         request.acknowledgeRequest(status);
     }
+
+    private String handleBreakpoint(String command, String[] fields) {
+        StringBuilder response = new StringBuilder();
+        try {
+            char action = command.charAt(0); // 'Z' for insert, 'z' for remove
+            int breakpointType = Character.getNumericValue(command.charAt(1)); // Extracts the type of breakpoint (0 for software, 1 for hardware, etc.)
+            long address = Long.parseLong(fields[0].substring(1), 16); // Address is always the first field after 'Z'/'z'
+            int kind = Integer.parseInt(fields[1], 16); // Breakpoint kind (length, etc.)
+
+            if (action == 'Z') {
+                // Handle adding breakpoints
+                boolean success = cpu.addBreakpoint(breakpointType, address, kind);
+                response.append(success ? "OK" : "E01");
+            } else if (action == 'z') {
+                // Handle removing breakpoints
+                boolean success = cpu.removeBreakpoint(breakpointType, address, kind);
+                response.append(success ? "OK" : "E01");
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            response.append("E01"); // Return an error code if something goes wrong
+        }
+        return response.toString();
+    }
+
+
 
     private String parseMemoryAccessRequest(MemoryAccessRequest.TYPE type, String[] fields) {
         long address = Long.parseLong(fields[0].substring(1), 16);
