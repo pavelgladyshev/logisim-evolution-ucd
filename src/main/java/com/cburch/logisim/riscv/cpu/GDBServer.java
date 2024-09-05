@@ -1,6 +1,7 @@
 package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.riscv.cpu.gdb.*;
+import com.cburch.logisim.util.IconsUtil;
 
 import java.io.*;
 import java.net.ServerSocket;
@@ -28,8 +29,7 @@ public class GDBServer implements Runnable{
             serverSocket = new ServerSocket(port);
             cpu = cpuData;
             gdbserver = new Thread(this);
-                gdbserver.start();
-
+            gdbserver.start();
         }
         catch(IOException ex){
             //TODO inform user / log error info
@@ -153,6 +153,23 @@ public class GDBServer implements Runnable{
             if (request.isSuccess()) response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
             else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
         }
+        else if(field1.startsWith("c")){
+            while(!cpu.checkBreakpoint(cpu.getPC().get())) {
+                try {
+                    request = new StepRequest(1);
+                    request.waitForAcknowledgement();
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+                if (request.isSuccess() && cpu.checkBreakpoint(cpu.getPC().get()))
+                    response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
+                else if (request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
+            }
+        }
+        else if (field1.startsWith("Z") || field1.startsWith("z")) {
+            response.append(handleBreakpoint(field1, fields));
+            System.out.println(cpu.getBreakpoints());
+        }
         else switch (field1) {
                 case "?" -> {
                     response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
@@ -179,6 +196,31 @@ public class GDBServer implements Runnable{
     public void acknowledgeRequest(Request.STATUS status){
         request.acknowledgeRequest(status);
     }
+
+    private String handleBreakpoint(String command, String[] fields) {
+        StringBuilder response = new StringBuilder();
+        try {
+            char action = command.charAt(0);
+            int breakpointType = Character.getNumericValue(command.charAt(1));
+            long address = Long.parseLong(fields[1], 16);
+            int kind = Integer.parseInt(fields[2], 16);
+
+            System.out.println("ADDRESS: " + address);
+
+            if (action == 'Z') {
+                boolean success = cpu.addBreakpoint(Breakpoint.Type.HARDWARE, address, kind);
+                response.append(success ? "OK" : "E01");
+            } else if (action == 'z') {
+                boolean success = cpu.removeBreakpoint(Breakpoint.Type.HARDWARE, address, kind);
+                response.append(success ? "OK" : "E01");
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            response.append("E01");
+        }
+        return response.toString();
+    }
+
 
     private String parseMemoryAccessRequest(MemoryAccessRequest.TYPE type, String[] fields) {
         long address = Long.parseLong(fields[0].substring(1), 16);
