@@ -70,6 +70,10 @@ public abstract class Request {
         return o.getClass().equals(StepRequest.class);
     }
 
+    public static Boolean isContinueRequest(Object o){
+        return o.getClass().equals(ContinueRequest.class);
+    }
+
     public static Boolean isMemoryAccessRequest(Object o){
         return o.getClass().equals(MemoryAccessRequest.class);
     }

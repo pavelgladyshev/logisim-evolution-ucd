@@ -13,9 +13,8 @@ import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.*;
 import com.cburch.logisim.riscv.cpu.csrs.MIP_CSR;
 import com.cburch.logisim.riscv.cpu.csrs.MMCSR;
-import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
-import com.cburch.logisim.riscv.cpu.gdb.Request;
-import com.cburch.logisim.riscv.cpu.gdb.StepRequest;
+import com.cburch.logisim.riscv.cpu.gdb.*;
+import com.cburch.logisim.riscv.cpu.gdb.Breakpoint;
 import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
@@ -229,6 +228,17 @@ public class rv32im extends InstanceFactory {
           request.incrementStepsTaken();;
           if(request.isComplete()) completeDebuggerRequest(cur);
         }
+
+        if(cur.getService() == rv32imData.GDB_SERVICE.CONTINUING && instructionCompleted) {
+          ContinueRequest request =  (ContinueRequest) cur.getServer().getRequest();
+          java.util.List<Breakpoint> breakpoints = request.getBreakpoints();
+          for (Breakpoint bp : breakpoints) {
+            if (bp.getAddress() == cur.getPC().get()) {
+              breakpoints.remove(bp);
+              completeDebuggerRequest(cur);
+            }
+          }
+        }
     }
     updatePorts(state, cur);
   }
@@ -280,6 +290,9 @@ public class rv32im extends InstanceFactory {
         resumeCPU(cur);
       } else if (Request.isSingleStepRequest(request)) {
         cur.setService(rv32imData.GDB_SERVICE.STEPPING);
+        resumeCPU(cur);
+      } else if (Request.isContinueRequest(request)) {
+        cur.setService(rv32imData.GDB_SERVICE.CONTINUING);
         resumeCPU(cur);
       } else if (request.isStale()){
         failDebuggerRequest(cur);

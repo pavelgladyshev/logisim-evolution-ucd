@@ -66,7 +66,8 @@ public class rv32imData implements InstanceData, Cloneable {
   public enum GDB_SERVICE {
     NONE,
     STEPPING,
-    MEMORY_ACCESS
+    CONTINUING,
+    MEMORY_ACCESS,
   }
 
   // More To Do
@@ -134,7 +135,7 @@ public class rv32imData implements InstanceData, Cloneable {
       // in future propagations.
       CPUState initialCPUState = state.getAttributeValue(rv32im.ATTR_CPU_STATE).getValue().equals("Halted") ? CPUState.HALTED : CPUState.OPERATIONAL;
       ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
-              3333, initialCPUState, state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
+              state.getAttributeValue(rv32im.ATTR_TCP_PORT), initialCPUState, state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
       state.setData(ret);
     }
     return ret;

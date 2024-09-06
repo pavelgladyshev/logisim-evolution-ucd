@@ -8,6 +8,8 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest.TYPE.MEMREAD;
 import static com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest.TYPE.MEMWRITE;
@@ -22,17 +24,19 @@ public class GDBServer implements Runnable{
     private Thread gdbserver;
     private rv32imData cpu;
     private Request request;
+    private List<Breakpoint> breakpoints;
 
     public GDBServer(int port, rv32imData cpuData) {
         try {
             serverSocket = new ServerSocket(port);
             cpu = cpuData;
             gdbserver = new Thread(this);
-                gdbserver.start();
-
+            gdbserver.start();
+            breakpoints = new ArrayList<>();
         }
         catch(IOException ex){
-            //TODO inform user / log error info
+            System.err.println("Failed to start GDB server on port " + port);
+            ex.printStackTrace();
         }
     }
 
@@ -83,9 +87,9 @@ public class GDBServer implements Runnable{
                             printer.print("-");
                         }
                     }
-            } catch (IOException e) {
-                //TODO inform user / log error info
-                continue; // try again (?)
+            } catch (IOException ex) {
+                System.err.println("GDB server running failed ");
+                ex.printStackTrace();
             }
         }
     }
@@ -153,6 +157,19 @@ public class GDBServer implements Runnable{
             if (request.isSuccess()) response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
             else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
         }
+        else if(field1.startsWith("c")){
+            try {
+                request = new ContinueRequest(breakpoints);
+                request.waitForAcknowledgement();
+            } catch (Exception ex){
+                ex.printStackTrace();
+            }
+            if (request.isSuccess()) response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
+            else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
+        }
+        else if (field1.startsWith("Z") || field1.startsWith("z")) {
+            response.append(handleBreakpoint(field1, fields));
+        }
         else switch (field1) {
                 case "?" -> {
                     response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
@@ -178,6 +195,42 @@ public class GDBServer implements Runnable{
 
     public void acknowledgeRequest(Request.STATUS status){
         request.acknowledgeRequest(status);
+    }
+
+
+    private String handleBreakpoint(String command, String[] fields) {
+        StringBuilder response = new StringBuilder();
+        try {
+            char action = command.charAt(0);
+            int breakpointType = Character.getNumericValue(command.charAt(1));
+            long address = Long.parseLong(fields[1], 16);
+            int kind = Integer.parseInt(fields[2], 16);
+
+            System.out.println("ADDRESS: " + address);
+
+            if (action == 'Z') {
+                boolean success = addBreakpoint(Breakpoint.Type.HARDWARE, address, kind);
+                response.append(success ? "OK" : "E01");
+            } else if (action == 'z') {
+                boolean success = removeBreakpoint(Breakpoint.Type.HARDWARE, address, kind);
+                response.append(success ? "OK" : "E01");
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            response.append("E01");
+        }
+        return response.toString();
+    }
+
+    public boolean addBreakpoint(Breakpoint.Type breakpointType, long address, int kind) {
+        Breakpoint breakpoint = new Breakpoint(breakpointType, address, kind);
+        breakpoints.add(breakpoint);
+        return true;
+    }
+
+    public boolean removeBreakpoint(Breakpoint.Type breakpointType, long address, int kind) {
+        Breakpoint.Type type = breakpointType;
+        return breakpoints.removeIf(bp -> bp.getType() == type && bp.getAddress() == address && bp.getKind() == kind);
     }
 
     private String parseMemoryAccessRequest(MemoryAccessRequest.TYPE type, String[] fields) {
