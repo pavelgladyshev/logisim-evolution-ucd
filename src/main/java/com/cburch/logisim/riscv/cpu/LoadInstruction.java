@@ -31,11 +31,20 @@ public class LoadInstruction {
         hartData.getPC().increment();
     }
 
-    public static void performAddressing(rv32imData hartData) {
+
+    public static void performAddressing(rv32imData hartData){
+        performAddressing(hartData, LoadInstruction.getAddress(hartData), hartData.getIR().func3());
+    }
+
+    // GDB
+    public static void performAddressing(rv32imData hartData, Value address){
+        performAddressing(hartData, address , 0x4);
+    }
+
+    private static void performAddressing(rv32imData hartData, Value address, int func3) {
 
         //never reach latch step if instruction is invalid
-        InstructionRegister ir = hartData.getIR();
-        if(!(ir.func3() == 0x0 || ir.func3() == 0x1 || ir.func3() == 0x2 || ir.func3() == 0x4 || ir.func3() == 0x5)) {
+        if(!(func3 == 0x0 || func3 == 0x1 || func3 == 0x2 || func3 == 0x4 || func3 == 0x5)) {
             TrapHandler.throwIllegalInstructionException(hartData);
             return;
         }
@@ -44,7 +53,7 @@ public class LoadInstruction {
         hartData.setAddressing(true);
 
         // Values for outputs fetching data
-        hartData.setAddress(LoadInstruction.getAddress(hartData));
+        hartData.setAddress(address);
         hartData.setOutputData(HiZ32);     // The output data bus is in High Z
         hartData.setOutputDataWidth(4);    // all 4 bytes of the output
         hartData.setMemRead(Value.TRUE);   //  MemRead active
@@ -52,13 +61,13 @@ public class LoadInstruction {
         hartData.setIsSync(Value.TRUE);
     }
 
-    private static long getUnsignedDataByte(long data, long address) {
+    public static long getUnsignedDataByte(long data, long address) {
         long shift = address & 3;
         long mask = 0xffL << shift*8;
         return (data & mask) >>> (shift * 8);
     }
 
-    private static long getUnsignedDataHalf(long data, long address) {
+    public static long getUnsignedDataHalf(long data, long address) {
         long shift = address & 3;
         long mask = 0xffffL << shift*8;
         return (data & mask) >>> (shift * 8);

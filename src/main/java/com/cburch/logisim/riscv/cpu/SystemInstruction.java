@@ -49,6 +49,7 @@ public class SystemInstruction {
                     mstatus.MPIE.set(1);
                     CSR mip =  MMCSR.getCSR(hartData, MIP);
                     mip.write(mip.read() & (~0x80));
+                    mip.write(mip.read() & (~0x800));
                     // set MPP to user mode if implemented
                     mstatus.MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
                 } else {

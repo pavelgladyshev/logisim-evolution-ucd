@@ -1,0 +1,273 @@
+package com.cburch.logisim.riscv.cpu;
+
+import com.cburch.logisim.riscv.cpu.gdb.*;
+
+import java.io.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+
+import static com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest.TYPE.MEMREAD;
+import static com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest.TYPE.MEMWRITE;
+
+public class GDBServer implements Runnable{
+
+
+    private ServerSocket serverSocket;
+    private Socket socket;
+    private InputStream in;
+    private OutputStream out;
+    private Thread gdbserver;
+    private rv32imData cpu;
+    private Request request;
+    private List<Breakpoint> breakpoints;
+
+    public GDBServer(int port, rv32imData cpuData) {
+        try {
+            serverSocket = new ServerSocket(port);
+            cpu = cpuData;
+            gdbserver = new Thread(this);
+            gdbserver.start();
+            breakpoints = new ArrayList<>();
+        }
+        catch(IOException ex){
+            System.err.println("Failed to start GDB server on port " + port);
+            ex.printStackTrace();
+        }
+    }
+
+    @Override
+    public void run() {
+        while (true) {
+            try {
+                    System.out.println("Waiting for TCP connection");
+                    socket = serverSocket.accept();  // wait for incoming connection
+                    System.out.println("Accepted incoming TCP connection");
+
+                    in = socket.getInputStream();
+                    out = socket.getOutputStream();
+
+                    PrintStream printer = new PrintStream(out, true);
+                    Packet packetResponse = new Packet("");
+
+                    while (socket.isConnected()) {
+
+                        byte[] data = new byte[65536];
+                        int len;
+
+                        // in.read();
+                        len = in.read(data);
+
+                        if (Thread.interrupted()) {
+                            terminate();
+                            return;
+                        }
+
+                        Packet packetReceived = new Packet(data, len);
+                        //System.out.println("received : " + packetReceived.getPacketData());
+
+                        if (packetReceived.isValid()) {
+                            printer.print("+");
+                            // analyse data and manipulate cpu object accordingly
+                            String response = handle(packetReceived.getPacketData());
+                            // send response;
+                            packetResponse = new Packet(response);
+                            printer.print(packetResponse.wrapped());
+                        }
+                        //if NACK ("-") is received retransmit response
+                        else if (packetReceived.isNACK()) {
+                            printer.print(packetResponse.wrapped());
+                        }
+                        //else if checksum is invalid transmit NACK ("-")
+                        else if (!packetReceived.isACK()) {
+                            printer.print("-");
+                        }
+                    }
+            } catch (IOException ex) {
+                System.err.println("GDB server running failed ");
+                ex.printStackTrace();
+            }
+        }
+    }
+
+    public void terminate() {
+        // do any cleanup required
+        if(gdbserver != null) gdbserver.interrupt();
+    }
+
+    public String handle(String command) {
+        String[] fields = command.split("[:,;,,]");
+        StringBuilder response = new StringBuilder();
+        String errorMessage;
+
+        String field1 = fields[0];
+
+        System.out.println(command);
+        System.out.println(Arrays.toString(fields));
+
+        if(field1.startsWith("q")){
+            switch (field1.substring(1)) {
+                case "Supported" -> {
+                    response.append("PacketSize=65536;qXfer:features:read+");
+                }
+                case "Xfer" -> {
+                    response.append("l<target version=\"1.0\"><architecture>riscv:rv32</architecture></target>");
+                }
+                case "Attached" -> {
+                    response.append("1");
+                }
+            }
+        }
+        else if(field1.startsWith("Q")){
+            switch(field1.substring(1)){
+
+            }
+        }
+        else if(field1.startsWith("v")){
+            if (field1.substring(1).equals("MustReplyEmpty")) {
+            }
+        }
+        else if(field1.startsWith("m")){
+            parseMemoryAccessRequest(MEMREAD, fields);
+            if(!(errorMessage = parseMemoryAccessRequest(MEMREAD, fields)).isBlank()) {
+                response.append(errorMessage);
+            }
+            else if (request.isSuccess()) response.append(((MemoryAccessRequest)request).getDataBuffer());
+            else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
+
+        }
+        else if(field1.startsWith("M")){
+                if(!(errorMessage = parseMemoryAccessRequest(MEMWRITE, fields)).isBlank()) {
+                    response.append(errorMessage);
+                }
+                else if(request.isSuccess()) response.append("OK");
+                else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
+        }
+        else if(field1.startsWith("s")){
+            try {
+                request = new StepRequest(1);
+                request.waitForAcknowledgement();
+            } catch (Exception ex){
+                ex.printStackTrace();
+            }
+            if (request.isSuccess()) response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
+            else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
+        }
+        else if(field1.startsWith("c")){
+            try {
+                request = new ContinueRequest(breakpoints);
+                request.waitForAcknowledgement();
+            } catch (Exception ex){
+                ex.printStackTrace();
+            }
+            if (request.isSuccess()) response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
+            else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
+        }
+        else if (field1.startsWith("Z") || field1.startsWith("z")) {
+            response.append(handleBreakpoint(field1, fields));
+        }
+        else switch (field1) {
+                case "?" -> {
+                    response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
+                }
+                case "g" -> {
+                    for (int i = 0; i < 32; i++) {
+                        response.append(bigToLittleEndian4(cpu.getX(i)));
+                    }
+                    response.append(bigToLittleEndian4(cpu.getPC().get()));
+                }
+            }
+        return response.toString();
+    }
+
+    public Boolean isRequestPending(){
+        if(request == null) return false;
+        else return request.isPending();
+    }
+
+    public Request getRequest(){
+        return request;
+    }
+
+    public void acknowledgeRequest(Request.STATUS status){
+        request.acknowledgeRequest(status);
+    }
+
+
+    private String handleBreakpoint(String command, String[] fields) {
+        StringBuilder response = new StringBuilder();
+        try {
+            char action = command.charAt(0);
+            int breakpointType = Character.getNumericValue(command.charAt(1));
+            long address = Long.parseLong(fields[1], 16);
+            int kind = Integer.parseInt(fields[2], 16);
+
+            System.out.println("ADDRESS: " + address);
+
+            if (action == 'Z') {
+                boolean success = addBreakpoint(Breakpoint.Type.HARDWARE, address, kind);
+                response.append(success ? "OK" : "E01");
+            } else if (action == 'z') {
+                boolean success = removeBreakpoint(Breakpoint.Type.HARDWARE, address, kind);
+                response.append(success ? "OK" : "E01");
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            response.append("E01");
+        }
+        return response.toString();
+    }
+
+    public boolean addBreakpoint(Breakpoint.Type breakpointType, long address, int kind) {
+        Breakpoint breakpoint = new Breakpoint(breakpointType, address, kind);
+        breakpoints.add(breakpoint);
+        return true;
+    }
+
+    public boolean removeBreakpoint(Breakpoint.Type breakpointType, long address, int kind) {
+        Breakpoint.Type type = breakpointType;
+        return breakpoints.removeIf(bp -> bp.getType() == type && bp.getAddress() == address && bp.getKind() == kind);
+    }
+
+    private String parseMemoryAccessRequest(MemoryAccessRequest.TYPE type, String[] fields) {
+        long address = Long.parseLong(fields[0].substring(1), 16);
+        int bytes = (int) Long.parseLong(fields[1], 16);
+        String errorMessage = "";
+        //check if out of memory bounds
+        if(!((address >= 0x00400000 && address < 0x00404000) || (address >= 0x10010000 && address < 0x10014000))){
+            errorMessage = SIGNAL.GDB_EXC_BAD_ACCESS.getCode();
+        }
+        //else create request
+        else try {
+            if (type.equals(MEMWRITE)) {
+                String data = fields[2];
+                request = new MemoryAccessRequest(MEMWRITE, address, bytes, data);
+            }
+            else {
+                request = new MemoryAccessRequest(MEMREAD, address, bytes);
+            }
+            request.waitForAcknowledgement();
+        } catch (IOException e) {
+                throw new RuntimeException(e);
+        }
+        return errorMessage;
+    }
+
+    public String bigToLittleEndian4(long x){
+        ByteBuffer buffer = bigToLittleEndian(x, 4);
+        return String.format("%08x",buffer.asIntBuffer().get());
+    }
+
+    private ByteBuffer bigToLittleEndian(long x, int bytes){
+        int value = (int) x;
+        ByteBuffer buffer = ByteBuffer.allocate(bytes);
+        buffer.order(ByteOrder.BIG_ENDIAN);
+        buffer.asIntBuffer().put(value);
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        return buffer;
+    }
+}
