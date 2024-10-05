@@ -7,7 +7,7 @@
  * This is free software released under GNU GPLv3 license
  */
 
-package com.cburch.gray;
+package com.cburch.draw.gray;
 
 import com.cburch.logisim.data.Attribute;
 import com.cburch.logisim.data.BitWidth;
@@ -59,7 +59,7 @@ class GrayCounter extends InstanceFactory {
     // These next two lines set it up so that the explorer window shows a
     // customized icon representing the component type. This should be a
     // 16x16 image.
-    final var url = getClass().getClassLoader().getResource("com/cburch/gray/counter.gif");
+    final var url = getClass().getClassLoader().getResource("com/cburch/draw/gray/counter.gif");
     if (url != null) setIcon(new ImageIcon(url));
   }
 

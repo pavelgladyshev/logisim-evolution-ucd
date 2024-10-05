@@ -1,38 +1,45 @@
 package com.cburch.logisim.riscv.cpu;
 
+import com.cburch.logisim.comp.Component;
+import com.cburch.logisim.gui.generic.OptionPane;
 import com.cburch.logisim.riscv.cpu.gdb.Packet;
+import com.cburch.logisim.util.UniquelyNamedThread;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Arrays;
 
-public class GDBServer implements Runnable{
+public class GDBServer extends UniquelyNamedThread {
 
     private ServerSocket serverSocket;
     private Socket socket;
     private InputStream in;
     private OutputStream out;
-    private Thread gdbserver;
     private rv32imData cpuData;
 
-    public GDBServer(int port, rv32imData cpuData) {
+    public GDBServer(int port, rv32imData cpuData) throws IOException {
+        super("GDBServer");
+        serverSocket = new ServerSocket(port);
+        this.cpuData = cpuData;
+    }
+
+    public void closeServerSocket()
+    {
         try {
-            serverSocket = new ServerSocket(port);
-            this.cpuData = cpuData;
-            gdbserver = new Thread(this);
-            gdbserver.start();
-        }
-        catch(IOException ex){
-            //TODO inform user / log error info
+            serverSocket.close();
+        } catch(IOException ex){
+        //TODO inform user / log error info
+            System.err.println(ex);
         }
     }
 
     @Override
     public void run() {
+        byte[] data = new byte[65536];
         while (true) {
             try {
-                System.out.println("Waiting for TCP connection");
+                System.out.println("Waiting for TCP connection on port "+serverSocket.getLocalPort());
                 socket = serverSocket.accept();  // wait for incoming connection
                 System.out.println("Accepted incoming TCP connection");
 
@@ -42,18 +49,10 @@ public class GDBServer implements Runnable{
                 PrintStream printer = new PrintStream(out,true);
                 Packet packetResponse = new Packet("");
 
-                while (socket.isConnected()) {
+                for (;;) {
 
-                    byte[] data = new byte[65536];
-                    int len;
-
-                    // in.read();
-                    len = in.read(data);
-
-                    if(Thread.interrupted()) {
-                        terminate();
-                        return;
-                    }
+                    int len = in.read(data);
+                    if (len < 0) break; // socket has closed
 
                     Packet packetReceived = new Packet(data, len);
                     //System.out.println("received : " + packetReceived.getPacketData());
@@ -76,17 +75,20 @@ public class GDBServer implements Runnable{
                     }
                 }
 
+                //socket.close();
+
             } catch (IOException e) {
                 //TODO inform user / log error info
+                if (serverSocket.isClosed()) {
+                    // gdbServer is being stopped
+                    System.out.println("Stopping GDB server");
+                    return;
+                }
                 continue; // try again (?)
             }
         }
     }
 
-    public void terminate() {
-        // do any cleanup required
-        gdbserver.interrupt();
-    }
 
     public static String handle(String command, rv32imData cpu) {
         String[] fields = command.split("[:,;,,]");

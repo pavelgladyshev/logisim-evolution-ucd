@@ -9,11 +9,19 @@
 
 package com.cburch.logisim.riscv.cpu;
 
+import com.cburch.logisim.Main;
+import com.cburch.logisim.comp.Component;
 import com.cburch.logisim.data.BitWidth;
+import com.cburch.logisim.data.TestException;
 import com.cburch.logisim.data.Value;
+import com.cburch.logisim.gui.generic.OptionPane;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
+import com.cburch.logisim.proj.Projects;
 import com.cburch.logisim.riscv.cpu.csrs.*;
+
+import javax.swing.*;
+import java.io.IOException;
 
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
@@ -23,13 +31,20 @@ public class rv32imData implements InstanceData, Cloneable {
 
   /** The last values observed. */
   private Value lastClock;
-  private long lastDataIn;
-  private long lastAddress;
 
   /** Output values */
-  static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
+
+  static final Value ALL1s = Value.createKnown(32,0xffffffff);
+  static final Value ALL0s = Value.createKnown(32,0x0);
+  static final Value [] byteMasks = {Value.createKnown(32,0xffffff00),
+                                     Value.createKnown(32,0xffff00ff),
+                                     Value.createKnown(32,0xff00ffff),
+                                     Value.createKnown(32,0x00ffffff)};
+  static final Value [] hwMasks = {Value.createKnown(32,0xffff0000),
+                                   Value.createKnown(32,0x0000ffff)};
+
   private Value address;          // value to be placed on the address bus;
-  private Value outputData;       // value to be placed on data bus
+  private long outputData;        // value to be placed on data bus, possibly after shifting and mixing
   private int outputDataWidth;    // width of the data to be written in bytes (1,2,or 4)
   private Value memRead;
   private Value memWrite;
@@ -38,8 +53,6 @@ public class rv32imData implements InstanceData, Cloneable {
   /** Boolean flags */
   private boolean fetching;
   private boolean addressing;
-  private boolean intermixFlag;
-  private boolean pressedContinue;
 
   /** Registers */
   private final ProgramCounter pc;
@@ -58,12 +71,14 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   /** GDB server */
-  private GDBServer server;
+  private GDBServer gdbServer;
 
   // More To Do
 
   /** Constructs a state with the given values. */
-  public rv32imData(Value lastClock, long resetAddress, int port, boolean gdbRunning) {
+  public rv32imData(Value lastClock, long resetAddress) { this(lastClock, resetAddress, 1234, false); }
+
+  public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer) {
 
     // initial values for registers
     this.lastClock = lastClock;
@@ -72,15 +87,18 @@ public class rv32imData implements InstanceData, Cloneable {
     this.x = new IntegerRegisters();
     this.csr = new ControlAndStatusRegisters();
     this.cpuState = CPUState.OPERATIONAL;
-    this.intermixFlag = false;
-    this.pressedContinue = false;
 
-    if(gdbRunning) {
-      this.server = new GDBServer(port, this);
+    this.gdbServer = null;
+    if(startGDBServer) {
+      try {
+        this.gdbServer = new GDBServer(port, this);
+      } catch (IOException ex) {
+        String message = "Cannot start GDB server at port "+port;
+        SwingUtilities.invokeLater(()->OptionPane.showMessageDialog(null,message,"GDB Server", OptionPane.ERROR_MESSAGE));
+        this.gdbServer = null;
+      }
     }
-    else {
-      this.server = null;
-    }
+    if (this.gdbServer != null) this.gdbServer.start();
 
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
@@ -96,8 +114,8 @@ public class rv32imData implements InstanceData, Cloneable {
 
      // Values for outputs fetching instruction
      address = Value.createKnown(32,pc.get());
-     outputData = HiZ32;     // The output data bus is in High Z
-     outputDataWidth = 4;    // all 4 bytes of the output
+     outputData = 0;     // The output data bus is in High Z
+     outputDataWidth = 0;    // all 4 bytes of the output
      memRead = Value.TRUE;   // MemRead active
      memWrite = Value.FALSE; // MemWrite not active
      isSync = Value.TRUE;
@@ -108,16 +126,18 @@ public class rv32imData implements InstanceData, Cloneable {
    * necessary.
    */
   public static rv32imData get(InstanceState state) {
-    rv32imData ret = (rv32imData) state.getData();
-    if (ret == null) {
-      // If it doesn't yet exist, then we'll set it up with our default
-      // values and put it into the circuit state so it can be retrieved
-      // in future propagations.
-      ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
-              state.getAttributeValue(rv32im.ATTR_TCP_PORT), state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
-      state.setData(ret);
+    synchronized (rv32imData.class) {
+      rv32imData ret = (rv32imData) state.getData();
+      if (ret == null) {
+        // If it doesn't yet exist, then we'll set it up with our default
+        // values and put it into the circuit state so it can be retrieved
+        // in future propagations.
+        ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
+                state.getAttributeValue(rv32im.ATTR_TCP_PORT), state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
+        state.setData(ret);
+      }
+      return ret;
     }
-    return ret;
   }
 
   /** Returns a copy of this object. */
@@ -149,23 +169,32 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   /** update CPU state (execute) */
-  public void update(long dataIn) {
+  public void update(long dataIn) { update(dataIn,0,0); }
 
-    // Check for external interrupts
+  public void update(long dataIn, long timerInterruptRequest, long externalInterruptRequest) {
+
+    // update interrupt pending bits in MIP CSR to reflect the state of input pins
+    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
+    mip.MTIP.set(timerInterruptRequest);
+    mip.MEIP.set(externalInterruptRequest);
+
+    // Check for external interrupts first
     if (isExternalInterruptPending()) {
       TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
       fetchNextInstruction();
       return;
     }
 
-    // Check for timer interrupts
+    // Check for timer interrupts as the second priority
     if (isTimerInterruptPending()) {
           TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
           fetchNextInstruction();
           return;
     }
 
-    if (fetching) { lastDataIn = dataIn; lastAddress = address.toLongValue(); ir.set(dataIn); }
+    if (fetching) {
+      ir.set(dataIn);
+    }
 
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
@@ -185,8 +214,12 @@ public class rv32imData implements InstanceData, Cloneable {
         }
         break;
       case 0x23:  // storing instruction (S-type)
-        StoreInstruction.performAddressing(this);
-        intermixFlag = (addressing);
+        if(!addressing) {
+          StoreInstruction.performAddressing(this);
+        } else {
+          pc.increment();
+          fetchNextInstruction();
+        }
         break;
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
@@ -222,17 +255,13 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   public void stopGDBServer() {
-    server.terminate();
+    if (null != gdbServer) {
+      gdbServer.closeServerSocket();
+    }
   }
 
   public void halt() {
-    isSync = Value.FALSE;
     cpuState = CPUState.HALTED;
-  }
-
-  public void skipInstruction() {
-    pc.increment();
-    fetchNextInstruction();
   }
 
   public boolean isTimerInterruptPending() {
@@ -259,40 +288,56 @@ public class rv32imData implements InstanceData, Cloneable {
 
 
   /** getters and setters*/
-  public long getLastDataIn() { return lastDataIn; }
-  public long getLastAddress() { return lastAddress; }
   public Value getAddress() { return address; }
-  public Value getOutputData() { return outputData; }
-  public int getOutputDataWidth() { return outputDataWidth; }
   public Value getMemRead() { return memRead; }
   public Value getMemWrite() { return memWrite;  }
   public ProgramCounter getPC() { return pc; }
   public CPUState getCpuState() { return cpuState; }
   public InstructionRegister getIR() { return ir; }
-  public Value getIsSync() { return isSync; }
   public long getX(int index) { return x.get(index); }
   public void setX(int index, long value) { x.set(index,value); }
   public boolean getAddressing() { return addressing; }
-  public boolean getIntermixFlag() { return intermixFlag; }
-  public boolean getPressedContinue() { return pressedContinue; }
   public long getCSRValue(int csr) {return this.csr.read(this, csr);}
   public CSR getCSR(int csr) { return this.csr.get(csr); }
   public IntegerRegisters getIntegerRegisters() {return this.x;}
 
+  public int getOutputDataWidth() {
+    return outputDataWidth;
+  }
+  // build output data value based on data width and the address
+  public Value getOutputData() {
+    switch(outputDataWidth) {
+      case 1:
+        return getInvertedOutputDataMask().not().controls(
+                   Value.createKnown(32,(outputData & 0xff) << ((getAddress().toLongValue() & 0x3) * 8)));
+      case 2:
+        return getInvertedOutputDataMask().not().controls(
+                   Value.createKnown(32,(outputData & 0xffff) << ((getAddress().toLongValue() & 0x3) * 8)));
+      default:
+        return Value.createKnown(32,outputData);
+    }
+  }
 
-  public void setLastDataIn(long value) { lastDataIn = value; }
-  public void setLastAddress(long value) { lastAddress = value; }
-  public void setOutputData(Value value) { outputData = value; }
+  public Value getInvertedOutputDataMask() {
+    switch(outputDataWidth) {
+      case 1:
+        return byteMasks[(int)getAddress().toLongValue() & 0x3];
+      case 2:
+        return hwMasks[((int)getAddress().toLongValue() & 0x3)>>1];
+      case 4:
+        return ALL0s;
+      default:
+        return ALL1s;
+    }
+  }
+
+  public void setOutputData(long value) { outputData = value; }
+  public void setOutputDataWidth(int value) { outputDataWidth = value; }
   public void setCpuState(CPUState newCpuState) { cpuState = newCpuState; }
   public void setFetching(boolean value) { fetching = value; }
   public void setAddressing(boolean value) { addressing = value; }
   public void setAddress(Value newAddress) { address = newAddress; }
-  public void setOutputDataWidth(int value) { outputDataWidth = value; }
   public void setMemRead(Value value) { memRead = value; }
   public void setMemWrite(Value value) { memWrite = value; }
-  public void setIsSync(Value value) { isSync = value; }
-  public void setIntermixFlag(boolean value) { intermixFlag = value; }
-  public void setPressedContinue(boolean value) { pressedContinue = value; }
   public void setCSR(int csr, long value) { this.csr.write(this, csr, value); }
-  public void setServer(int port) {this.server = new GDBServer(port, this);}
 }

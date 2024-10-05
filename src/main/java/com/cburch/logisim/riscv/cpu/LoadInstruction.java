@@ -3,12 +3,10 @@ package com.cburch.logisim.riscv.cpu;
 import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;
 
-import static com.cburch.logisim.riscv.cpu.rv32imData.HiZ32;
-
 public class LoadInstruction {
 
     public static void latch(rv32imData hartData, long data) {
-        long address = getAddress(hartData).toLongValue();
+        long address = getAddress(hartData);
         InstructionRegister ir = hartData.getIR();
 
         switch (ir.func3()) {
@@ -40,16 +38,32 @@ public class LoadInstruction {
             return;
         }
 
+        long address = LoadInstruction.getAddress(hartData);
+        switch (ir.func3()) {
+            case 0x1:  // lh rd, imm(rs1)
+            case 0x5:  // lhu rd, imm(rs1)
+                if ((address & 0x1) != 0) {
+                    TrapHandler.throwIllegalInstructionException(hartData);
+                    return;
+                }
+                break;
+            case 0x2:  // lw rd, imm(rs1)
+                if ((address & 0x3) != 0) {
+                    TrapHandler.throwIllegalInstructionException(hartData);
+                    return;
+                }
+                break;
+        }
+
         hartData.setFetching(false);
         hartData.setAddressing(true);
 
         // Values for outputs fetching data
-        hartData.setAddress(LoadInstruction.getAddress(hartData));
-        hartData.setOutputData(HiZ32);     // The output data bus is in High Z
-        hartData.setOutputDataWidth(4);    // all 4 bytes of the output
+        hartData.setAddress(Value.createKnown(BitWidth.create(32), getAddress(hartData)));
+        hartData.setOutputData(0);
+        hartData.setOutputDataWidth(0);    // The output data bus is in High Z for all 4 bytes of the output
         hartData.setMemRead(Value.TRUE);   //  MemRead active
         hartData.setMemWrite(Value.FALSE); // MemWrite not active
-        hartData.setIsSync(Value.TRUE);
     }
 
     private static long getUnsignedDataByte(long data, long address) {
@@ -64,8 +78,8 @@ public class LoadInstruction {
         return (data & mask) >>> (shift * 8);
     }
 
-    public static Value getAddress(rv32imData hartData) {
+    public static long getAddress(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
-        return Value.createKnown(BitWidth.create(32), (hartData.getX(ir.rs1()) + ir.imm_I()));
+        return hartData.getX(ir.rs1()) + ir.imm_I();
     }
 }
