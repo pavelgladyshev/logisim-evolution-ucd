@@ -1,27 +1,31 @@
 package com.cburch.logisim.riscv.cpu;
 
-import com.cburch.logisim.comp.Component;
-import com.cburch.logisim.gui.generic.OptionPane;
 import com.cburch.logisim.riscv.cpu.gdb.Packet;
 import com.cburch.logisim.util.UniquelyNamedThread;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Arrays;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.SynchronousQueue;
+
 
 public class GDBServer extends UniquelyNamedThread {
 
     private ServerSocket serverSocket;
     private Socket socket;
-    private InputStream in;
-    private OutputStream out;
     private rv32imData cpuData;
+    public SynchronousQueue<String> responses = new SynchronousQueue<>();
+
+    static final Logger logger = LoggerFactory.getLogger(GDBServer.class);
 
     public GDBServer(int port, rv32imData cpuData) throws IOException {
         super("GDBServer");
         serverSocket = new ServerSocket(port);
         this.cpuData = cpuData;
+
     }
 
     public void closeServerSocket()
@@ -30,7 +34,7 @@ public class GDBServer extends UniquelyNamedThread {
             serverSocket.close();
         } catch(IOException ex){
         //TODO inform user / log error info
-            System.err.println(ex);
+            logger.info(ex.toString());
         }
     }
 
@@ -39,14 +43,12 @@ public class GDBServer extends UniquelyNamedThread {
         byte[] data = new byte[65536];
         while (true) {
             try {
-                System.out.println("Waiting for TCP connection on port "+serverSocket.getLocalPort());
+                logger.info("Waiting for incoming TCP connection on port "+serverSocket.getLocalPort());
                 socket = serverSocket.accept();  // wait for incoming connection
-                System.out.println("Accepted incoming TCP connection");
+                logger.info("Accepted incoming TCP connection");
 
-                in = socket.getInputStream();
-                out = socket.getOutputStream();
-
-                PrintStream printer = new PrintStream(out,true);
+                InputStream in = socket.getInputStream();
+                PrintStream out = new PrintStream(socket.getOutputStream(),true);
                 Packet packetResponse = new Packet("");
 
                 for (;;) {
@@ -58,46 +60,45 @@ public class GDBServer extends UniquelyNamedThread {
                     //System.out.println("received : " + packetReceived.getPacketData());
 
                     if(packetReceived.isValid()) {
-                            printer.print("+");
-                            // analyse data and manipulate cpu object accordingly
+                            out.print("+");
+                            // analyse data and generate response string, send debugger requests to cpu if necessary
                             String response = handle(packetReceived.getPacketData(), cpuData);
                             // send response;
                             packetResponse = new Packet(response);
-                            printer.print(packetResponse.wrapped());
+                            out.print(packetResponse.wrapped());
                     }
                     //if NACK ("-") is received retransmit response
                     else if(packetReceived.isNACK()){
-                        printer.print(packetResponse.wrapped());
+                        out.print(packetResponse.wrapped());
                     }
                     //else if checksum is invalid transmit NACK ("-")
                     else if(!packetReceived.isACK()){
-                        printer.print("-");
+                        out.print("-");
                     }
                 }
 
-                //socket.close();
-
-            } catch (IOException e) {
-                //TODO inform user / log error info
+            } catch (Exception e) {
+                //TODO improve exception handling
                 if (serverSocket.isClosed()) {
                     // gdbServer is being stopped
-                    System.out.println("Stopping GDB server");
+                    logger.info("Stopping");
                     return;
                 }
-                continue; // try again (?)
+                logger.info("Incoming TCP connection closed");
+                continue; // try again
             }
         }
     }
 
 
-    public static String handle(String command, rv32imData cpu) {
+    private String handle(String command, rv32imData cpu) throws InterruptedException {
         String[] fields = command.split("[:,;,,]");
         String response = "";
 
         String field1 = fields[0];
 
-        System.out.println(command);
-        System.out.println(Arrays.toString(fields));
+        //System.out.println(command);
+        //System.out.println(Arrays.toString(fields));
 
         if(field1.startsWith("q")){
             switch(field1.substring(1)){
@@ -133,13 +134,38 @@ public class GDBServer extends UniquelyNamedThread {
             }
         }
         else if(field1.startsWith("g")){
-            response = cpu.getIntegerRegisters().readAllRegisters((int) cpu.getPC().get());
+            cpu.setDebuggerRequest(()->{
+                StringBuilder resp = new StringBuilder();
+                for (int i=0; i<32; i++) {
+                    resp.append(formatWordString(cpu.getX(i)));
+                }
+                resp.append(formatWordString(cpu.getPC().get()));
+                cpu.addDebuggerResponse(resp.toString());
+                return true;
+            });
+            response = responses.take();
         }
         else if(field1.startsWith("p")){
-            response = String.format("%08x", cpu.getX(Integer.valueOf(field1.substring(2))));
+            cpu.setDebuggerRequest(()->{
+                cpu.addDebuggerResponse(formatWordString(cpu.getX(Integer.valueOf(field1.substring(2)))));
+                return true;
+            });
+            response = responses.take();
         }
         else if(field1.startsWith("P")){
-            writeRegister(field1.substring(1), cpu);
+            String[] parts = field1.substring(1).split("=");
+            int regNum = Integer.parseInt(parts[0], 16);
+            int regValue = Integer.reverseBytes((int) Long.parseLong(parts[1], 16));
+            cpu.setDebuggerRequest(()->{
+                if (regNum == 32) {
+                    cpu.getPC().set(regValue);
+                } else {
+                    cpu.setX(regNum, regValue);
+                }
+                cpu.addDebuggerResponse("OK");
+                return true;
+            });
+            response = responses.take();
         }
         else if(field1.startsWith("s")){
             // inst = memRead(pc);
@@ -155,10 +181,7 @@ public class GDBServer extends UniquelyNamedThread {
         return response;
     }
 
-    private static void writeRegister(String command, rv32imData cpu) {
-        String[] parts = command.split("=");
-        int regNum = Integer.parseInt(parts[0], 16);
-        int regValue = (int) Long.parseLong(parts[1], 16);
-        cpu.setX(regNum, regValue);
+    private static String formatWordString(long val) {
+        return String.format("%08x",Integer.reverseBytes((int)val));
     }
 }

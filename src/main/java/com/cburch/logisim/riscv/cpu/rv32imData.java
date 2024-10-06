@@ -9,16 +9,12 @@
 
 package com.cburch.logisim.riscv.cpu;
 
-import com.cburch.logisim.Main;
-import com.cburch.logisim.comp.Component;
-import com.cburch.logisim.data.BitWidth;
-import com.cburch.logisim.data.TestException;
 import com.cburch.logisim.data.Value;
 import com.cburch.logisim.gui.generic.OptionPane;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
-import com.cburch.logisim.proj.Projects;
 import com.cburch.logisim.riscv.cpu.csrs.*;
+import com.cburch.logisim.riscv.cpu.gdb.DebuggerRequest;
 
 import javax.swing.*;
 import java.io.IOException;
@@ -72,13 +68,16 @@ public class rv32imData implements InstanceData, Cloneable {
 
   /** GDB server */
   private GDBServer gdbServer;
+  private DebuggerRequest debuggerRequest = null;
 
   // More To Do
 
   /** Constructs a state with the given values. */
-  public rv32imData(Value lastClock, long resetAddress) { this(lastClock, resetAddress, 1234, false); }
+  public rv32imData(Value lastClock, long resetAddress) {
+    this(lastClock, resetAddress, 1234, false, CPUState.OPERATIONAL);
+  }
 
-  public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer) {
+  public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, CPUState initialCpuState) {
 
     // initial values for registers
     this.lastClock = lastClock;
@@ -86,7 +85,7 @@ public class rv32imData implements InstanceData, Cloneable {
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
     this.csr = new ControlAndStatusRegisters();
-    this.cpuState = CPUState.OPERATIONAL;
+    this.cpuState = initialCpuState;
 
     this.gdbServer = null;
     if(startGDBServer) {
@@ -94,7 +93,10 @@ public class rv32imData implements InstanceData, Cloneable {
         this.gdbServer = new GDBServer(port, this);
       } catch (IOException ex) {
         String message = "Cannot start GDB server at port "+port;
-        SwingUtilities.invokeLater(()->OptionPane.showMessageDialog(null,message,"GDB Server", OptionPane.ERROR_MESSAGE));
+        SwingUtilities.invokeLater(
+                ()->OptionPane.showMessageDialog(null,message,
+                        "GDB Server",
+                        OptionPane.ERROR_MESSAGE));
         this.gdbServer = null;
       }
     }
@@ -133,7 +135,9 @@ public class rv32imData implements InstanceData, Cloneable {
         // values and put it into the circuit state so it can be retrieved
         // in future propagations.
         ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
-                state.getAttributeValue(rv32im.ATTR_TCP_PORT), state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
+                state.getAttributeValue(rv32im.ATTR_TCP_PORT),
+                state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING),
+                state.getAttributeValue(rv32im.ATTR_CPU_STATE).toString().compareTo("Halted") == 0 ? CPUState.HALTED : CPUState.OPERATIONAL);
         state.setData(ret);
       }
       return ret;
@@ -173,6 +177,17 @@ public class rv32imData implements InstanceData, Cloneable {
 
   public void update(long dataIn, long timerInterruptRequest, long externalInterruptRequest) {
 
+    if (fetching) {
+      // check for and process debugger requests only during instruction fetch phase,
+      // so that instruction execution is not stopped midway.
+      processDebuggerRequest();
+    }
+
+    if (cpuState == CPUState.HALTED) {
+      // do not perform instructions or state updates.
+      return;
+    }
+
     // update interrupt pending bits in MIP CSR to reflect the state of input pins
     MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
     mip.MTIP.set(timerInterruptRequest);
@@ -187,9 +202,9 @@ public class rv32imData implements InstanceData, Cloneable {
 
     // Check for timer interrupts as the second priority
     if (isTimerInterruptPending()) {
-          TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
-          fetchNextInstruction();
-          return;
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
+      fetchNextInstruction();
+      return;
     }
 
     if (fetching) {
@@ -286,6 +301,33 @@ public class rv32imData implements InstanceData, Cloneable {
     return (machineInterruptsEnabled && machineExternalInterruptsEnabled && machineExternalInterruptPending);
   }
 
+  // Setting and processing debugger requests
+
+  public boolean setDebuggerRequest(DebuggerRequest r) {
+    synchronized (this) {
+       if (debuggerRequest != null) {
+         return false;
+       } else {
+         debuggerRequest = r;
+         return true;
+       }
+    }
+  }
+
+  private void processDebuggerRequest() {
+    synchronized (this) {
+      if (debuggerRequest != null) {
+        if (debuggerRequest.process()) {
+          debuggerRequest = null;
+        }
+      }
+    }
+  }
+
+
+  public void addDebuggerResponse(String resp) {
+    gdbServer.responses.add(resp);
+  }
 
   /** getters and setters*/
   public Value getAddress() { return address; }
