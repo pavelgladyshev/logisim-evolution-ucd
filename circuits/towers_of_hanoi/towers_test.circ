@@ -361,6 +361,7 @@
       <a name="width" val="32"/>
     </comp>
     <comp lib="11" loc="(220,90)" name="RV32IM CPU">
+      <a name="gdbServerRunning" val="true"/>
       <a name="hexRegisters" val="true"/>
       <a name="resetAddress" val="0x400000"/>
     </comp>
