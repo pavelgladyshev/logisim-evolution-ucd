@@ -18,6 +18,8 @@ import com.cburch.logisim.riscv.cpu.gdb.DebuggerRequest;
 
 import javax.swing.*;
 import java.io.IOException;
+import java.util.Map;
+import java.util.HashMap;
 
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
@@ -69,6 +71,9 @@ public class rv32imData implements InstanceData, Cloneable {
   private GDBServer gdbServer;
   private DebuggerRequest debuggerRequest = null;
 
+  private Map<Long, Boolean> breakpoints;
+  private boolean breakpointsEnabled;
+
   // More To Do
 
   /** Constructs a state with the given values. */
@@ -103,6 +108,9 @@ public class rv32imData implements InstanceData, Cloneable {
 
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
+
+    this.breakpoints = new HashMap<>();
+    this.breakpointsEnabled = true;
   }
 
   /**
@@ -175,14 +183,32 @@ public class rv32imData implements InstanceData, Cloneable {
 
   public void update(long dataIn, long timerInterruptRequest, long externalInterruptRequest) {
 
+    boolean result = false;
+
     if (fetching) {
       // check for and process debugger requests only during instruction fetch phase,
       // so that instruction execution is not stopped midway.
-      processDebuggerRequest(dataIn);
+      synchronized (this) {
+        if (debuggerRequest != null) {
+          result = debuggerRequest.process(dataIn);
+          if (result) {
+            debuggerRequest = null;
+          }
+        }
+      }
+      // always return after finishing processing of a debugger request to allow for next instruction addressing when resuming.
+      if (result) { return; }
     }
 
     if (cpuState == CPUState.HALTED) {
       // do not perform instructions or state updates.
+      return;
+    }
+
+    // Check for breakpoint before executing instruction
+    if (isBreakpointHit()) {
+      cpuState = CPUState.HALTED;
+      addDebuggerResponse("T05"); // Signal 5 is SIGTRAP
       return;
     }
 
@@ -265,6 +291,13 @@ public class rv32imData implements InstanceData, Cloneable {
       default:  // Unknown instruction
         TrapHandler.throwIllegalInstructionException(this);
     }
+
+    // After updating PC, check for breakpoint again
+    if (isBreakpointHit()) {
+      cpuState = CPUState.HALTED;
+      addDebuggerResponse("T05"); // Signal 5 is SIGTRAP
+      return;
+    }
   }
 
   public void stopGDBServer() {
@@ -299,8 +332,7 @@ public class rv32imData implements InstanceData, Cloneable {
     return (machineInterruptsEnabled && machineExternalInterruptsEnabled && machineExternalInterruptPending);
   }
 
-  // Setting and processing debugger requests
-
+  // Handling debugger requests
   public boolean setDebuggerRequest(DebuggerRequest r) {
     synchronized (this) {
        if (debuggerRequest != null) {
@@ -312,19 +344,14 @@ public class rv32imData implements InstanceData, Cloneable {
     }
   }
 
-  private void processDebuggerRequest(long dataIn) {
-    synchronized (this) {
-      if (debuggerRequest != null) {
-        if (debuggerRequest.process(dataIn)) {
-          debuggerRequest = null;
-        }
-      }
-    }
+  public void setGDBServer(GDBServer server) {
+    this.gdbServer = server;
   }
 
-
-  public void addDebuggerResponse(String resp) {
-    gdbServer.responses.add(resp);
+  public void addDebuggerResponse(String response) {
+    if (gdbServer != null) {
+      gdbServer.addResponse(response);
+    }
   }
 
   /** getters and setters*/
@@ -373,4 +400,21 @@ public class rv32imData implements InstanceData, Cloneable {
   public void setMemRead(Value value) { memRead = value; }
   public void setMemWrite(Value value) { memWrite = value; }
   public void setCSR(int csr, long value) { this.csr.write(this, csr, value); }
+
+  // Breakpoint handling
+  public void setBreakpoint(long address) {
+    breakpoints.put(address, true);
+  }
+
+  public void removeBreakpoint(long address) {
+    breakpoints.remove(address);
+  }
+
+  public void setBreakpointsEnabled(boolean enabled) {
+    this.breakpointsEnabled = enabled;
+  }
+
+  public boolean isBreakpointHit() {
+    return breakpointsEnabled && breakpoints.containsKey(pc.get());
+  }
 }

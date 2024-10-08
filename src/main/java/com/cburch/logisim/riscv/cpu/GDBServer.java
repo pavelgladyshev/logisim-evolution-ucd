@@ -12,13 +12,13 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.SynchronousQueue;
 
-
 public class GDBServer extends UniquelyNamedThread {
 
     private ServerSocket serverSocket;
     private Socket socket;
     private rv32imData cpuData;
     public SynchronousQueue<String> responses = new SynchronousQueue<>();
+    private boolean shouldRun = true;
 
     static final Logger logger = LoggerFactory.getLogger(GDBServer.class);
 
@@ -26,7 +26,7 @@ public class GDBServer extends UniquelyNamedThread {
         super("GDBServer");
         serverSocket = new ServerSocket(port);
         this.cpuData = cpuData;
-
+        this.cpuData.setGDBServer(this);
     }
 
     public void closeServerSocket()
@@ -39,45 +39,64 @@ public class GDBServer extends UniquelyNamedThread {
         }
     }
 
+    public void addResponse(String response) {
+        try {
+            responses.put(response);
+        } catch (InterruptedException e) {
+            logger.error("Interrupted while adding response", e);
+        }
+    }
+
     @Override
     public void run() {
         byte[] data = new byte[65536];
-        while (true) {
+        while (shouldRun) {
             try {
-                logger.info("Waiting for incoming TCP connection on port "+serverSocket.getLocalPort());
+                logger.info("Waiting for incoming TCP connection on port " + serverSocket.getLocalPort());
                 socket = serverSocket.accept();  // wait for incoming connection
                 logger.info("Accepted incoming TCP connection");
 
                 InputStream in = socket.getInputStream();
-                PrintStream out = new PrintStream(socket.getOutputStream(),true);
+                PrintStream out = new PrintStream(socket.getOutputStream(), true);
                 Packet packetResponse = new Packet("");
 
-                for (;;) {
+                while (shouldRun) {
+                    // Check if there's incoming data
+                    if (in.available() > 0) {
+                        int len = in.read(data);
+                        if (len < 0) break; // socket has closed
 
-                    int len = in.read(data);
-                    if (len < 0) break; // socket has closed
+                        int processedBytes = 0;
+                        while (processedBytes < len) {
+                            Packet packetReceived = new Packet(data, len, processedBytes);
+                            processedBytes += packetReceived.getProcessedBytes();
 
-                    Packet packetReceived = new Packet(data, len);
-                    //System.out.println("received : " + packetReceived.getPacketData());
+                            if (packetReceived.isValid()) {
+                                out.print("+");
+                                // analyse data and generate response string, send debugger requests to cpu if necessary
+                                String response = handle(packetReceived.getPacketData(), cpuData);
+                                // send response;
+                                if (null != response) {
+                                    packetResponse = new Packet(response);
+                                    out.print(packetResponse.wrapped());
+                                }
+                            } else if (packetReceived.isNACK()) {
+                                out.print(packetResponse.wrapped());
+                            } else if (!packetReceived.isACK()) {
+                                out.print("-");
+                            }
+                        }
+                    }
 
-                    if(packetReceived.isValid()) {
-                            out.print("+");
-                            // analyse data and generate response string, send debugger requests to cpu if necessary
-                            String response = handle(packetReceived.getPacketData(), cpuData);
-                            // send response;
-                            packetResponse = new Packet(response);
-                            out.print(packetResponse.wrapped());
+                    // Check for debugger responses (including breakpoint hits)
+                    String debuggerResponse = responses.poll();
+                    if (debuggerResponse != null) {
+                        Packet responsePacket = new Packet(debuggerResponse);
+                        out.print(responsePacket.wrapped());
                     }
-                    //if NACK ("-") is received retransmit response
-                    else if(packetReceived.isNACK()){
-                        out.print(packetResponse.wrapped());
-                    }
-                    //else if checksum is invalid transmit NACK ("-")
-                    else if(!packetReceived.isACK()){
-                        out.print("-");
-                    }
+
+                    Thread.sleep(100); // Small delay to avoid busy waiting
                 }
-
             } catch (Exception e) {
                 //TODO improve exception handling
                 if (serverSocket.isClosed()) {
@@ -91,6 +110,9 @@ public class GDBServer extends UniquelyNamedThread {
         }
     }
 
+    public void stopServer() {
+        shouldRun = false;
+    }
 
     private String handle(String command, rv32imData cpu) throws InterruptedException {
         String[] fields = command.split("[:,;,,]");
@@ -184,7 +206,7 @@ public class GDBServer extends UniquelyNamedThread {
                         if (addressing) {
                             // add read byte to string.
                             long shiftBits = (address & 0x3) * 8;
-                            resp.append(String.format("%02x", (dataIn & (0xff << shiftBits)) >> shiftBits));
+                            resp.append(String.format("%02x", (dataIn >> shiftBits) & 0xff));
                             address++;
                             count--;
                         }
@@ -233,6 +255,48 @@ public class GDBServer extends UniquelyNamedThread {
                 }
             });
             response = responses.take();
+        }
+        else if(field0.startsWith("Z")) {
+            // Set breakpoint
+            int type = Integer.parseInt(field0.substring(1, 2));
+            long address = Long.parseLong(fields[1], 16);
+            
+            if (type == 0 || type == 1) {  // Software or hardware breakpoint
+                cpu.setDebuggerRequest((long dataIn) -> {
+                    cpu.setBreakpoint(address);
+                    cpu.addDebuggerResponse("OK");
+                    return true;
+                });
+                response = responses.take();
+            } else {
+                response = "";  // Unsupported breakpoint type
+            }
+        }
+        else if(field0.startsWith("z")) {
+            // Remove breakpoint
+            int type = Integer.parseInt(field0.substring(1, 2));
+            long address = Long.parseLong(fields[1], 16);
+            
+            if (type == 0 || type == 1) {  // Software or hardware breakpoint
+                cpu.setDebuggerRequest((long dataIn) -> {
+                    cpu.removeBreakpoint(address);
+                    cpu.addDebuggerResponse("OK");
+                    return true;
+                });
+                response = responses.take();
+            } else {
+                response = "";  // Unsupported breakpoint type
+            }
+        }
+        else if(field0.equals("c")) {
+            // Continue execution
+            cpu.setDebuggerRequest((long dataIn) -> {
+                cpu.setBreakpointsEnabled(true);
+                cpu.setCpuState(rv32imData.CPUState.OPERATIONAL);
+                cpu.fetchNextInstruction();
+                return true;
+            });
+            return null; // Don't send immediate response, wait for CPU to stop
         }
         else switch (field0) {
                 case "?" : {
