@@ -44,7 +44,6 @@ public class rv32imData implements InstanceData, Cloneable {
   private int outputDataWidth;    // width of the data to be written in bytes (1,2,or 4)
   private Value memRead;
   private Value memWrite;
-  private Value isSync;
 
   /** Boolean flags */
   private boolean fetching;
@@ -120,7 +119,6 @@ public class rv32imData implements InstanceData, Cloneable {
      outputDataWidth = 0;    // all 4 bytes of the output
      memRead = Value.TRUE;   // MemRead active
      memWrite = Value.FALSE; // MemWrite not active
-     isSync = Value.TRUE;
    }
 
   /**
@@ -180,7 +178,7 @@ public class rv32imData implements InstanceData, Cloneable {
     if (fetching) {
       // check for and process debugger requests only during instruction fetch phase,
       // so that instruction execution is not stopped midway.
-      processDebuggerRequest();
+      processDebuggerRequest(dataIn);
     }
 
     if (cpuState == CPUState.HALTED) {
@@ -314,10 +312,10 @@ public class rv32imData implements InstanceData, Cloneable {
     }
   }
 
-  private void processDebuggerRequest() {
+  private void processDebuggerRequest(long dataIn) {
     synchronized (this) {
       if (debuggerRequest != null) {
-        if (debuggerRequest.process()) {
+        if (debuggerRequest.process(dataIn)) {
           debuggerRequest = null;
         }
       }
@@ -348,29 +346,22 @@ public class rv32imData implements InstanceData, Cloneable {
   }
   // build output data value based on data width and the address
   public Value getOutputData() {
-    switch(outputDataWidth) {
-      case 1:
-        return getInvertedOutputDataMask().not().controls(
-                   Value.createKnown(32,(outputData & 0xff) << ((getAddress().toLongValue() & 0x3) * 8)));
-      case 2:
-        return getInvertedOutputDataMask().not().controls(
-                   Value.createKnown(32,(outputData & 0xffff) << ((getAddress().toLongValue() & 0x3) * 8)));
-      default:
-        return Value.createKnown(32,outputData);
-    }
+    return switch (outputDataWidth) {
+      case 1 -> getInvertedOutputDataMask().not().controls(
+              Value.createKnown(32, (outputData & 0xff) << ((getAddress().toLongValue() & 0x3) * 8)));
+      case 2 -> getInvertedOutputDataMask().not().controls(
+              Value.createKnown(32, (outputData & 0xffff) << ((getAddress().toLongValue() & 0x3) * 8)));
+      default -> Value.createKnown(32, outputData);
+    };
   }
 
   public Value getInvertedOutputDataMask() {
-    switch(outputDataWidth) {
-      case 1:
-        return byteMasks[(int)getAddress().toLongValue() & 0x3];
-      case 2:
-        return hwMasks[((int)getAddress().toLongValue() & 0x3)>>1];
-      case 4:
-        return ALL0s;
-      default:
-        return ALL1s;
-    }
+    return switch (outputDataWidth) {
+      case 1 -> byteMasks[(int) getAddress().toLongValue() & 0x3];
+      case 2 -> hwMasks[((int) getAddress().toLongValue() & 0x3) >> 1];
+      case 4 -> ALL0s;
+      default -> ALL1s;
+    };
   }
 
   public void setOutputData(long value) { outputData = value; }
