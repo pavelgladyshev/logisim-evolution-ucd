@@ -64,7 +64,8 @@ public class rv32imData implements InstanceData, Cloneable {
 
   public enum CPUState {
     OPERATIONAL,
-    HALTED
+    HALTED,
+    SINGLE_STEP
   }
 
   /** GDB server */
@@ -293,7 +294,7 @@ public class rv32imData implements InstanceData, Cloneable {
     }
 
     // After updating PC, check for breakpoint again
-    if (isBreakpointHit()) {
+    if (isBreakpointHit() || (fetching && (cpuState == CPUState.SINGLE_STEP))) {
       cpuState = CPUState.HALTED;
       addDebuggerResponse("T05"); // Signal 5 is SIGTRAP
       return;

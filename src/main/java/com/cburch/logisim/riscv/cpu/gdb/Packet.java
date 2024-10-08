@@ -28,7 +28,11 @@ public class Packet {
     }
 
     public Boolean isACK() {
-        return Objects.equals(packetData, "+");
+        return packetData.equals("+");
+    }
+
+    public Boolean isCtrlC() {
+        return packetData.equals("\u0003");
     }
 
     public String getPacketData() {

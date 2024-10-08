@@ -82,6 +82,10 @@ public class GDBServer extends UniquelyNamedThread {
                                 }
                             } else if (packetReceived.isNACK()) {
                                 out.print(packetResponse.wrapped());
+                            } else if (packetReceived.isCtrlC()) {
+                                handle(packetReceived.getPacketData(), cpuData);
+                                packetResponse = new Packet("OK");
+                                out.print(packetResponse.wrapped());
                             } else if (!packetReceived.isACK()) {
                                 out.print("-");
                             }
@@ -95,7 +99,7 @@ public class GDBServer extends UniquelyNamedThread {
                         out.print(responsePacket.wrapped());
                     }
 
-                    Thread.sleep(100); // Small delay to avoid busy waiting
+                    Thread.sleep(10); // Small delay to avoid busy waiting
                 }
             } catch (Exception e) {
                 //TODO improve exception handling
@@ -190,9 +194,13 @@ public class GDBServer extends UniquelyNamedThread {
             response = responses.take();
         }
         else if(field0.startsWith("s")){
-            // inst = memRead(pc);
-            // cpu.update(inst);
-            response = "S05";
+            // Single step execution
+            cpu.setDebuggerRequest((long dataIn) -> {
+                cpu.setCpuState(rv32imData.CPUState.SINGLE_STEP);
+                cpu.fetchNextInstruction();
+                return true;
+            });
+            return null; // Don't send immediate response, wait for CPU to stop
         }
         else if(field0.startsWith("m")){
                 cpu.setDebuggerRequest(new DebuggerRequest() {
@@ -297,6 +305,15 @@ public class GDBServer extends UniquelyNamedThread {
                 return true;
             });
             return null; // Don't send immediate response, wait for CPU to stop
+        }
+        else if(field0.startsWith("\u0003")) {
+            // Ctrl-C interruption
+            cpu.setDebuggerRequest((long dataIn) -> {
+                cpu.setCpuState(rv32imData.CPUState.HALTED);
+                cpu.addDebuggerResponse("T05");
+                return true;
+            });
+            return "OK";
         }
         else switch (field0) {
                 case "?" : {
