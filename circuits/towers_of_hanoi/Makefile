@@ -38,7 +38,7 @@ ROM_IMAGE_TXT = $(ROM_IMAGE).txt
 .DEFAULT_GOAL = $(ROM_IMAGE_TXT)
 
 # Tool name prfix
-RISCV_TOOL_PREFIX=riscv64-unknown-elf-
+RISCV_TOOL_PREFIX=/opt/homebrew/bin/riscv64-elf-
 
 # RISC-V instruction set architecture to use when compiling the program (RV32IM by default)
 RISCV_ISA=rv32im
