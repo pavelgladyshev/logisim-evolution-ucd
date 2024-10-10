@@ -5,7 +5,7 @@ import com.cburch.logisim.data.Bounds;
 import com.cburch.logisim.data.Value;
 import com.cburch.logisim.instance.*;
 
-import static com.cburch.logisim.std.Strings.S;
+import static com.cburch.logisim.riscv.Strings.S;
 
 public class MonochromeVideoram extends InstanceFactory {
 

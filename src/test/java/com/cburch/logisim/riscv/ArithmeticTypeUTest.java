@@ -13,8 +13,9 @@ public class ArithmeticTypeUTest {
     void instructionTest_lui() {
         out.println("rv32imData test: lui x5,0x12345 should load 0x12345000 into x5");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000);
-        cpu.update(0x123452b7);  // perform lui x5,0x12345
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        // perform lui x5,0x12345
+        cpu.update(0x123452b7,0,0);
         out.printf("\tTesting CPU state after lui x5,0x12345 ...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -22,8 +23,9 @@ public class ArithmeticTypeUTest {
         assertRegistersEqual(cpu, expected);
 
         out.println("rv32imData test: lui x6,0x0 should load 0x0 into x6");
-        cpu = new rv32imData(Value.FALSE, 0x400000);
-        cpu.update(0x000002b7);  // perform lui x6,0x0
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        // perform lui x6,0x0
+        cpu.update(0x000002b7,0,0);
         out.printf("\tTesting CPU state after lui x6,0x0 ...\n");
         assertEquals(0x400004, cpu.getPC().get());
         expected = new long[32];
@@ -35,8 +37,9 @@ public class ArithmeticTypeUTest {
     void instructionTest_auipc() {
         out.println("rv32imData test: auipc x5,0x12345 should add 0x12345000 to PC and store in x5");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000);
-        cpu.update(0x12345297);  // perform auipc x5,0x12345
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        // perform auipc x5,0x12345
+        cpu.update(0x12345297,0,0);
         out.printf("\tTesting CPU state after auipc x5,0x12345 ...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -44,8 +47,9 @@ public class ArithmeticTypeUTest {
         assertRegistersEqual(cpu, expected);
 
         out.println("rv32imData test: auipc x6,0x0 should load current PC into x6");
-        cpu = new rv32imData(Value.FALSE, 0x400000);
-        cpu.update(0x00000317);  // perform auipc x6,0x0
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        // perform auipc x6,0x0
+        cpu.update(0x00000317,0,0);
         out.printf("\tTesting CPU state after auipc x6,0x0 ...\n");
         assertEquals(0x400004, cpu.getPC().get());
         expected = new long[32];

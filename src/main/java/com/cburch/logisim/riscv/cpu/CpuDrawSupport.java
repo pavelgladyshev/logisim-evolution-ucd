@@ -6,6 +6,8 @@ import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
 
+import static com.cburch.logisim.riscv.Strings.S;
+
 public class CpuDrawSupport {
 
     public static Bounds getBounds(int x, int y, int width, int height, boolean scale) {
@@ -141,8 +143,8 @@ public class CpuDrawSupport {
 
         switch(cpuState)
         {
-            case OPERATIONAL -> g2.setColor(Color.GREEN);
-            case HALTED -> g2.setColor(Color.RED);
+            case RUNNING -> g2.setColor(Color.GREEN);
+            case STOPPED -> g2.setColor(Color.RED);
         }
         bds = getBounds(1, 16, blockWidth - 2, 13, scale);
         g2.fillRect(bds.getX(), bds.getY(), bds.getWidth(), bds.getHeight());
@@ -153,9 +155,15 @@ public class CpuDrawSupport {
 
         switch (cpuState)
         {
-            case OPERATIONAL -> GraphicsUtil.drawCenteredText(g2, "ACTIVE", bds.getX(), bds.getY());
-            case HALTED ->
-            { g2.setColor(Color.cyan); GraphicsUtil.drawCenteredText(g2, "HALTED", bds.getX(), bds.getY()); }
+            case SINGLE_STEP:
+            case RUNNING:
+                g2.setColor(Color.black);
+                GraphicsUtil.drawCenteredText(g2, S.get("rv32imCpuStateRunning"), bds.getX(), bds.getY());
+                break;
+            case STOPPED:
+                g2.setColor(Color.cyan);
+                GraphicsUtil.drawCenteredText(g2, S.get("rv32imCpuStateStopped"), bds.getX(), bds.getY());
+                break;
         }
         g2.dispose();
     }
