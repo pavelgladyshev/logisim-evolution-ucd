@@ -3,7 +3,6 @@ package com.cburch.logisim.riscv.cpu;
 import com.cburch.logisim.data.Value;
 import com.cburch.logisim.riscv.cpu.gdb.DebuggerRequest;
 import com.cburch.logisim.riscv.cpu.gdb.Packet;
-import com.cburch.logisim.util.UniquelyNamedThread;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,36 +11,51 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.SynchronousQueue;
 
-public class GDBServer extends UniquelyNamedThread {
+public class GDBServer implements Runnable {
 
     private ServerSocket serverSocket;
     private Socket socket;
     private rv32imData cpuData;
-    public SynchronousQueue<String> responses = new SynchronousQueue<>();
-    private boolean shouldRun = true;
+    public SynchronousQueue<String> debuggerResponse;
+    private boolean shouldRun;
+    private Thread thread;
 
     static final Logger logger = LoggerFactory.getLogger(GDBServer.class);
 
-    public GDBServer(int port, rv32imData cpuData) throws IOException {
-        super("GDBServer");
-        serverSocket = new ServerSocket(port);
+    public void startGDBServer(int port, rv32imData cpuData) throws IOException {
+        this.serverSocket = new ServerSocket(port);
+        this.debuggerResponse = new SynchronousQueue<>();
         this.cpuData = cpuData;
         this.cpuData.setGDBServer(this);
+        this.thread = new Thread(this);
+        this.shouldRun = true;
+        this.thread.start();
     }
 
-    public void closeServerSocket()
-    {
-        try {
-            serverSocket.close();
-        } catch(IOException ex){
-        //TODO inform user / log error info
-            logger.info(ex.toString());
+    public void stopGDBServer() {
+        shouldRun = false;
+        if (null != serverSocket) {
+            try {
+                serverSocket.close();
+            } catch (IOException ex) {
+                //TODO inform user / log error info
+                logger.info(ex.toString());
+            }
         }
+        if (null != thread) {
+            while (thread.isAlive()) {
+                try {
+                    Thread.sleep(10);
+                } catch(InterruptedException ex) {
+                    continue;
+                }
+            }
+        };
     }
 
-    public void addResponse(String response) {
+    public void setDebuggerResponse(String response) {
         try {
-            responses.put(response);
+            debuggerResponse.put(response);
         } catch (InterruptedException e) {
             logger.error("Interrupted while adding response", e);
         }
@@ -55,10 +69,14 @@ public class GDBServer extends UniquelyNamedThread {
                 logger.info("Waiting for incoming TCP connection on port " + serverSocket.getLocalPort());
                 socket = serverSocket.accept();  // wait for incoming connection
                 logger.info("Accepted incoming TCP connection");
+                socket.setKeepAlive(true);
 
                 InputStream in = socket.getInputStream();
                 PrintStream out = new PrintStream(socket.getOutputStream(), true);
                 Packet packetResponse = new Packet("");
+
+                // stop CPU if currently running (as if GDB user pressed Ctrl-C)
+                handle("\u0003",cpuData);
 
                 while (shouldRun) {
                     // Check if there's incoming data
@@ -80,6 +98,13 @@ public class GDBServer extends UniquelyNamedThread {
                                     packetResponse = new Packet(response);
                                     out.print(packetResponse.wrapped());
                                 }
+                                // if this was a debugging termination request "D",
+                                // close the socket and go back to listening for incoming connections
+                                if (packetReceived.getPacketData().equals("D")) {
+                                    out.flush();
+                                    socket.close();
+                                    break;
+                                }
                             } else if (packetReceived.isNACK()) {
                                 out.print(packetResponse.wrapped());
                             } else if (packetReceived.isCtrlC()) {
@@ -93,7 +118,7 @@ public class GDBServer extends UniquelyNamedThread {
                     }
 
                     // Check for debugger responses (including breakpoint hits)
-                    String debuggerResponse = responses.poll();
+                    String debuggerResponse = this.debuggerResponse.poll();
                     if (debuggerResponse != null) {
                         Packet responsePacket = new Packet(debuggerResponse);
                         out.print(responsePacket.wrapped());
@@ -112,10 +137,6 @@ public class GDBServer extends UniquelyNamedThread {
                 continue; // try again
             }
         }
-    }
-
-    public void stopServer() {
-        shouldRun = false;
     }
 
     private String handle(String command, rv32imData cpu) throws InterruptedException {
@@ -167,43 +188,42 @@ public class GDBServer extends UniquelyNamedThread {
                 }
                 resp.append(formatWordString(cpu.getPC().get()));
                 cpu.addDebuggerResponse(resp.toString());
-                return true;
+                    return true;
             });
-            response = responses.take();
+            response = debuggerResponse.take();
         }
         else if(field0.startsWith("p")){
             cpu.setDebuggerRequest((long dataIn)->{
-                cpu.addDebuggerResponse(formatWordString(cpu.getX(Integer.valueOf(field0.substring(2)))));
-                return true;
+                    cpu.addDebuggerResponse(formatWordString(cpu.getX(Integer.valueOf(field0.substring(2)))));
+                    return true;
             });
-            response = responses.take();
+            response = debuggerResponse.take();
         }
         else if(field0.startsWith("P")){
             String[] parts = field0.substring(1).split("=");
             int regNum = Integer.parseInt(parts[0], 16);
             int regValue = Integer.reverseBytes((int) Long.parseLong(parts[1], 16));
             cpu.setDebuggerRequest((long dataIn)->{
-                if (regNum == 32) {
-                    cpu.getPC().set(regValue);
-                } else {
-                    cpu.setX(regNum, regValue);
-                }
-                cpu.addDebuggerResponse("OK");
-                return true;
+                    if (regNum == 32) {
+                        cpu.getPC().set(regValue);
+                    } else {
+                        cpu.setX(regNum, regValue);
+                    }
+                    cpu.addDebuggerResponse("OK");
+                    return true;
             });
-            response = responses.take();
+            response = debuggerResponse.take();
         }
         else if(field0.startsWith("s")){
-            // Single step execution
             cpu.setDebuggerRequest((long dataIn) -> {
-                cpu.setCpuState(rv32imData.CPUState.SINGLE_STEP);
-                cpu.fetchNextInstruction();
-                return true;
+                    cpu.setCpuState(rv32imData.CPUState.SINGLE_STEP);
+                    cpu.fetchNextInstruction();
+                    return true;
             });
             return null; // Don't send immediate response, wait for CPU to stop
         }
         else if(field0.startsWith("m")){
-                cpu.setDebuggerRequest(new DebuggerRequest() {
+            cpu.setDebuggerRequest(new DebuggerRequest() {
                     long address = Long.parseLong(field0.substring(1),16);
                     long count = Long.valueOf(fields[1],16);
                     boolean addressing = false;
@@ -232,37 +252,37 @@ public class GDBServer extends UniquelyNamedThread {
                             return false;
                         }
                     }
-                });
-                response = responses.take();
+            });
+            response = debuggerResponse.take();
         }
         else if(field0.startsWith("M")){
             cpu.setDebuggerRequest(new DebuggerRequest() {
-                long address = Long.parseLong(field0.substring(1),16);
-                long count = Long.valueOf(fields[1],16);
-                byte[] data = hexStringToByteArray(fields[2]);
-                int i=0;
+                    long address = Long.parseLong(field0.substring(1),16);
+                    long count = Long.valueOf(fields[1],16);
+                    byte[] data = hexStringToByteArray(fields[2]);
+                    int i=0;
 
-                @Override
-                public boolean process(long dataIn) {
-                    if (count == i) {
-                        cpu.addDebuggerResponse("OK");
-                        cpu.setOutputDataWidth(0);
-                        cpu.setMemRead(Value.FALSE);
-                        cpu.setMemWrite(Value.FALSE);
-                        return true;
-                    } else {
-                        cpu.setAddress(Value.createKnown(32, address));
-                        cpu.setOutputData(data[i]);
-                        cpu.setOutputDataWidth(1);
-                        cpu.setMemRead(Value.TRUE);
-                        cpu.setMemWrite(Value.TRUE);
-                        i++;
-                        address++;
-                        return false;
+                    @Override
+                    public boolean process(long dataIn) {
+                        if (count == i) {
+                            cpu.addDebuggerResponse("OK");
+                            cpu.setOutputDataWidth(0);
+                            cpu.setMemRead(Value.FALSE);
+                            cpu.setMemWrite(Value.FALSE);
+                            return true;
+                        } else {
+                            cpu.setAddress(Value.createKnown(32, address));
+                            cpu.setOutputData(data[i]);
+                            cpu.setOutputDataWidth(1);
+                            cpu.setMemRead(Value.TRUE);
+                            cpu.setMemWrite(Value.TRUE);
+                            i++;
+                            address++;
+                            return false;
+                        }
                     }
-                }
             });
-            response = responses.take();
+            response = debuggerResponse.take();
         }
         else if(field0.startsWith("Z")) {
             // Set breakpoint
@@ -271,11 +291,11 @@ public class GDBServer extends UniquelyNamedThread {
             
             if (type == 0 || type == 1) {  // Software or hardware breakpoint
                 cpu.setDebuggerRequest((long dataIn) -> {
-                    cpu.setBreakpoint(address);
-                    cpu.addDebuggerResponse("OK");
-                    return true;
+                        cpu.setBreakpoint(address);
+                        cpu.addDebuggerResponse("OK");
+                        return true;
                 });
-                response = responses.take();
+                response = debuggerResponse.take();
             } else {
                 response = "";  // Unsupported breakpoint type
             }
@@ -287,11 +307,11 @@ public class GDBServer extends UniquelyNamedThread {
             
             if (type == 0 || type == 1) {  // Software or hardware breakpoint
                 cpu.setDebuggerRequest((long dataIn) -> {
-                    cpu.removeBreakpoint(address);
-                    cpu.addDebuggerResponse("OK");
-                    return true;
+                        cpu.removeBreakpoint(address);
+                        cpu.addDebuggerResponse("OK");
+                        return true;
                 });
-                response = responses.take();
+                response = debuggerResponse.take();
             } else {
                 response = "";  // Unsupported breakpoint type
             }
@@ -299,19 +319,31 @@ public class GDBServer extends UniquelyNamedThread {
         else if(field0.equals("c")) {
             // Continue execution
             cpu.setDebuggerRequest((long dataIn) -> {
-                cpu.setBreakpointsEnabled(true);
-                cpu.setCpuState(rv32imData.CPUState.OPERATIONAL);
-                cpu.fetchNextInstruction();
-                return true;
+                    cpu.setBreakpointsEnabled(true);
+                    cpu.setCpuState(rv32imData.CPUState.RUNNING);
+                    cpu.fetchNextInstruction();
+                    return true;
             });
             return null; // Don't send immediate response, wait for CPU to stop
         }
         else if(field0.startsWith("\u0003")) {
             // Ctrl-C interruption
             cpu.setDebuggerRequest((long dataIn) -> {
-                cpu.setCpuState(rv32imData.CPUState.HALTED);
-                cpu.addDebuggerResponse("T05");
-                return true;
+                    if (cpu.getCpuState() != rv32imData.CPUState.STOPPED) {
+                        cpu.setCpuState(rv32imData.CPUState.SINGLE_STEP);
+                    }
+                    //cpu.addDebuggerResponse("T05");
+                    return true;
+            });
+            return "OK";
+        }
+        else if(field0.startsWith("D")) {
+            // termination of debug session by the remote: resume CPU
+            cpu.setDebuggerRequest((long dataIn) -> {
+                    cpu.setBreakpointsEnabled(false);
+                    cpu.setCpuState(rv32imData.CPUState.RUNNING);
+                    cpu.fetchNextInstruction();
+                    return true;
             });
             return "OK";
         }

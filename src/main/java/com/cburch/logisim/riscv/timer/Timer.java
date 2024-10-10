@@ -6,7 +6,7 @@ import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
 
-import static com.cburch.logisim.std.Strings.S;
+import static com.cburch.logisim.riscv.Strings.S;
 
 public class Timer extends InstanceFactory {
 

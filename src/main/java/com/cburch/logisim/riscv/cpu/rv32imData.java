@@ -63,13 +63,13 @@ public class rv32imData implements InstanceData, Cloneable {
   private CPUState cpuState;
 
   public enum CPUState {
-    OPERATIONAL,
-    HALTED,
+    RUNNING,
+    STOPPED,
     SINGLE_STEP
   }
 
   /** GDB server */
-  private GDBServer gdbServer;
+  private GDBServer gdbServer = null;
   private DebuggerRequest debuggerRequest = null;
 
   private Map<Long, Boolean> breakpoints;
@@ -77,12 +77,7 @@ public class rv32imData implements InstanceData, Cloneable {
 
   // More To Do
 
-  /** Constructs a state with the given values. */
-  public rv32imData(Value lastClock, long resetAddress) {
-    this(lastClock, resetAddress, 1234, false, CPUState.OPERATIONAL);
-  }
-
-  public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, CPUState initialCpuState) {
+  public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, CPUState initialCpuState, GDBServer gdbServerAttr) {
 
     // initial values for registers
     this.lastClock = lastClock;
@@ -92,10 +87,10 @@ public class rv32imData implements InstanceData, Cloneable {
     this.csr = new ControlAndStatusRegisters();
     this.cpuState = initialCpuState;
 
-    this.gdbServer = null;
     if(startGDBServer) {
       try {
-        this.gdbServer = new GDBServer(port, this);
+        this.gdbServer = gdbServerAttr;
+        this.gdbServer.startGDBServer(port,this);
       } catch (IOException ex) {
         String message = "Cannot start GDB server at port "+port;
         SwingUtilities.invokeLater(
@@ -105,7 +100,6 @@ public class rv32imData implements InstanceData, Cloneable {
         this.gdbServer = null;
       }
     }
-    if (this.gdbServer != null) this.gdbServer.start();
 
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
@@ -144,7 +138,8 @@ public class rv32imData implements InstanceData, Cloneable {
         ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
                 state.getAttributeValue(rv32im.ATTR_TCP_PORT),
                 state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING),
-                state.getAttributeValue(rv32im.ATTR_CPU_STATE).toString().compareTo("Halted") == 0 ? CPUState.HALTED : CPUState.OPERATIONAL);
+                state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING) ? CPUState.STOPPED : CPUState.RUNNING,
+                (GDBServer)state.getAttributeValue(rv32im.ATTR_GDB_SERVER));
         state.setData(ret);
       }
       return ret;
@@ -179,9 +174,6 @@ public class rv32imData implements InstanceData, Cloneable {
      pc.set(pcInit);
   }
 
-  /** update CPU state (execute) */
-  public void update(long dataIn) { update(dataIn,0,0); }
-
   public void update(long dataIn, long timerInterruptRequest, long externalInterruptRequest) {
 
     boolean result = false;
@@ -201,14 +193,14 @@ public class rv32imData implements InstanceData, Cloneable {
       if (result) { return; }
     }
 
-    if (cpuState == CPUState.HALTED) {
+    if (cpuState == CPUState.STOPPED) {
       // do not perform instructions or state updates.
       return;
     }
 
     // Check for breakpoint before executing instruction
     if (isBreakpointHit()) {
-      cpuState = CPUState.HALTED;
+      cpuState = CPUState.STOPPED;
       addDebuggerResponse("T05"); // Signal 5 is SIGTRAP
       return;
     }
@@ -295,20 +287,14 @@ public class rv32imData implements InstanceData, Cloneable {
 
     // After updating PC, check for breakpoint again
     if (isBreakpointHit() || (fetching && (cpuState == CPUState.SINGLE_STEP))) {
-      cpuState = CPUState.HALTED;
+      cpuState = CPUState.STOPPED;
       addDebuggerResponse("T05"); // Signal 5 is SIGTRAP
       return;
     }
   }
 
-  public void stopGDBServer() {
-    if (null != gdbServer) {
-      gdbServer.closeServerSocket();
-    }
-  }
-
-  public void halt() {
-    cpuState = CPUState.HALTED;
+  public void stop() {
+    cpuState = CPUState.STOPPED;
   }
 
   public boolean isTimerInterruptPending() {
@@ -351,7 +337,7 @@ public class rv32imData implements InstanceData, Cloneable {
 
   public void addDebuggerResponse(String response) {
     if (gdbServer != null) {
-      gdbServer.addResponse(response);
+      gdbServer.setDebuggerResponse(response);
     }
   }
 
@@ -418,4 +404,5 @@ public class rv32imData implements InstanceData, Cloneable {
   public boolean isBreakpointHit() {
     return breakpointsEnabled && breakpoints.containsKey(pc.get());
   }
+
 }

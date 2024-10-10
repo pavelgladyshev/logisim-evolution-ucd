@@ -16,7 +16,7 @@ import com.cburch.logisim.util.GraphicsUtil;
 import java.awt.*;
 
 import static com.cburch.logisim.riscv.cpu.CpuDrawSupport.*;
-import static com.cburch.logisim.std.Strings.S;
+import static com.cburch.logisim.riscv.Strings.S;
 
 /**
  * Initial stab at RISC-V rv32im cpu component. All of the code relevant to state, though,
@@ -53,22 +53,28 @@ public class rv32im extends InstanceFactory {
           Attributes.forIntegerRange("tcpPort", S.getter("rv32imTcpPort"), 0, 65535);
 
   public static final Attribute<Boolean> ATTR_GDB_SERVER_RUNNING =
-          Attributes.forBoolean("gdbServerRunning", S.getter("rv32imGDBServerRunning"));
+          Attributes.forBoolean("gdbServerRunning", S.getter("rv32imStartGDBServer"));
 
-  public static final Attribute<AttributeOption> ATTR_CPU_STATE =
-          Attributes.forOption(
-                  "cpuState",
-                  S.getter("rv32imCpuState"),
-                  new AttributeOption[] {
-                          new AttributeOption("Halted", S.getter("cpuStateHalted")),
-                          new AttributeOption("Operational", S.getter("cpuStateOperational"))
-                  });
+  protected static class GDBServerAttribute extends Attribute<GDBServer> {
+    @Override
+    public GDBServer parse(String value) {
+      return null;
+    }
+
+    @Override
+    public boolean isToSave() {
+      return false;
+    }
+
+    @Override
+    public boolean isHidden() {
+      return true;
+    }
+  }
+
+  public static final Attribute<GDBServer> ATTR_GDB_SERVER = new GDBServerAttribute();
 
 
-  // We don't have any instance variables related to an
-  // individual instance's state. We can't put that here, because only one
-  // rv32im object is ever created, and its job is to manage all
-  // instances that appear in any circuits.
 
   public rv32im() {
     super(_ID);
@@ -101,9 +107,9 @@ public class rv32im extends InstanceFactory {
     // Add attributes
     setAttributes(
             new Attribute[] {
-                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_CPU_STATE, StdAttr.LABEL, StdAttr.LABEL_FONT
+                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_GDB_SERVER, StdAttr.LABEL, StdAttr.LABEL_FONT
             },
-            new Object[] {Long.valueOf(0), false, 3333, false, new AttributeOption("Halted", S.getter("cpuStateHalted")), "", StdAttr.DEFAULT_LABEL_FONT});
+            new Object[] {Long.valueOf(0), false, 3333, false, new GDBServer(), "", StdAttr.DEFAULT_LABEL_FONT});
   }
 
   @Override
@@ -158,25 +164,24 @@ public class rv32im extends InstanceFactory {
 
     rv32imData cur;
 
-    // Checks reset port. If active -> clears out component data
     synchronized (rv32imData.class) {
       cur = (rv32imData) state.getData();
-      if (state.getPortValue(RESET) == Value.TRUE) {
-        // if a gdb server is running, we need to stop it
-        if (null != cur) {
-          cur.stopGDBServer();
-        }
-        // discard old data
+      if ((state.getPortValue(RESET) == Value.TRUE) || (null == cur)) {
+        // destroy old data, if reset has been pressed
         state.setData(null);
+        // if a gdb server is running, we need to stop it
+        GDBServer gdbServer = (GDBServer) state.getAttributeValue(ATTR_GDB_SERVER);
+        gdbServer.stopGDBServer();
         // getData() method will end up creating a new rv32imData object if state's data is null
+        // and re-starting the GDBServer if required
         cur = rv32imData.get(state);
       }
     }
 
     // Check if clock signal is changing from low/false to high/true
-    final var trigger = cur.updateClock(state.getPortValue(0));
+    final var isClockRisingEdge = cur.updateClock(state.getPortValue(CLOCK));
 
-    if (trigger) {
+    if (isClockRisingEdge) {
       // process state update, current values of input ports (e.g. Data-In bus value)
       // are passed to update() as parameters
       cur.update(state.getPortValue(DATA_IN).toLongValue(),
