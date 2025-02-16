@@ -33,7 +33,7 @@ public class JumpAndLinkTest {
     @Test
     void instructionTest_jal_in_place() {
         // perform jal x1,0
-        cpu.update(0x000000ef,0,0);
+        cpu.update(0x000000ef,0,0, 0);
         assertEquals(reset, cpu.getPC().get());
     }
 
@@ -41,35 +41,35 @@ public class JumpAndLinkTest {
     @Test
     void instructionTest_jal_forward() {
         // perform jal x1,1048575
-        cpu.update(0x7ffff0ef,0,0);
+        cpu.update(0x7ffff0ef,0,0, 0);
         assertEquals(reset + 1048574, cpu.getPC().get());
     }
 
     @Test
     void instructionTest_jal_backward() {
         // perform jal x1,-1048576
-        cpu.update(0x800000efL,0,0);
+        cpu.update(0x800000efL,0,0, 0);
         assertEquals(reset + (-1048576), cpu.getPC().get());
     }
 
     @Test
     void instructionTest_jalr_alignment() {
         // perform jalr x1,2047(x0)
-        cpu.update(0x7ff000e7,0,0);
+        cpu.update(0x7ff000e7,0,0, 0);
         assertEquals(2046, cpu.getPC().get());
     }
 
     @Test
     void instructionTest_jalr_forward() {
         // perform jalr x1,2047(x20)
-        cpu.update(0x7ffa00e7,0,0);
+        cpu.update(0x7ffa00e7,0,0, 0);
         assertEquals(x20 + (2046), cpu.getPC().get());
     }
 
     @Test
     void instructionTest_jalr_backward() {
         // perform jalr x1, -2048(x20)
-        cpu.update(0x800a00e7L,0,0);
+        cpu.update(0x800a00e7L,0,0, 0);
         assertEquals(x20 + (-2048), cpu.getPC().get());
     }
 

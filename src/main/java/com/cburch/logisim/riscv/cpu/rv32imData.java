@@ -9,6 +9,7 @@
 
 package com.cburch.logisim.riscv.cpu;
 
+import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;
 import com.cburch.logisim.gui.generic.OptionPane;
 import com.cburch.logisim.instance.InstanceData;
@@ -30,6 +31,8 @@ public class rv32imData implements InstanceData, Cloneable {
   /** The last values observed. */
   private Value lastClock;
 
+  static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
+
   /** Output values */
 
   static final Value ALL1s = Value.createKnown(32,0xffffffff);
@@ -46,6 +49,7 @@ public class rv32imData implements InstanceData, Cloneable {
   private int outputDataWidth;    // width of the data to be written in bytes (1,2,or 4)
   private Value memRead;
   private Value memWrite;
+  private Value waitAck = Value.FALSE;
 
   /** Boolean flags */
   private boolean fetching;
@@ -113,15 +117,15 @@ public class rv32imData implements InstanceData, Cloneable {
    */
    public void fetchNextInstruction()
    {
-     fetching = true;
-     addressing = false;
+       fetching = true;
+       addressing = false;
 
-     // Values for outputs fetching instruction
-     address = Value.createKnown(32,pc.get());
-     outputData = 0;     // The output data bus is in High Z
-     outputDataWidth = 0;    // all 4 bytes of the output
-     memRead = Value.TRUE;   // MemRead active
-     memWrite = Value.FALSE; // MemWrite not active
+       // Values for outputs fetching instruction
+       address = Value.createKnown(32, pc.get());
+       outputData = 0;     // The output data bus is in High Z
+       outputDataWidth = 0;    // all 4 bytes of the output
+       memRead = Value.TRUE;   // MemRead active
+       memWrite = Value.FALSE; // MemWrite not active
    }
 
   /**
@@ -174,7 +178,7 @@ public class rv32imData implements InstanceData, Cloneable {
      pc.set(pcInit);
   }
 
-  public void update(long dataIn, long timerInterruptRequest, long externalInterruptRequest) {
+  public void update(long dataIn, long timerInterruptRequest, long externalInterruptRequest, long waitRequest) {
 
     boolean result = false;
 

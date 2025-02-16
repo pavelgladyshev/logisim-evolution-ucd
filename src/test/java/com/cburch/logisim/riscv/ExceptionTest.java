@@ -28,7 +28,7 @@ public class ExceptionTest {
     @Test
     void instructionTest_ebreak(){
         // perform ebreak
-        cpu.update(0x100073,0,0);
+        cpu.update(0x100073,0,0, 0);
         assertEquals(0x400000, MMCSR.getValue(cpu, MEPC));
         assertEquals(mtvec.BASE.get(), cpu.getPC().get());
         assertEquals(mcause.INTERRUPT.get(), 0);
@@ -41,7 +41,7 @@ public class ExceptionTest {
     @Test
     void instructionTest_ecall(){
         // perform ecall
-        cpu.update(0x73,0,0);
+        cpu.update(0x73,0,0, 0);
         assertEquals(0x400000, MMCSR.getValue(cpu, MEPC));
         assertEquals(mtvec.BASE.get(), cpu.getPC().get());
         assertEquals(mcause.INTERRUPT.get(), 0);
@@ -53,7 +53,7 @@ public class ExceptionTest {
     @Test
     void exceptionTest_illegal_instruction_unknown() {
         // illegal instruction passed to cpu
-        cpu.update(0x024859348,0,0);
+        cpu.update(0x024859348,0,0, 0);
         assertEquals(0x400000, MMCSR.getValue(cpu, MEPC));
         assertEquals(mtvec.BASE.get(), cpu.getPC().get());
         assertEquals(mcause.INTERRUPT.get(), 0);
