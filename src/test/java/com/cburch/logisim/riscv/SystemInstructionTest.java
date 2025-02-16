@@ -25,9 +25,9 @@ public class SystemInstructionTest {
 
     @Test
     void instructionTest_csrrw() {
-        cpu.update(0xbc40413,0,0);
+        cpu.update(0xbc40413,0,0, 0);
         cpu.setX(8, 0x5678);
-        cpu.update(0x30541073,0,0);
+        cpu.update(0x30541073,0,0, 0);
 
         assertEquals(0x5678, cpu.getX(8));
         assertEquals(0x1800, MMCSR.getValue(cpu, MSTATUS));
@@ -38,7 +38,7 @@ public class SystemInstructionTest {
     @Test
     void instructionTest_csrrs() {
         cpu.setX(8, 0x5678);
-        cpu.update(0x3002a373,0,0);
+        cpu.update(0x3002a373,0,0, 0);
 
         assertEquals(0x5678, cpu.getX(8));
         assertEquals(0x1800, MMCSR.getValue(cpu, MSTATUS));
@@ -52,7 +52,7 @@ public class SystemInstructionTest {
         cpu.setX(1, 0x0F0F); // rs1 value
 
         // csrrc x0, mstatus, x1 (0x300210f3)
-        cpu.update(0x3002b573,0,0);
+        cpu.update(0x3002b573,0,0, 0);
 
         assertEquals(0, cpu.getX(0)); // rd should contain old CSR value
         assertEquals(6144, MMCSR.getValue(cpu, MSTATUS)); // CSR should be AND-ed with NOT(rs1) value
@@ -61,7 +61,7 @@ public class SystemInstructionTest {
     @Test
     void instructionTest_csrrwi() {
         cpu.setX(5, 0x5678);
-        cpu.update(0x3002d073,0,0);
+        cpu.update(0x3002d073,0,0, 0);
 
         assertEquals(0x5678, cpu.getX(5));
         assertEquals(0, mcause.INTERRUPT.get());
@@ -71,7 +71,7 @@ public class SystemInstructionTest {
     @Test
     void instructionTest_csrrsi() {
         cpu.setX(8, 0x5678);
-        cpu.update(0x30046073,0,0);
+        cpu.update(0x30046073,0,0, 0);
 
         assertEquals(0x5678, cpu.getX(8));
         assertEquals(0x1808, MMCSR.getValue(cpu, MSTATUS));
@@ -82,7 +82,7 @@ public class SystemInstructionTest {
     @Test
     void instructionTest_csrrci() {
         cpu.setX(8, 0x5678);
-        cpu.update(0x30047073,0,0);
+        cpu.update(0x30047073,0,0, 0);
 
         assertEquals(0x5678, cpu.getX(8));
         assertEquals(0x1800, MMCSR.getValue(cpu, MSTATUS));
@@ -98,7 +98,7 @@ public class SystemInstructionTest {
         MMCSR.getCSR(cpu, MSTATUS).write(0x1800); // MPP=0b11, MPIE=1
 
         // mret instruction
-        cpu.update(0x30200073,0,0);
+        cpu.update(0x30200073,0,0, 0);
         SystemInstruction.execute(cpu);
 
         assertEquals(0x1000, cpu.getPC().get()); // PC should be set to MEPC value

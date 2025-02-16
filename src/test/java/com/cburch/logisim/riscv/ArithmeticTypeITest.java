@@ -15,7 +15,7 @@ public class ArithmeticTypeITest {
         out.println("rv32imData test: addi x5,x0,12 should load 12 into x5");
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         // perform addi x5,x0,12
-        cpu.update(0x00c00293,0,0);
+        cpu.update(0x00c00293,0,0, 0);
         out.printf("\tTesting CPU state after addi x5,x0,12 ...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -25,7 +25,7 @@ public class ArithmeticTypeITest {
         out.println("rv32imData test: addi x5,x0,-1 should load -1 into x5");
         cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         // perform addi x5,x0,-1
-        cpu.update(0xfff00293,0,0);
+        cpu.update(0xfff00293,0,0, 0);
         out.printf("\tTesting CPU state after addi x5,x0,-1 ...\n");
         assertEquals(0x400004, cpu.getPC().get());
         expected = new long[32];
@@ -40,7 +40,7 @@ public class ArithmeticTypeITest {
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 123);   // Initially, x5 = 123
         // perform addi x5,x0,12
-        cpu.update(0x00529313,0,0);
+        cpu.update(0x00529313,0,0, 0);
         out.printf("\tTesting CPU state after slli x6,x5,5...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -56,7 +56,7 @@ public class ArithmeticTypeITest {
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 5);   // Initially, x5 = 5
         // perform slti x6,x5,10
-        cpu.update(0x00a2b313,0,0);
+        cpu.update(0x00a2b313,0,0, 0);
         out.printf("\tTesting CPU state after slti x6,x5,10...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -68,7 +68,7 @@ public class ArithmeticTypeITest {
         cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 5);   // Initially, x5 = 5
         // perform slti x6,x5,5
-        cpu.update(0x0052b313,0,0);
+        cpu.update(0x0052b313,0,0, 0);
         out.printf("\tTesting CPU state after slti x6,x5,5...\n");
         assertEquals(0x400004, cpu.getPC().get());
         expected = new long[32];
@@ -84,7 +84,7 @@ public class ArithmeticTypeITest {
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 5);   // Initially, x5 = 5
         // perform sltiu x6,x5,10
-        cpu.update(0x00a2b313,0,0);
+        cpu.update(0x00a2b313,0,0, 0);
         out.printf("\tTesting CPU state after sltiu x6,x5,10...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -96,7 +96,7 @@ public class ArithmeticTypeITest {
         cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 5);   // Initially, x5 = 5
         // perform sltiu x6,x5,5
-        cpu.update(0x0052b313,0,0);
+        cpu.update(0x0052b313,0,0, 0);
         out.printf("\tTesting CPU state after sltiu x6,x5,5...\n");
         assertEquals(0x400004, cpu.getPC().get());
         expected = new long[32];
@@ -112,7 +112,7 @@ public class ArithmeticTypeITest {
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 0xff00ff00L);   // Initially, x5 = 0xff00ff00
         // perform xori x6,x5,0xff
-        cpu.update(0x0ff2c313,0,0);
+        cpu.update(0x0ff2c313,0,0, 0);
         out.printf("\tTesting CPU state after xori x6,x5,0xff...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -128,7 +128,7 @@ public class ArithmeticTypeITest {
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 123);   // Initially, x5 = 123
         // perform srli x6,x5,2
-        cpu.update(0x0022d313,0,0);
+        cpu.update(0x0022d313,0,0, 0);
         out.printf("\tTesting CPU state after srli x6,x5,2...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -144,7 +144,7 @@ public class ArithmeticTypeITest {
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, -123);   // Initially, x5 = -123
         // perform srai x6,x5,2
-        cpu.update(0x4022d313,0,0);
+        cpu.update(0x4022d313,0,0, 0);
         out.printf("\tTesting CPU state after srai x6,x5,2...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -160,7 +160,7 @@ public class ArithmeticTypeITest {
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 0xff00ff00L);   // Initially, x5 = 0xff00ff00
         // perform ori x6,x5,0xff
-        cpu.update(0x0ff2e313,0,0);
+        cpu.update(0x0ff2e313,0,0, 0);
         out.printf("\tTesting CPU state after ori x6,x5,0xff...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];
@@ -176,7 +176,7 @@ public class ArithmeticTypeITest {
         rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 0xff00ff00L);   // Initially, x5 = 0xff00ff00
         // perform andi x6,x5,0xff
-        cpu.update(0x0ff2f313,0,0);
+        cpu.update(0x0ff2f313,0,0, 0);
         out.printf("\tTesting CPU state after andi x6,x5,0xff...\n");
         assertEquals(0x400004, cpu.getPC().get());
         long[] expected = new long[32];

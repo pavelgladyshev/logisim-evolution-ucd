@@ -9,22 +9,24 @@ public class BranchInstruction {
 
         switch (ir.func3()) {
             case 0x0:   // beq rs1, rs2, label
-                if (hartData.getX(ir.rs1()) == hartData.getX(ir.rs2())) {
+                if (Integer.compareUnsigned((int)hartData.getX(ir.rs1()),
+                                             (int)hartData.getX(ir.rs2())) == 0) {
                     takeBranch = true;
                 }
                 break;
             case 0x1:   // bne rs1, rs2, label
-                if (hartData.getX(ir.rs1()) != hartData.getX(ir.rs2())) {
+                if (Integer.compareUnsigned((int)hartData.getX(ir.rs1()),
+                                            (int)hartData.getX(ir.rs2())) != 0) {
                     takeBranch = true;
                 }
                 break;
             case 0x4:   // blt rs1, rs2, label
-                if (hartData.getX(ir.rs1()) < hartData.getX(ir.rs2())) {
+                if ((int)hartData.getX(ir.rs1()) < (int)hartData.getX(ir.rs2())) {
                     takeBranch = true;
                 }
                 break;
             case 0x5:   // bge rs1, rs2, label
-                if (hartData.getX(ir.rs1()) >= hartData.getX(ir.rs2())) {
+                if ((int)hartData.getX(ir.rs1()) >= (int)hartData.getX(ir.rs2())) {
                     takeBranch = true;
                 }
                 break;

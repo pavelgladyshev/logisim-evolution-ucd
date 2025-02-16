@@ -42,6 +42,8 @@ public class rv32im extends InstanceFactory {
   public static final int MEMWRITE = 6;
   public static final int TIMER_INTERRUPT_REQUEST = 7;
   public static final int PLIC_INTERRUPT_REQUEST = 8;
+  public static final int WAIT_REQUEST = 9;
+  public static final int WAIT_ACK = 10;
 
   public static final Attribute<Long> ATTR_RESET_ADDR =
           Attributes.forHexLong("resetAddress", S.getter("rv32imResetAddress"));
@@ -80,7 +82,7 @@ public class rv32im extends InstanceFactory {
     super(_ID);
     setOffsetBounds(Bounds.create(-60, -20, 180, 675));
 
-    Port[] ps = new Port[9];
+    Port[] ps = new Port[11];
 
     ps[CLOCK] = new Port(-60, -10, Port.INPUT, 1);
     ps[RESET] = new Port(-60, 60, Port.INPUT, 1);
@@ -91,6 +93,8 @@ public class rv32im extends InstanceFactory {
     ps[MEMWRITE] = new Port(120, 90, Port.OUTPUT, 1);
     ps[TIMER_INTERRUPT_REQUEST] = new Port(-60, 140, Port.INPUT, 1);
     ps[PLIC_INTERRUPT_REQUEST] = new Port(-60, 190, Port.INPUT, 1);
+    ps[WAIT_REQUEST] = new Port(-60, 220, Port.INPUT, 1);
+    ps[WAIT_ACK] = new Port(120, 120, Port.OUTPUT, 1);
 
     ps[CLOCK].setToolTip(S.getter("rv32imClock"));
     ps[RESET].setToolTip(S.getter("rv32imReset"));
@@ -101,6 +105,8 @@ public class rv32im extends InstanceFactory {
     ps[MEMWRITE].setToolTip(S.getter("rv32imMemWrite"));
     ps[TIMER_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imTimerInterruptRequestIn"));
     ps[PLIC_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imPLICInterruptRequestIn"));
+    ps[WAIT_REQUEST].setToolTip(S.getter("rv32imWaitRequestIn"));
+    ps[WAIT_ACK].setToolTip(S.getter("rv32imWaitAckOut"));
 
     setPorts(ps);
 
@@ -186,7 +192,8 @@ public class rv32im extends InstanceFactory {
       // are passed to update() as parameters
       cur.update(state.getPortValue(DATA_IN).toLongValue(),
                  state.getPortValue(TIMER_INTERRUPT_REQUEST) == Value.TRUE ? 1 : 0,
-                 state.getPortValue(PLIC_INTERRUPT_REQUEST) == Value.TRUE ? 1 : 0);
+                 state.getPortValue(PLIC_INTERRUPT_REQUEST) == Value.TRUE ? 1 : 0,
+                 state.getPortValue(WAIT_REQUEST) == Value.TRUE ? 1 : 0);
     }
 
     state.setPort(ADDRESS, cur.getAddress(), 9);
@@ -200,6 +207,7 @@ public class rv32im extends InstanceFactory {
     }
     state.setPort(MEMREAD, cur.getMemRead(), 9);
     state.setPort(MEMWRITE, cur.getMemWrite(), 9);
+    state.setPort(WAIT_ACK, Value.UNKNOWN, 9);
   }
 
 }
