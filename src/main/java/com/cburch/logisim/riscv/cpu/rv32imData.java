@@ -79,6 +79,10 @@ public class rv32imData implements InstanceData, Cloneable {
   private Map<Long, Boolean> breakpoints;
   private boolean breakpointsEnabled;
 
+  /** Memory cache */
+  private final MemoryCache cache = new MemoryCache();
+  private boolean cache_hit = false;
+
   // More To Do
 
   public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, CPUState initialCpuState, GDBServer gdbServerAttr) {
@@ -117,15 +121,28 @@ public class rv32imData implements InstanceData, Cloneable {
    */
    public void fetchNextInstruction()
    {
-       fetching = true;
-       addressing = false;
+     fetching = true;
+     addressing = false;
 
+     long pcVal = pc.get();
+
+     if (cache.isValid(pcVal)) {
+       cache_hit = true;
+       // The output data bus is in High Z
+       address = HiZ32;
+       outputData = 0;
+       outputDataWidth = 0;
+       memRead = Value.FALSE;
+       memWrite = Value.FALSE;
+     } else {
        // Values for outputs fetching instruction
-       address = Value.createKnown(32, pc.get());
+       cache_hit = false;
+       address = Value.createKnown(32, pcVal);
        outputData = 0;     // The output data bus is in High Z
        outputDataWidth = 0;    // all 4 bytes of the output
        memRead = Value.TRUE;   // MemRead active
        memWrite = Value.FALSE; // MemWrite not active
+     }
    }
 
   /**
@@ -229,7 +246,17 @@ public class rv32imData implements InstanceData, Cloneable {
     }
 
     if (fetching) {
-      ir.set(dataIn);
+      long pcVal = pc.get();
+      if (cache.isValid(pcVal)) {
+        // Get from cache
+        cache_hit = true;
+        ir.set(cache.get(pcVal));
+      } else {
+        // Get from memory
+        cache_hit = false;
+        ir.set(dataIn);
+        cache.update(pcVal, dataIn);
+      }
     }
 
     switch(ir.opcode()) {
