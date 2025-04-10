@@ -111,6 +111,9 @@ public class ArithmeticTypeRMulAndDivTest {
         cpu.update(0x0201cbb3,0,0, 0);
         // perform div x24,x2,x9 (signed overflow)
         cpu.update(0x02914c33,0,0, 0);
+
+        System.out.println(cpu);
+
         expected[20] = 134217727;
         expected[21] = -134217727;
         expected[22] = 134217728;
