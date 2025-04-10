@@ -38,11 +38,11 @@ public class rv32imData implements InstanceData, Cloneable {
   static final Value ALL1s = Value.createKnown(32,0xffffffff);
   static final Value ALL0s = Value.createKnown(32,0x0);
   static final Value [] byteMasks = {Value.createKnown(32,0xffffff00),
-                                     Value.createKnown(32,0xffff00ff),
-                                     Value.createKnown(32,0xff00ffff),
-                                     Value.createKnown(32,0x00ffffff)};
+          Value.createKnown(32,0xffff00ff),
+          Value.createKnown(32,0xff00ffff),
+          Value.createKnown(32,0x00ffffff)};
   static final Value [] hwMasks = {Value.createKnown(32,0xffff0000),
-                                   Value.createKnown(32,0x0000ffff)};
+          Value.createKnown(32,0x0000ffff)};
 
   private Value address;          // value to be placed on the address bus;
   private long outputData;        // value to be placed on data bus, possibly after shifting and mixing
@@ -78,6 +78,10 @@ public class rv32imData implements InstanceData, Cloneable {
 
   private Map<Long, Boolean> breakpoints;
   private boolean breakpointsEnabled;
+
+  /** Memory cache */
+  private final MemoryCache cache = new MemoryCache();
+  private boolean cache_hit = false;
 
   // More To Do
 
@@ -115,18 +119,31 @@ public class rv32imData implements InstanceData, Cloneable {
   /**
    * Set up outputs to fetch next instruction
    */
-   public void fetchNextInstruction()
-   {
-       fetching = true;
-       addressing = false;
+  public void fetchNextInstruction()
+  {
+    fetching = true;
+    addressing = false;
 
-       // Values for outputs fetching instruction
-       address = Value.createKnown(32, pc.get());
-       outputData = 0;     // The output data bus is in High Z
-       outputDataWidth = 0;    // all 4 bytes of the output
-       memRead = Value.TRUE;   // MemRead active
-       memWrite = Value.FALSE; // MemWrite not active
-   }
+    long pcVal = pc.get();
+
+    if (cache.isValid(pcVal)) {
+      cache_hit = true;
+      // The output data bus is in High Z
+      address = HiZ32;
+      outputData = 0;
+      outputDataWidth = 0;
+      memRead = Value.FALSE;
+      memWrite = Value.FALSE;
+    } else {
+      // Values for outputs fetching instruction
+      cache_hit = false;
+      address = Value.createKnown(32, pcVal);
+      outputData = 0;     // The output data bus is in High Z
+      outputDataWidth = 0;    // all 4 bytes of the output
+      memRead = Value.TRUE;   // MemRead active
+      memWrite = Value.FALSE; // MemWrite not active
+    }
+  }
 
   /**
    * Retrieves the state associated with this counter in the circuit state, generating the state if
@@ -175,7 +192,7 @@ public class rv32imData implements InstanceData, Cloneable {
 
   /** reset CPU state to initial values */
   public void reset(long pcInit) {
-     pc.set(pcInit);
+    pc.set(pcInit);
   }
 
   public void update(long dataIn, long timerInterruptRequest, long externalInterruptRequest, long waitRequest) {
@@ -229,7 +246,17 @@ public class rv32imData implements InstanceData, Cloneable {
     }
 
     if (fetching) {
-      ir.set(dataIn);
+      long pcVal = pc.get();
+      System.out.println(pcVal + " " + cache.isValid(pcVal));
+      if (cache.isValid(pcVal)) {
+        System.out.println("Cache hit: " + cache.get(pcVal ));
+        ir.set(cache.get(pcVal));
+      } else {
+        System.out.println("Cache miss: Fetching from memory");
+        cache_hit = false;
+        ir.set(dataIn);
+        cache.update(pcVal, dataIn);
+      }
     }
 
     switch(ir.opcode()) {
@@ -326,12 +353,12 @@ public class rv32imData implements InstanceData, Cloneable {
   // Handling debugger requests
   public boolean setDebuggerRequest(DebuggerRequest r) {
     synchronized (this) {
-       if (debuggerRequest != null) {
-         return false;
-       } else {
-         debuggerRequest = r;
-         return true;
-       }
+      if (debuggerRequest != null) {
+        return false;
+      } else {
+        debuggerRequest = r;
+        return true;
+      }
     }
   }
 

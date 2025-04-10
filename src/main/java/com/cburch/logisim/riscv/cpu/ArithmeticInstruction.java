@@ -114,35 +114,46 @@ public class ArithmeticInstruction {
         // Refer to specification for division/mod by zero:
         // https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf
         // (page 36)
-
         if (rs2 == 0) {
             // div by zero
             switch (ir.func3()) {
                 case 0x4:   // div by zero
                     hartData.setX(ir.rd(), -1);
-                    return;
+                    break;
                 case 0x5:   // divu by zero
                     hartData.setX(ir.rd(), ( ( (1L << 32) - 1) ^ 0x80000000L) - 0x80000000L);
-                    return;
+                    break;
                 case 0x6:   // rem by zero
                     hartData.setX(ir.rd(), rs1);
-                    return;
+                    break;
                 case 0x7:   // remu by zero
                     hartData.setX(ir.rd(), rs1);
-                    return;
+                    break;
+                default:
+                    illegalInstructionExceptionTriggered = true;
+            }
+
+            if (!illegalInstructionExceptionTriggered) {
+                hartData.getPC().increment(); // Ensure PC increment once
+                return;
             }
         }
-
         // Signed Overflow (−2^XLEN−1, is divided by −1):
         if (rs1 == (Math.pow(-2,31)) && rs2 == -1) {
             // div by zero
             if(ir.func3() == 0x4) {
                 hartData.setX(ir.rd(), rs1);
-                return;
             }
             // rem by zero
-            if(ir.func3() == 0x6) {
+            else if(ir.func3() == 0x6) {
                 hartData.setX(ir.rd(), 0);
+            }
+            else {
+                illegalInstructionExceptionTriggered = true;
+            }
+
+            if (!illegalInstructionExceptionTriggered) {
+                hartData.getPC().increment(); // Ensure PC increment once
                 return;
             }
         }
@@ -175,8 +186,11 @@ public class ArithmeticInstruction {
             default:
                 illegalInstructionExceptionTriggered = true;
         }
-        if(illegalInstructionExceptionTriggered)TrapHandler.throwIllegalInstructionException(hartData);
-        else hartData.getPC().increment();
+        if (illegalInstructionExceptionTriggered) {
+            TrapHandler.throwIllegalInstructionException(hartData);
+        }
+
+        hartData.getPC().increment();
     }
     public static void executeRegister(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
