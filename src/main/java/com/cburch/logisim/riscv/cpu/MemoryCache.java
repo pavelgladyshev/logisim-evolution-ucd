@@ -35,4 +35,12 @@ public class MemoryCache {
         tags[idx] = addr;
         data[idx] = dataIn;
     }
+
+    public void invalidateEntry(long addr) {
+        int idx = index(addr);
+        valid[idx] = false;
+        tags[idx] = 0;
+        data[idx] = 0;
+    }
+
 }

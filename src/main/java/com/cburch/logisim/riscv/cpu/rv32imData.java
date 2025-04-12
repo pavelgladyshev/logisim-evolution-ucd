@@ -80,7 +80,7 @@ public class rv32imData implements InstanceData, Cloneable {
   private boolean breakpointsEnabled;
 
   /** Memory cache */
-  private final MemoryCache cache = new MemoryCache();
+  public final MemoryCache cache = new MemoryCache();
   private boolean cache_hit = false;
 
   // More To Do
@@ -269,20 +269,41 @@ public class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x03:  // load instruction (I-type)
-        if(!addressing) {
+        if (!addressing) {
           LoadInstruction.performAddressing(this);
         } else {
-          LoadInstruction.latch(this, dataIn);
+          long addr = getAddress().toLongValue();
+
+          if (cache.isValid(addr)) {
+            LoadInstruction.latch(this, cache.get(addr));
+          } else {
+            LoadInstruction.latch(this, dataIn);
+            cache.update(addr, dataIn);
+          }
+
           fetchNextInstruction();
         }
         break;
       case 0x23:  // storing instruction (S-type)
-        if(!addressing) {
+        if (!addressing) {
           StoreInstruction.performAddressing(this);
         } else {
+          long addr = getAddress().toLongValue();
+          //int width = getOutputDataWidth();
+          long value = getOutputData().toLongValue();
+
+          cache.invalidateEntry(addr);
+
           pc.increment();
           fetchNextInstruction();
         }
+
+        //if(!addressing) {
+        //  StoreInstruction.performAddressing(this);
+        //} else {
+        //  pc.increment();
+        //  fetchNextInstruction();
+        //}
         break;
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
