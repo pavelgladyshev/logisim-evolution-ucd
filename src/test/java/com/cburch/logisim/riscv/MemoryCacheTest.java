@@ -93,14 +93,12 @@ class MemoryCacheTest {
 
     @Test
     void testFullCacheCoverage() {
-        // Fill all 1024 unique cache slots
         for (int i = 0; i < 1024; i++) {
             long addr = ((long) i << 2);
             long data = addr ^ 0x5A5A5A5AL;
             cache.update(addr, data);
         }
 
-        // Verify all entries
         for (int i = 0; i < 1024; i++) {
             long addr = ((long) i << 2);
             long expected = addr ^ 0x5A5A5A5AL;
