@@ -247,12 +247,12 @@ public class rv32imData implements InstanceData, Cloneable {
 
     if (fetching) {
       long pcVal = pc.get();
-      System.out.println(pcVal + " " + cache.isValid(pcVal));
+      //System.out.println(pcVal + " " + cache.isValid(pcVal));
       if (cache.isValid(pcVal)) {
-        System.out.println("Cache hit: " + cache.get(pcVal ));
+        //System.out.println("Cache hit: " + cache.get(pcVal ));
         ir.set(cache.get(pcVal));
       } else {
-        System.out.println("Cache miss: Fetching from memory");
+        //System.out.println("Cache miss: Fetching from memory");
         cache_hit = false;
         ir.set(dataIn);
         cache.update(pcVal, dataIn);
@@ -272,17 +272,27 @@ public class rv32imData implements InstanceData, Cloneable {
         if (!addressing) {
           LoadInstruction.performAddressing(this);
         } else {
-          long addr = getAddress().toLongValue();
-
-          if (cache.isValid(addr)) {
-            LoadInstruction.latch(this, cache.get(addr));
-          } else {
-            LoadInstruction.latch(this, dataIn);
-            cache.update(addr, dataIn);
-          }
+          LoadInstruction.latch(this, dataIn);
 
           fetchNextInstruction();
         }
+
+
+        //using cache
+//        if (!addressing) {
+//          LoadInstruction.performAddressing(this);
+//        } else {
+//          long addr = getAddress().toLongValue();
+//
+//          if (cache.isValid(addr)) {
+//            LoadInstruction.latch(this, cache.get(addr));
+//          } else {
+//            LoadInstruction.latch(this, dataIn);
+//            cache.update(addr, dataIn);
+//          }
+//
+//          fetchNextInstruction();
+//        }
         break;
       case 0x23:  // storing instruction (S-type)
         if (!addressing) {

@@ -196,6 +196,7 @@ public class rv32im extends InstanceFactory {
                  state.getPortValue(WAIT_REQUEST) == Value.TRUE ? 1 : 0);
     }
 
+
     state.setPort(ADDRESS, cur.getAddress(), 9);
 
     if (cur.getOutputDataWidth() != 0) {
