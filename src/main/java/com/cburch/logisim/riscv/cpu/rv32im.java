@@ -14,9 +14,12 @@ import com.cburch.logisim.instance.*;
 import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
+import java.util.Arrays;
 
 import static com.cburch.logisim.riscv.cpu.CpuDrawSupport.*;
 import static com.cburch.logisim.riscv.Strings.S;
+import static com.cburch.logisim.riscv.cpu.HardDrive.*;
+import static com.cburch.logisim.riscv.cpu.rv32imData.HiZ;
 
 /**
  * Initial stab at RISC-V rv32im cpu component. All of the code relevant to state, though,
@@ -35,15 +38,19 @@ public class rv32im extends InstanceFactory {
 
   public static final int CLOCK = 0;
   public static final int RESET = 1;
-  public static final int DATA_IN = 2;
+  public static final int DATA = 2;
   public static final int ADDRESS = 3;
-  public static final int DATA_OUT = 4;
-  public static final int MEMREAD = 5;
-  public static final int MEMWRITE = 6;
-  public static final int TIMER_INTERRUPT_REQUEST = 7;
-  public static final int PLIC_INTERRUPT_REQUEST = 8;
-  public static final int WAIT_REQUEST = 9;
-  public static final int WAIT_ACK = 10;
+  public static final int MEMREAD = 4;
+  public static final int MEMWRITE = 5;
+  public static final int TIMER_INTERRUPT_REQUEST = 6;
+  public static final int PLIC_INTERRUPT_REQUEST = 7;
+  public static final int BUS_REQUEST = 8;
+  public static final int BUS_ACK = 9;
+  public static final int BE0 = 10;
+  public static final int BE1 = 11;
+  public static final int BE2 = 12;
+  public static final int BE3 = 13;
+
 
   public static final Attribute<Long> ATTR_RESET_ADDR =
           Attributes.forHexLong("resetAddress", S.getter("rv32imResetAddress"));
@@ -82,31 +89,40 @@ public class rv32im extends InstanceFactory {
     super(_ID);
     setOffsetBounds(Bounds.create(-60, -20, 180, 675));
 
-    Port[] ps = new Port[11];
+    Port[] ps = new Port[14];
 
     ps[CLOCK] = new Port(-60, -10, Port.INPUT, 1);
     ps[RESET] = new Port(-60, 60, Port.INPUT, 1);
-    ps[DATA_IN] = new Port(-60, 100, Port.INPUT, 32);
+    ps[DATA] = new Port(120, 30, Port.INOUT, 32);
     ps[ADDRESS] = new Port(120, 0, Port.OUTPUT, 32);
-    ps[DATA_OUT] = new Port(120, 30, Port.OUTPUT, 32);
     ps[MEMREAD] = new Port(120, 60, Port.OUTPUT, 1);
     ps[MEMWRITE] = new Port(120, 90, Port.OUTPUT, 1);
     ps[TIMER_INTERRUPT_REQUEST] = new Port(-60, 140, Port.INPUT, 1);
     ps[PLIC_INTERRUPT_REQUEST] = new Port(-60, 190, Port.INPUT, 1);
-    ps[WAIT_REQUEST] = new Port(-60, 220, Port.INPUT, 1);
-    ps[WAIT_ACK] = new Port(120, 120, Port.OUTPUT, 1);
+    ps[BUS_REQUEST] = new Port(-60, 220, Port.INPUT, 1);
+    ps[BUS_ACK] = new Port(120, 120, Port.OUTPUT, 1);
+    ps[BE0] = new Port(120, 150, Port.OUTPUT, 1);
+    ps[BE1] = new Port(120, 180, Port.OUTPUT, 1);
+    ps[BE2] = new Port(120, 210, Port.OUTPUT, 1);
+    ps[BE3] = new Port(120, 240, Port.OUTPUT, 1);
+
+
 
     ps[CLOCK].setToolTip(S.getter("rv32imClock"));
     ps[RESET].setToolTip(S.getter("rv32imReset"));
-    ps[DATA_IN].setToolTip(S.getter("rv32imDataIn"));
+    ps[DATA].setToolTip(S.getter("rv32imDataBus"));
     ps[ADDRESS].setToolTip(S.getter("rv32imAddress"));
-    ps[DATA_OUT].setToolTip(S.getter("rv32imDataOut"));
     ps[MEMREAD].setToolTip(S.getter("rv32imMemRead"));
     ps[MEMWRITE].setToolTip(S.getter("rv32imMemWrite"));
     ps[TIMER_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imTimerInterruptRequestIn"));
     ps[PLIC_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imPLICInterruptRequestIn"));
-    ps[WAIT_REQUEST].setToolTip(S.getter("rv32imWaitRequestIn"));
-    ps[WAIT_ACK].setToolTip(S.getter("rv32imWaitAckOut"));
+    ps[BUS_REQUEST].setToolTip(S.getter("rv32imWaitRequestIn"));
+    ps[BUS_ACK].setToolTip(S.getter("rv32imWaitAckOut"));
+    ps[BE0].setToolTip(S.getter("rv32imByteEnable0"));
+    ps[BE1].setToolTip(S.getter("rv32imByteEnable1"));
+    ps[BE2].setToolTip(S.getter("rv32imByteEnable2"));
+    ps[BE3].setToolTip(S.getter("rv32imByteEnable3"));
+
 
     setPorts(ps);
 
@@ -135,14 +151,10 @@ public class rv32im extends InstanceFactory {
     painter.drawBounds();
     painter.drawLabel();
     painter.drawClock(0, Direction.EAST); // draw a triangle on port 0
-    painter.drawPort(1); // draw port 1 as just a dot
-    painter.drawPort(2); // draw port 2 as just a dot
-    painter.drawPort(3); // draw port 3 as just a dot
-    painter.drawPort(4); // draw port 4 as just a dot
-    painter.drawPort(5); // draw port 5 as just a dot
-    painter.drawPort(6); // draw port 6 as just a dot
-    painter.drawPort(7); // draw port 7 as just a dot
-    painter.drawPort(8); // draw port 8 as just a dot
+
+    for (int i = 1; i < 14; i++) {
+      painter.drawPort(i);
+    }
 
     // Display the current state.
     // If the context says not to show state (as when generating
@@ -156,9 +168,8 @@ public class rv32im extends InstanceFactory {
 
       Font font = new Font("SansSerif", Font.BOLD, 20);
       GraphicsUtil.drawText(graphics, font,"RISC-V RV32IM", posX+80, posY-127,0,0, Color.black, Color.WHITE);
-
       drawHexReg(graphics, posX, posY - 40, false, (int) state.getPC().get(), "PC", true);
-      drawHexReg(graphics, posX, posY-80, false, (int) state.getOutputData().toLongValue(), "Data Out", true);
+      drawHexReg(graphics, posX, posY-80, false,  (int) painter.getPortValue(DATA).toLongValue(), "Data", true);
       drawHexReg(graphics, posX+80, posY-80, false, (int) state.getAddress().toLongValue(), "Addr", true);
       drawRegisters(graphics, posX, posY, false, state, painter.getAttributeValue(ATTR_HEX_REGS));
       drawCpuState(graphics, posX+80, posY-40, false, "CPU state", state.getCpuState());
@@ -168,47 +179,110 @@ public class rv32im extends InstanceFactory {
   @Override
   public void propagate(InstanceState state) {
 
-    rv32imData cur;
+    rv32imData cpuState = rv32imData.get(state);
 
-    synchronized (rv32imData.class) {
-      cur = (rv32imData) state.getData();
-      if ((state.getPortValue(RESET) == Value.TRUE) || (null == cur)) {
-        // destroy old data, if reset has been pressed
-        state.setData(null);
-        // if a gdb server is running, we need to stop it
-        GDBServer gdbServer = (GDBServer) state.getAttributeValue(ATTR_GDB_SERVER);
-        gdbServer.stopGDBServer();
-        // getData() method will end up creating a new rv32imData object if state's data is null
-        // and re-starting the GDBServer if required
-        cur = rv32imData.get(state);
+
+    Value clock = state.getPortValue(CLOCK);
+    Value reset = state.getPortValue(RESET);
+    Value dataIn = state.getPortValue(DATA);
+    Value timerInterrupt = state.getPortValue(TIMER_INTERRUPT_REQUEST);
+    Value plicInterrupt = state.getPortValue(PLIC_INTERRUPT_REQUEST);
+    Value busRequest = state.getPortValue(BUS_REQUEST);
+
+
+    if (reset == Value.TRUE) {
+      long resetAddr = state.getAttributeValue(ATTR_RESET_ADDR);
+      cpuState.reset(resetAddr);
+      cpuState.setCpuState(rv32imData.CPUState.RUNNING);
+      updateOutputSignals(state, cpuState);
+      return;
+    }
+
+    boolean clockRisingEdge = cpuState.updateClock(clock) && clock == Value.TRUE;
+
+
+    if (clockRisingEdge) {
+      //if (cpuState.isBusGranted() && busRequest == HiZ) {
+      //  cpuState.setBusGranted(false);
+      //} else {
+      //  cpuState.setBusGranted(true);
+     // }
+
+
+      cpuState.setBusGranted(busRequest == Value.TRUE);
+
+
+      //if (cpuState.isBusGranted()) {
+      //  updateOutputSignals(state, cpuState);
+      //  return;
+      //}
+
+      long timerIrq = timerInterrupt == Value.TRUE ? 1 : 0;
+      long plicIrq = plicInterrupt == Value.TRUE ? 1 : 0;
+      long waitRequest = busRequest == Value.TRUE ? 1 : 0;
+      long dataValue = dataIn.toLongValue();
+      cpuState.update(dataValue, timerIrq, plicIrq, waitRequest);
+    }
+
+    updateOutputSignals(state, cpuState);
+  }
+
+
+  private void updateOutputSignals(InstanceState state, rv32imData cpu) {
+    if (cpu.isBusGranted()) {
+      state.setPort(ADDRESS, HiZ32, 1);
+      state.setPort(MEMREAD, HiZ, 1);
+      state.setPort(MEMWRITE, HiZ, 1);
+      state.setPort(DATA, HiZ32, 1);
+      state.setPort(BE0, HiZ, 1);
+      state.setPort(BE1, HiZ, 1);
+      state.setPort(BE2, HiZ, 1);
+      state.setPort(BE3, HiZ, 1);
+      state.setPort(BUS_ACK, Value.TRUE, 1);
+    } else {
+      state.setPort(ADDRESS, cpu.getAddress(), 1);
+      state.setPort(MEMREAD, cpu.getMemRead(), 1);
+      state.setPort(MEMWRITE, cpu.getMemWrite(), 1);
+
+      if (cpu.getMemWrite() == Value.TRUE) {
+        state.setPort(DATA, cpu.getOutputData(), 1);
+      } else {
+        state.setPort(DATA, Value.createUnknown(BitWidth.create(32)), 1);
+      }
+
+      Value[] byteEnable = calculateByteEnables(cpu);
+      state.setPort(BE0, byteEnable[0], 1);
+      state.setPort(BE1, byteEnable[1], 1);
+      state.setPort(BE2, byteEnable[2], 1);
+      state.setPort(BE3, byteEnable[3], 1);
+
+      state.setPort(BUS_ACK, Value.FALSE, 1);
+    }
+  }
+
+  private Value[] calculateByteEnables(rv32imData cpu) {
+    Value[] enables = new Value[4];
+    Arrays.fill(enables, Value.FALSE);
+
+    if (cpu.isMemoryAccessActive()) {
+      long addr = cpu.getAddress().toLongValue();
+      int width = cpu.getAccessWidth();
+      int offset = (int) (addr & 0x03);
+
+      switch (width) {
+        case 1:
+          enables[offset] = Value.TRUE;
+          break;
+        case 2:
+          enables[offset] = Value.TRUE;
+          enables[(offset + 1) % 4] = Value.TRUE;
+          break;
+        case 4:
+          Arrays.fill(enables, Value.TRUE);
+          break;
       }
     }
-
-    // Check if clock signal is changing from low/false to high/true
-    final var isClockRisingEdge = cur.updateClock(state.getPortValue(CLOCK));
-
-    if (isClockRisingEdge) {
-      // process state update, current values of input ports (e.g. Data-In bus value)
-      // are passed to update() as parameters
-      cur.update(state.getPortValue(DATA_IN).toLongValue(),
-                 state.getPortValue(TIMER_INTERRUPT_REQUEST) == Value.TRUE ? 1 : 0,
-                 state.getPortValue(PLIC_INTERRUPT_REQUEST) == Value.TRUE ? 1 : 0,
-                 state.getPortValue(WAIT_REQUEST) == Value.TRUE ? 1 : 0);
-    }
-
-
-    state.setPort(ADDRESS, cur.getAddress(), 9);
-
-    if (cur.getOutputDataWidth() != 0) {
-      // DATA_OUT = combination of rv32im data output with the data from DATA_IN
-      state.setPort(DATA_OUT, cur.getInvertedOutputDataMask().controls(
-              state.getPortValue(DATA_IN)).combine(cur.getOutputData()), 9);
-    } else {
-      state.setPort(DATA_OUT, HiZ32, 9);
-    }
-    state.setPort(MEMREAD, cur.getMemRead(), 9);
-    state.setPort(MEMWRITE, cur.getMemWrite(), 9);
-    state.setPort(WAIT_ACK, Value.UNKNOWN, 9);
+    return enables;
   }
 
 }

@@ -7,7 +7,7 @@
  * This is free software released under GNU GPLv3 license
  */
 
-package com.cburch.draw.gray;
+package com.cburch.gray;
 
 import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;
