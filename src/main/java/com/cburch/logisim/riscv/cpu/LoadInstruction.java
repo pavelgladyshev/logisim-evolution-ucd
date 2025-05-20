@@ -39,15 +39,22 @@ public class LoadInstruction {
         }
 
         long address = LoadInstruction.getAddress(hartData);
+        int width = 0;
         switch (ir.func3()) {
-            case 0x1:  // lh rd, imm(rs1)
+            case 0x0:  // lh rd, imm(rs1)
+            case 0x4: // lbu (unsigned byte)
+                width = 1;
+                break;
+            case 0x1: // lh (halfword)
             case 0x5:  // lhu rd, imm(rs1)
+                width = 2;
                 if ((address & 0x1) != 0) {
                     TrapHandler.throwIllegalInstructionException(hartData);
                     return;
                 }
                 break;
             case 0x2:  // lw rd, imm(rs1)
+                width = 4;
                 if ((address & 0x3) != 0) {
                     TrapHandler.throwIllegalInstructionException(hartData);
                     return;
@@ -61,7 +68,7 @@ public class LoadInstruction {
         // Values for outputs fetching data
         hartData.setAddress(Value.createKnown(BitWidth.create(32), getAddress(hartData)));
         hartData.setOutputData(0);
-        hartData.setOutputDataWidth(0);    // The output data bus is in High Z for all 4 bytes of the output
+        hartData.setOutputDataWidth(width);    // The output data bus is in High Z for all 4 bytes of the output
         hartData.setMemRead(Value.TRUE);   //  MemRead active
         hartData.setMemWrite(Value.FALSE); // MemWrite not active
     }

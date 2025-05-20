@@ -15,6 +15,7 @@ import com.cburch.logisim.riscv.timer.Timer;
 import com.cburch.logisim.riscv.videoram.MonochromeVideoram;
 import com.cburch.logisim.tools.AddTool;
 import com.cburch.logisim.tools.Library;
+import com.cburch.logisim.riscv.cpu.HardDrive;
 
 import java.util.Arrays;
 import java.util.List;
@@ -47,7 +48,8 @@ public class RiscvComponents extends Library {
             new AddTool(new rv32im()),
             new AddTool(new MonochromeVideoram()),
             new AddTool(new Timer()),
-            new AddTool(new PLIC()));
+            new AddTool(new PLIC()),
+            new AddTool(new HardDrive()));
   }
 
   /** Returns the name of the library that the user will see. */

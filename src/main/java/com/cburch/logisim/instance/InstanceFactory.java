@@ -372,4 +372,5 @@ public abstract class InstanceFactory extends AbstractComponentFactory {
   public boolean providesSubCircuitMenu() {
     return false;
   }
+
 }

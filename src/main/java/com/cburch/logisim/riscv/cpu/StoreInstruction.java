@@ -45,7 +45,7 @@ public class StoreInstruction {
 
         // Values for outputs fetching data
         hartData.setAddress(Value.createKnown(32, address));
-        hartData.setMemRead(Value.TRUE);
+        hartData.setMemRead(Value.FALSE);
         hartData.setMemWrite(Value.TRUE);
     }
 

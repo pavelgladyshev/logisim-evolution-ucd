@@ -412,8 +412,8 @@ public class SubcircuitFactory extends InstanceFactory {
     if (attrs.getValue(CircuitAttributes.APPEARANCE_ATTR).equals(CircuitAttributes.APPEAR_CLASSIC))
       paintClasicIcon(g2);
     else if (attrs
-        .getValue(CircuitAttributes.APPEARANCE_ATTR)
-        .equals(CircuitAttributes.APPEAR_FPGA)) paintHCIcon(g2);
+            .getValue(CircuitAttributes.APPEARANCE_ATTR)
+            .equals(CircuitAttributes.APPEAR_FPGA)) paintHCIcon(g2);
     else paintEvolutionIcon(g2);
     g2.dispose();
   }
@@ -422,18 +422,18 @@ public class SubcircuitFactory extends InstanceFactory {
     g2.setStroke(new BasicStroke(AppPreferences.getScaled(2)));
     g2.setColor(Color.GRAY);
     g2.drawArc(
-        AppPreferences.getScaled(6),
-        AppPreferences.getScaled(-2),
-        AppPreferences.getScaled(4),
-        AppPreferences.getScaled(6),
-        180,
-        180);
+            AppPreferences.getScaled(6),
+            AppPreferences.getScaled(-2),
+            AppPreferences.getScaled(4),
+            AppPreferences.getScaled(6),
+            180,
+            180);
     g2.setColor(Color.BLACK);
     g2.drawRect(
-        AppPreferences.getScaled(2),
-        AppPreferences.getScaled(1),
-        AppPreferences.getScaled(12),
-        AppPreferences.getScaled(14));
+            AppPreferences.getScaled(2),
+            AppPreferences.getScaled(1),
+            AppPreferences.getScaled(12),
+            AppPreferences.getScaled(14));
     final var wh = AppPreferences.getScaled(3);
     for (var y = 0; y < 3; y++) {
       if (y == 1) g2.setColor(Value.trueColor);
@@ -450,16 +450,16 @@ public class SubcircuitFactory extends InstanceFactory {
     g2.setStroke(new BasicStroke(AppPreferences.getScaled(2)));
     g2.setColor(Color.BLACK);
     g2.drawRect(
-        AppPreferences.getScaled(1),
-        AppPreferences.getScaled(1),
-        AppPreferences.getScaled(14),
-        AppPreferences.getScaled(14));
+            AppPreferences.getScaled(1),
+            AppPreferences.getScaled(1),
+            AppPreferences.getScaled(14),
+            AppPreferences.getScaled(14));
     final var f = g2.getFont().deriveFont((float) AppPreferences.getIconSize() / 4);
     final var l = new TextLayout("main", f, g2.getFontRenderContext());
     l.draw(
-        g2,
-        (float) (AppPreferences.getIconSize() / 2 - l.getBounds().getCenterX()),
-        (float) (AppPreferences.getIconSize() / 4 - l.getBounds().getCenterY()));
+            g2,
+            (float) (AppPreferences.getIconSize() / 2 - l.getBounds().getCenterX()),
+            (float) (AppPreferences.getIconSize() / 4 - l.getBounds().getCenterY()));
     final var wh = AppPreferences.getScaled(3);
     for (int y = 1; y < 3; y++) {
       if (y == 1) g2.setColor(Value.trueColor);
@@ -475,24 +475,24 @@ public class SubcircuitFactory extends InstanceFactory {
   public static void paintEvolutionIcon(Graphics2D g2) {
     g2.setStroke(new BasicStroke(AppPreferences.getScaled(2)));
     g2.drawRect(
-        AppPreferences.getScaled(2), 0, AppPreferences.getScaled(12), AppPreferences.getScaled(16));
+            AppPreferences.getScaled(2), 0, AppPreferences.getScaled(12), AppPreferences.getScaled(16));
     g2.fillRect(
-        AppPreferences.getScaled(2),
-        (3 * AppPreferences.getIconSize()) / 4,
-        AppPreferences.getScaled(12),
-        AppPreferences.getIconSize() / 4);
+            AppPreferences.getScaled(2),
+            (3 * AppPreferences.getIconSize()) / 4,
+            AppPreferences.getScaled(12),
+            AppPreferences.getIconSize() / 4);
     for (int y = 0; y < 3; y++) {
       g2.drawLine(
-          0,
-          AppPreferences.getScaled(y * 4 + 2),
-          AppPreferences.getScaled(2),
-          AppPreferences.getScaled(y * 4 + 2));
+              0,
+              AppPreferences.getScaled(y * 4 + 2),
+              AppPreferences.getScaled(2),
+              AppPreferences.getScaled(y * 4 + 2));
       if (y < 2)
         g2.drawLine(
-            AppPreferences.getScaled(13),
-            AppPreferences.getScaled(y * 4 + 2),
-            AppPreferences.getScaled(15),
-            AppPreferences.getScaled(y * 4 + 2));
+                AppPreferences.getScaled(13),
+                AppPreferences.getScaled(y * 4 + 2),
+                AppPreferences.getScaled(15),
+                AppPreferences.getScaled(y * 4 + 2));
     }
     g2.setColor(Color.WHITE);
     final var f = g2.getFont().deriveFont((float) AppPreferences.getIconSize() / 4);

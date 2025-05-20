@@ -32,7 +32,7 @@ public class rv32imData implements InstanceData, Cloneable {
   private Value lastClock;
 
   static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
-
+  static final Value HiZ = Value.createUnknown(BitWidth.create(1));
   /** Output values */
 
   static final Value ALL1s = Value.createKnown(32,0xffffffff);
@@ -45,11 +45,15 @@ public class rv32imData implements InstanceData, Cloneable {
           Value.createKnown(32,0x0000ffff)};
 
   private Value address;          // value to be placed on the address bus;
-  private long outputData;        // value to be placed on data bus, possibly after shifting and mixing
+  private Value outputData;        // value to be placed on data bus, possibly after shifting and mixing
   private int outputDataWidth;    // width of the data to be written in bytes (1,2,or 4)
   private Value memRead;
   private Value memWrite;
   private Value waitAck = Value.FALSE;
+  private boolean busGranted = false;
+  private boolean busRequestPending = false;
+
+  private boolean waitingForMemory;
 
   /** Boolean flags */
   private boolean fetching;
@@ -130,7 +134,7 @@ public class rv32imData implements InstanceData, Cloneable {
       cache_hit = true;
       // The output data bus is in High Z
       address = HiZ32;
-      outputData = 0;
+      outputData = HiZ32;
       outputDataWidth = 0;
       memRead = Value.FALSE;
       memWrite = Value.FALSE;
@@ -138,7 +142,7 @@ public class rv32imData implements InstanceData, Cloneable {
       // Values for outputs fetching instruction
       cache_hit = false;
       address = Value.createKnown(32, pcVal);
-      outputData = 0;     // The output data bus is in High Z
+      outputData = HiZ32;     // The output data bus is in High Z
       outputDataWidth = 0;    // all 4 bytes of the output
       memRead = Value.TRUE;   // MemRead active
       memWrite = Value.FALSE; // MemWrite not active
@@ -259,6 +263,15 @@ public class rv32imData implements InstanceData, Cloneable {
       }
     }
 
+    if (waitingForMemory) {
+      if (waitRequest == 1) {
+        // Still waiting, do not proceed
+        return;
+      } else {
+        waitingForMemory = false;
+      }
+    }
+
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
         ArithmeticInstruction.executeImmediate(this);
@@ -270,10 +283,15 @@ public class rv32imData implements InstanceData, Cloneable {
         break;
       case 0x03:  // load instruction (I-type)
         if (!addressing) {
-          LoadInstruction.performAddressing(this);
+        LoadInstruction.performAddressing(this);
+        addressing = true;
         } else {
+          if (waitRequest == 1) {
+            waitingForMemory = true;
+            return;
+          }
           LoadInstruction.latch(this, dataIn);
-
+          addressing = false;
           fetchNextInstruction();
         }
 
@@ -297,16 +315,19 @@ public class rv32imData implements InstanceData, Cloneable {
       case 0x23:  // storing instruction (S-type)
         if (!addressing) {
           StoreInstruction.performAddressing(this);
+          addressing = true;
         } else {
+          if (waitRequest == 1) {
+            waitingForMemory = true;
+            return;
+          }
           long addr = getAddress().toLongValue();
-          //int width = getOutputDataWidth();
-          long value = getOutputData().toLongValue();
-
           cache.invalidateEntry(addr);
-
           pc.increment();
+          addressing = false;
           fetchNextInstruction();
         }
+        break;
 
         //if(!addressing) {
         //  StoreInstruction.performAddressing(this);
@@ -314,7 +335,6 @@ public class rv32imData implements InstanceData, Cloneable {
         //  pc.increment();
         //  fetchNextInstruction();
         //}
-        break;
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
         fetchNextInstruction();
@@ -407,6 +427,7 @@ public class rv32imData implements InstanceData, Cloneable {
   public Value getAddress() { return address; }
   public Value getMemRead() { return memRead; }
   public Value getMemWrite() { return memWrite;  }
+  public boolean getWaitingForMemory() { return waitingForMemory;  }
   public ProgramCounter getPC() { return pc; }
   public CPUState getCpuState() { return cpuState; }
   public InstructionRegister getIR() { return ir; }
@@ -423,24 +444,30 @@ public class rv32imData implements InstanceData, Cloneable {
   // build output data value based on data width and the address
   public Value getOutputData() {
     return switch (outputDataWidth) {
-      case 1 -> getInvertedOutputDataMask().not().controls(
-              Value.createKnown(32, (outputData & 0xff) << ((getAddress().toLongValue() & 0x3) * 8)));
-      case 2 -> getInvertedOutputDataMask().not().controls(
-              Value.createKnown(32, (outputData & 0xffff) << ((getAddress().toLongValue() & 0x3) * 8)));
-      default -> Value.createKnown(32, outputData);
+      case 1 -> Value.createKnown(32,
+              (outputData.toLongValue() & 0xFF) << ((getAddress().toLongValue() & 0x3) * 8));
+      case 2 -> Value.createKnown(32,
+              (outputData.toLongValue() & 0xFFFF) << ((getAddress().toLongValue() & 0x3) * 8));
+      default -> outputData;
     };
   }
 
-  public Value getInvertedOutputDataMask() {
-    return switch (outputDataWidth) {
-      case 1 -> byteMasks[(int) getAddress().toLongValue() & 0x3];
-      case 2 -> hwMasks[((int) getAddress().toLongValue() & 0x3) >> 1];
-      case 4 -> ALL0s;
-      default -> ALL1s;
-    };
+
+
+  public int getAccessWidth() {
+    return outputDataWidth;
   }
 
-  public void setOutputData(long value) { outputData = value; }
+
+  public boolean isBusGranted() { return busGranted; }
+  public void setBusGranted(boolean granted) { busGranted = granted; }
+  public boolean isBusRequestPending() { return busRequestPending; }
+  public void setBusRequestPending(boolean pending) { busRequestPending = pending; }
+  public boolean isMemoryAccessActive() {
+    return getMemRead() == Value.TRUE || getMemWrite() == Value.TRUE;
+  }
+
+  public void setOutputData(long value) { outputData = Value.createKnown(32, value); }
   public void setOutputDataWidth(int value) { outputDataWidth = value; }
   public void setCpuState(CPUState newCpuState) { cpuState = newCpuState; }
   public void setFetching(boolean value) { fetching = value; }
