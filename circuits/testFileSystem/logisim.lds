@@ -4,8 +4,8 @@ ENTRY(_start)
 
 MEMORY 
 {
-  rom (rxi)  : ORIGIN = 0x00000000, LENGTH = 1K
-  ram (w!i)   : ORIGIN = 0x00010000, LENGTH = 1K
+  rom (rxi)  : ORIGIN = 0x00000000, LENGTH = 6K
+  ram (w!i)   : ORIGIN = 0x00010000, LENGTH = 64K
 }
 
 SECTIONS

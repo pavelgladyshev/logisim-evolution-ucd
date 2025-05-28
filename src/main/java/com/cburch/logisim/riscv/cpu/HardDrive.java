@@ -33,8 +33,6 @@ public class HardDrive extends InstanceFactory {
     public static final int DMA_ADDR = 14;
 
 
-    private static final long SECTOR_SIZE = 512;
-
     public HardDrive() {
         super(_ID);
         setOffsetBounds(Bounds.create(-50, -50, 180, 280));
@@ -155,11 +153,11 @@ public class HardDrive extends InstanceFactory {
         data.setPrevClock((clockVal == Value.TRUE));
 
 
-
+        long address = state.getPortValue(ADDR).toLongValue();
+        handleRegisterRead(state, data, address);
+        Value memData;
         if (clockRisingEdge) {
-            long address = state.getPortValue(ADDR).toLongValue();
-            handleRegisterAccess(state, data, address);
-
+            handleRegisterWrite(state, data, address);
 
             switch (data.dmaState) {
                 case IDLE:
@@ -178,13 +176,15 @@ public class HardDrive extends InstanceFactory {
                     break;
 
                 case READING:
+                    memData = data.getCurrentDmaWord();
+                    state.setPort(DATA, memData, 1);
                     if (data.advanceDma()) {
                         data.finishTransfer();
                     }
                     break;
 
                 case WRITING:
-                    Value memData = state.getPortValue(DATA);
+                    memData = state.getPortValue(DATA);
                     data.writeNextDmaWord(memData);
                     break;
             }
@@ -195,32 +195,29 @@ public class HardDrive extends InstanceFactory {
 
     private void updateControlSignals(InstanceState state, HardDriveData data) {
 
-
-        Value writeActive = state.getPortValue(WRITE_ENABLE);
-        Value readActive = state.getPortValue(READ_ENABLE);
-        Value byteEnable = (writeActive == Value.TRUE || readActive == Value.TRUE)
-                ? Value.TRUE
-                : HiZ;
-
-        state.setPort(BE0, byteEnable, 1);
-        state.setPort(BE1, byteEnable, 1);
-        state.setPort(BE2, byteEnable, 1);
-        state.setPort(BE3, byteEnable, 1);
-
         switch (data.dmaState) {
             case IDLE:
+                state.setPort(BE0, HiZ, 1);
+                state.setPort(BE1, HiZ, 1);
+                state.setPort(BE2, HiZ, 1);
+                state.setPort(BE3, HiZ, 1);
                 state.setPort(DATA, HiZ32, 1);
                 state.setPort(BUS_REQUEST, HiZ, 1);
                 state.setPort(MEM_READ, HiZ, 1);
                 state.setPort(MEM_WRITE, HiZ, 1);
                 state.setPort(DMA_ADDR, HiZ32, 1);
                 break;
+
             case BUS_REQUEST_READING:
             case BUS_REQUEST_WRITING:
                 state.setPort(BUS_REQUEST, Value.TRUE, 1);
                 break;
 
             case READING:
+                state.setPort(BE0, Value.TRUE, 1);
+                state.setPort(BE1, Value.TRUE, 1);
+                state.setPort(BE2, Value.TRUE, 1);
+                state.setPort(BE3, Value.TRUE, 1);
                 state.setPort(DATA, data.getCurrentDmaWord(), 1);
                 state.setPort(MEM_WRITE, Value.TRUE, 1);
                 state.setPort(MEM_READ, Value.FALSE, 1);
@@ -228,6 +225,10 @@ public class HardDrive extends InstanceFactory {
                 break;
 
             case WRITING:
+                state.setPort(BE0, Value.TRUE, 1);
+                state.setPort(BE1, Value.TRUE, 1);
+                state.setPort(BE2, Value.TRUE, 1);
+                state.setPort(BE3, Value.TRUE, 1);
                 state.setPort(MEM_WRITE, Value.FALSE, 1);
                 state.setPort(MEM_READ, Value.TRUE, 1);
                 state.setPort(DMA_ADDR, Value.createKnown(32, data.getDmaMemoryAddress()), 1);
@@ -237,7 +238,7 @@ public class HardDrive extends InstanceFactory {
 
 
 
-    private void handleRegisterAccess(InstanceState state, HardDriveData data, long address) {
+    private void handleRegisterWrite(InstanceState state, HardDriveData data, long address) {
         int regOffset = (int) (address & 0xFF);
         Value dataBus = state.getPortValue(DATA);
         Value writeEnable = state.getPortValue(WRITE_ENABLE);
@@ -245,7 +246,16 @@ public class HardDrive extends InstanceFactory {
 
         if (writeEnable == Value.TRUE) {
             data.writeRegister(regOffset, dataBus.toLongValue());
-        } else if (readEnable == Value.TRUE) {
+        }
+    }
+
+    private void handleRegisterRead(InstanceState state, HardDriveData data, long address) {
+        int regOffset = (int) (address & 0xFF);
+        Value dataBus = state.getPortValue(DATA);
+        Value writeEnable = state.getPortValue(WRITE_ENABLE);
+        Value readEnable = state.getPortValue(READ_ENABLE);
+
+        if (readEnable == Value.TRUE) {
             Value regValue = data.readRegister(regOffset);
             state.setPort(DATA, regValue, 1);
         }

@@ -6,7 +6,7 @@ import java.io.*;
 import java.util.Arrays;
 
 public class HardDriveData implements InstanceData, Cloneable {
-    public static final int SECTOR_SIZE = 4;
+    public static final int SECTOR_SIZE = 512;
     private static final String FILE_PATH = "harddrive.bin";
 
     public static final int REG_COMMAND = 0x0;
@@ -113,7 +113,7 @@ public class HardDriveData implements InstanceData, Cloneable {
                 case CMD_READ_SECTOR:
                     if (sectorAddress >= numSectors) throw new IOException("Invalid sector");
                     loadSector(sectorAddress);
-                    System.arraycopy(buffer, 0, dmaBuffer, 0, SECTOR_SIZE);
+                    dmaBuffer = Arrays.copyOf(buffer, SECTOR_SIZE);
                     dmaState = DmaState.BUS_REQUEST_READING;
                     dmaPosition = 0;
                     dmaMemoryAddress = memoryAddress;
@@ -134,7 +134,7 @@ public class HardDriveData implements InstanceData, Cloneable {
         } catch (IOException e) {
             status |= STATUS_ERROR;
             result = 1;
-            dmaState = DmaState.IDLE;
+            //dmaState = DmaState.IDLE;
         }
     }
 

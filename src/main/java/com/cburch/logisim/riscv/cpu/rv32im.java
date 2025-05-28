@@ -202,26 +202,30 @@ public class rv32im extends InstanceFactory {
 
 
     if (clockRisingEdge) {
-      //if (cpuState.isBusGranted() && busRequest == HiZ) {
-      //  cpuState.setBusGranted(false);
-      //} else {
-      //  cpuState.setBusGranted(true);
-     // }
+      if (cpuState.isBusGranted() && busRequest != Value.TRUE) {
+        cpuState.setBusGranted(false);
+        updateOutputSignals(state, cpuState);
+        return;
+      }
+
+      if (!cpuState.isBusGranted() && busRequest == Value.TRUE) {
+        cpuState.setBusGranted(true);
+     }
 
 
-      cpuState.setBusGranted(busRequest == Value.TRUE);
+      //cpuState.setBusGranted(busRequest == Value.TRUE);
 
 
-      //if (cpuState.isBusGranted()) {
-      //  updateOutputSignals(state, cpuState);
-      //  return;
-      //}
+      if (cpuState.isBusGranted()) {
+        updateOutputSignals(state, cpuState);
+        return;
+      }
 
       long timerIrq = timerInterrupt == Value.TRUE ? 1 : 0;
       long plicIrq = plicInterrupt == Value.TRUE ? 1 : 0;
       long waitRequest = busRequest == Value.TRUE ? 1 : 0;
       long dataValue = dataIn.toLongValue();
-      cpuState.update(dataValue, timerIrq, plicIrq, waitRequest);
+      cpuState.update(dataValue, timerIrq, plicIrq, 0);
     }
 
     updateOutputSignals(state, cpuState);
