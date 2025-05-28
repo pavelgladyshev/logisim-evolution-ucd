@@ -22,6 +22,7 @@ int main() {
          return -1;
      }
 
+
      int fd = fs_open_inode(1);
      if (fd < 0) {
          print('E');
