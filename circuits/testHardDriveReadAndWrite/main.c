@@ -1,4 +1,4 @@
-#define HD_BASE       0x00011000
+#define HD_BASE       0x00110000
 #define OUT_ADDR      0xFFF00000
 
 volatile int* hd_command = (volatile int*)(HD_BASE);
@@ -16,32 +16,44 @@ void printChar(char c) {
     volatile char *p = (volatile char*)OUT_ADDR;
     *p = c;
 }
+//volatile int* data;
+int data[128];
+int data2[128];
+int canary;
 
 int main(void) {
-    volatile int* data = (volatile int*)0x00010000;
+    data[0] = 0xABCDABCD;
 
-    *data = 0xABCDABCD;
+    for(int i = 0; i < 128; ++i){
+        data[i] = i;
+    }
 
-    *hd_mem_addr = (int)0x00010000;
+
+    *hd_mem_addr = (int) data;
     *hd_sector = 0;
     *hd_command = CMD_WRITE_SECTOR;
 
     while (*hd_status & STATUS_BUSY);
 
 
-    *data = 0;
-
-    *hd_mem_addr = (int)0x00010000;
-    *hd_sector = 1;
+    canary = 0xdeadbeef;
+    *hd_mem_addr = (int) data2;
+    *hd_sector = 0;
     *hd_command = CMD_READ_SECTOR;
 
     while (*hd_status & STATUS_BUSY);
 
+    int test = 1;
 
-    if (*data == 0xABCDABCD) {
-        printChar('K');
+    for(int i = 0; i < 128; ++i){
+        if(data2[i] != i) test = 0;
+    }
+
+
+    if (test) {
+        printChar('+');
     } else {
-        printChar('M');
+        printChar('-');
     }
 
     return 0;
