@@ -10,11 +10,14 @@ import static com.cburch.logisim.riscv.cpu.rv32imData.HiZ;
 import static com.cburch.logisim.riscv.cpu.rv32imData.HiZ32;
 
 import java.awt.*;
+import java.io.File;
+import java.io.IOException;
 
 public class HardDrive extends InstanceFactory {
 
     public static final String _ID = "Hard Drive DMA";
-
+    public static final Attribute<String> FILE_NAME_ATTR =
+            Attributes.forString("file_name", S.getter("hardDriveFileName"));
     // Port indices
     public static final int ADDR = 0;
     public static final int DATA = 1;
@@ -79,8 +82,16 @@ public class HardDrive extends InstanceFactory {
 
         setPorts(ports);
         setAttributes(
-                new Attribute[]{ StdAttr.LABEL, StdAttr.LABEL_FONT },
-                new Object[]{    "",         StdAttr.DEFAULT_LABEL_FONT }
+                new Attribute[]{
+                        StdAttr.LABEL,
+                        StdAttr.LABEL_FONT,
+                        FILE_NAME_ATTR
+                },
+                new Object[]{
+                        "",
+                        StdAttr.DEFAULT_LABEL_FONT,
+                        "hard_drive.bin"
+                }
         );
     }
 
@@ -93,54 +104,187 @@ public class HardDrive extends InstanceFactory {
                 GraphicsUtil.H_CENTER, GraphicsUtil.V_BASELINE
         );
     }
+
+    @Override
+    protected void instanceAttributeChanged(Instance instance, Attribute<?> attr) {
+        if (attr == FILE_NAME_ATTR) {
+
+            //instance.setData(null);
+            instance.fireInvalidated();
+        }
+    }
+
     @Override
     public void paintInstance(InstancePainter painter) {
         painter.drawBounds();
         painter.drawLabel();
         for (int i = 0; i < 14; i++) painter.drawPort(i);
 
+        Graphics2D graphics = (Graphics2D) painter.getGraphics();
+        Bounds bds = painter.getBounds();
+        int posX = bds.getX() + 10;
+        int posY = bds.getY() + 170;
+
+        Font titleFont = new Font("SansSerif", Font.BOLD, 20);
+        GraphicsUtil.drawText(
+                graphics,
+                titleFont,
+                "Hard Drive DMA",
+                posX + 80,
+                posY - 127,
+                GraphicsUtil.H_CENTER,
+                GraphicsUtil.V_CENTER,
+                Color.BLACK,
+                Color.WHITE
+        );
+
+
+        String fileName = painter.getAttributeValue(FILE_NAME_ATTR);
+        FileStatus status = getFileStatus(fileName);
+
+        Font statusFont = new Font("SansSerif", Font.PLAIN, 12);
+        Color statusColor = Color.BLACK;
+        String statusText = fileName;
+
+
+        if (status.isValid()) {
+            if (status.willBeCreated()) {
+                statusText = fileName + " (Will be created)";
+                statusColor = Color.BLUE;
+            } else {
+                statusText = fileName + " (" + status.getSectorCount() + " sectors)";
+                statusColor = Color.BLACK;
+            }
+        } else {
+            statusText = fileName + ": " + status.getErrorMessage();
+            statusColor = Color.RED;
+        }
+
+        int statusX = bds.getX() + bds.getWidth()/2;
+        int statusY = bds.getY() + bds.getHeight() - 15;
+        GraphicsUtil.drawText(
+                graphics,
+                statusFont,
+                statusText,
+                statusX,
+                statusY,
+                GraphicsUtil.H_CENTER,
+                GraphicsUtil.V_BOTTOM,
+                statusColor,
+                Color.GREEN
+        );
+
         if (painter.getShowState()) {
-            Graphics2D graphics = (Graphics2D) painter.getGraphics();
-            Bounds bds         = painter.getBounds();
-            int posX           = bds.getX() + 10;
-            int posY           = bds.getY() + 170;
-
-            Font font = new Font("SansSerif", Font.BOLD, 20);
-            GraphicsUtil.drawText(
-                    graphics, font,
-                    "Hard Drive DMA",
-                    posX + 80, posY - 127,
-                    0, 0,
-                    Color.BLACK, Color.WHITE
-            );
-
             HardDriveData data = (HardDriveData) painter.getData();
-            drawHexReg(graphics, posX,       posY - 80, false,
-                    (int) data.readRegister(HardDriveData.REG_COMMAND).toLongValue(),
-                    "Command", true);
+            if (data != null) {
+                drawHexReg(graphics, posX,       posY - 80, false,
+                        (int) data.readRegister(HardDriveData.REG_COMMAND).toLongValue(),
+                        "Command", true);
 
-            drawHexReg(graphics, posX + 80, posY - 80, false,
-                    (int) data.readRegister(HardDriveData.REG_STATUS).toLongValue(),
-                    "Status", true);
+                drawHexReg(graphics, posX + 80, posY - 80, false,
+                        (int) data.readRegister(HardDriveData.REG_STATUS).toLongValue(),
+                        "Status", true);
 
-            drawHexReg(graphics, posX,posY - 40, false,
-                    (int) data.readRegister(HardDriveData.REG_MEM_ADDR).toLongValue(),
-                    "Mem Addr", true);
+                drawHexReg(graphics, posX,posY - 40, false,
+                        (int) data.readRegister(HardDriveData.REG_MEM_ADDR).toLongValue(),
+                        "Mem Addr", true);
 
-            drawHexReg(graphics, posX + 80, posY - 40, false,
-                    (int) data.readRegister(HardDriveData.REG_SECTOR_ADDR).toLongValue(),
-                    "Sector Addr", true);
+                drawHexReg(graphics, posX + 80, posY - 40, false,
+                        (int) data.readRegister(HardDriveData.REG_SECTOR_ADDR).toLongValue(),
+                        "Sector Addr", true);
+            }
+        }
+    }
+
+    private FileStatus getFileStatus(String fileName) {
+        if (fileName == null || fileName.isEmpty()) {
+            return new FileStatus("No file selected");
+        }
+
+        File file = new File(fileName);
+
+        if (file.exists()) {
+            if (!file.canRead()) {
+                return new FileStatus("File not readable");
+            }
+            if (!file.canWrite()) {
+                return new FileStatus("File not writable");
+            }
+            long length = file.length();
+            if (length % HardDriveData.SECTOR_SIZE != 0) {
+                return new FileStatus("Size not multiple of 512");
+            }
+            int sectorCount = (int) (length / HardDriveData.SECTOR_SIZE);
+            return new FileStatus(sectorCount);
+        } else {
+            File parent = file.getParentFile();
+            if (parent == null) {
+                parent = file.getAbsoluteFile().getParentFile();
+            }
+
+            if (parent != null && parent.exists() && parent.isDirectory() && parent.canWrite()) {
+                return new FileStatus(true);
+            } else {
+                return new FileStatus("Cannot create file (no write permission)");
+            }
+        }
+    }
+
+    private static class FileStatus {
+        private final boolean valid;
+        private final boolean willBeCreated;
+        private final String errorMessage;
+        private final int sectorCount;
+
+        public FileStatus(int sectorCount) {
+            this.valid = true;
+            this.willBeCreated = false;
+            this.errorMessage = null;
+            this.sectorCount = sectorCount;
+        }
+
+        public FileStatus(boolean willBeCreated) {
+            this.valid = true;
+            this.willBeCreated = willBeCreated;
+            this.errorMessage = null;
+            this.sectorCount = 0;
+        }
+
+        public FileStatus(String errorMessage) {
+            this.valid = false;
+            this.willBeCreated = false;
+            this.errorMessage = errorMessage;
+            this.sectorCount = 0;
+        }
+
+        public boolean isValid() {
+            return valid;
+        }
+
+        public boolean willBeCreated() {
+            return willBeCreated;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public int getSectorCount() {
+            return sectorCount;
         }
     }
 
     @Override
     public void propagate(InstanceState state) {
+        String fileName = state.getAttributeValue(FILE_NAME_ATTR);
         HardDriveData data = (HardDriveData) state.getData();
-        if (data == null) {
-            data = new HardDriveData();
-            state.setData(data);
-        }
 
+        if (data == null) {
+            data = new HardDriveData(fileName);
+            state.setData(data);
+        } else if (!data.getFilePath().equals(fileName)) {
+            data.setFilePath(fileName);
+        }
         Value reset = state.getPortValue(RESET);
         if (reset == Value.TRUE) {
             data.reset();
@@ -262,8 +406,8 @@ public class HardDrive extends InstanceFactory {
     }
 
 
-    @Override
-    public HardDriveData clone() {
-        return new HardDriveData();
-    }
+    //@Override
+   // public HardDriveData clone() {
+    //    return new HardDriveData(filePath);
+    //}
 }

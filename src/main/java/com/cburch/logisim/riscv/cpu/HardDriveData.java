@@ -7,8 +7,9 @@ import java.util.Arrays;
 
 public class HardDriveData implements InstanceData, Cloneable {
     public static final int SECTOR_SIZE = 512;
-    private static final String FILE_PATH = "harddrive.bin";
-
+    private static final String FILE_PATH = "C:\\Users\\vltet\\IdeaProjects\\logisim-evolution-ucd\\circuits\\testFileSystem\\test_dir_drive.bin";  //temporary
+    private String filePath;
+    private String errorMessage;
     public static final int REG_COMMAND = 0x0;
     public static final int REG_MEM_ADDR = 0x4;
     public static final int REG_SECTOR_ADDR = 0x8;
@@ -24,7 +25,7 @@ public class HardDriveData implements InstanceData, Cloneable {
     public static final int STATUS_BUSY = 0x1;
     public static final int STATUS_ERROR = 0x2;
 
-    private final RandomAccessFile file;
+    private RandomAccessFile file;
     private byte[] buffer = new byte[SECTOR_SIZE];
     private int currentSector = -1;
     boolean prevClock = false;
@@ -43,9 +44,21 @@ public class HardDriveData implements InstanceData, Cloneable {
     private int result = 0;
     private int numSectors = 0;
 
-    public HardDriveData() {
+    public HardDriveData(String filePath) {
+        this.filePath = filePath;
         try {
-            file = new RandomAccessFile(FILE_PATH, "rw");
+            File f = new File(filePath);
+
+            if (!f.exists()) {
+                int defaultNumSectors = 1024;
+                long totalBytes = (long) defaultNumSectors * SECTOR_SIZE;
+
+                try (RandomAccessFile raf = new RandomAccessFile(f, "rw")) {
+                    raf.setLength(totalBytes);
+                }
+            }
+
+            file = new RandomAccessFile(f, "rw");
             numSectors = (int) (file.length() / SECTOR_SIZE);
         } catch (IOException e) {
             throw new RuntimeException("Cannot open disk file", e);
@@ -144,10 +157,10 @@ public class HardDriveData implements InstanceData, Cloneable {
         }
 
 
-        int word = ((dmaBuffer[dmaPosition] & 0xFF) << 24)
-                | ((dmaBuffer[dmaPosition+1] & 0xFF) << 16)
-                | ((dmaBuffer[dmaPosition+2] & 0xFF) << 8)
-                | (dmaBuffer[dmaPosition+3] & 0xFF);
+        int word = ((dmaBuffer[dmaPosition] & 0xFF))
+                | ((dmaBuffer[dmaPosition+1] & 0xFF) << 8)
+                | ((dmaBuffer[dmaPosition+2] & 0xFF) << 16)
+                | ((dmaBuffer[dmaPosition+3] & 0xFF) << 24);
 
         return Value.createKnown(BitWidth.create(32), word);
     }
@@ -156,10 +169,11 @@ public class HardDriveData implements InstanceData, Cloneable {
         if (dmaPosition >= SECTOR_SIZE) return;
 
         long word = data.toLongValue();
-        dmaBuffer[dmaPosition] = (byte) (word >> 24);
-        dmaBuffer[dmaPosition+1] = (byte) (word >> 16);
-        dmaBuffer[dmaPosition+2] = (byte) (word >> 8);
-        dmaBuffer[dmaPosition+3] = (byte) word;
+        dmaBuffer[dmaPosition] = (byte) (word);
+        dmaBuffer[dmaPosition+1] = (byte) (word >> 8);
+        dmaBuffer[dmaPosition+2] = (byte) (word >> 16);
+        dmaBuffer[dmaPosition+3] = (byte) (word >> 24);
+
 
         dmaPosition += 4;
         dmaMemoryAddress += 4;
@@ -189,17 +203,29 @@ public class HardDriveData implements InstanceData, Cloneable {
 
 
     private void loadSector(int sector) throws IOException {
+        if (file == null) {
+            throw new IOException("File not open");
+        }
         if (sector == currentSector) return;
 
-        file.seek(sector * SECTOR_SIZE);
-        file.readFully(buffer);
+        long pos = (long) sector * SECTOR_SIZE;
+        if (pos >= file.length()) {
+            Arrays.fill(buffer, (byte) 0);
+        } else {
+            file.seek(pos);
+            file.readFully(buffer);
+        }
         currentSector = sector;
     }
 
     private void flushBuffer() {
         try {
-            file.seek(currentSector * SECTOR_SIZE);
+            long pos = (long) currentSector * SECTOR_SIZE;
+            file.seek(pos);
             file.write(buffer);
+            if (pos + SECTOR_SIZE > file.length()) {
+                file.setLength(pos + SECTOR_SIZE);
+            }
         } catch (IOException e) {
             status |= STATUS_ERROR;
             result = 1;
@@ -244,8 +270,32 @@ public class HardDriveData implements InstanceData, Cloneable {
 
 
 
+    public String getFilePath() {
+        return filePath;
+    }
 
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
+        try {
+            File f = new File(filePath);
+            if (!f.exists()) {
+                int defaultNumSectors = 32;
+                long totalBytes = (long) defaultNumSectors * SECTOR_SIZE;
 
+                try (RandomAccessFile raf = new RandomAccessFile(f, "rw")) {
+                    raf.setLength(totalBytes);
+                }
+            }
+
+            file = new RandomAccessFile(f, "rw");
+            numSectors = (int) (file.length() / SECTOR_SIZE);
+            errorMessage = null;
+        } catch (IOException e) {
+            errorMessage = e.getMessage();
+            numSectors = 0;
+            file = null;
+        }
+    }
 
 
     @Override
