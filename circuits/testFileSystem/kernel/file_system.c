@@ -131,70 +131,64 @@ int fs_chdir(const char *path) {
 
 
 void normalize_path(const char *src, char *dst) {
-    if (!src || !dst) return;
-
     char full[MAX_PATH_LEN];
     char parts[MAX_PATH_DEPTH][MAX_NAME_LEN];
     int depth = 0;
 
-    char *f = full;
-    int remaining = MAX_PATH_LEN - 1;
-
     if (src[0] == '/') {
-        const char *s = src;
-        while (*s && remaining--) *f++ = *s++;
-        *f = '\0';
+        strncpy(full, src, MAX_PATH_LEN - 1);
+        full[MAX_PATH_LEN - 1] = '\0';
     } else {
-        const char *p = current_path;
-        while (*p && remaining--) *f++ = *p++;
-        if (f > full && f[-1] != '/' && remaining--) *f++ = '/';
-        const char *s = src;
-        while (*s && remaining--) *f++ = *s++;
-        *f = '\0';
+        full[0] = '\0';
+        strncpy(full, current_path, MAX_PATH_LEN - 1);
+        full[MAX_PATH_LEN - 1] = '\0';
+        int len = strlen(full);
+        if (len > 0 && full[len - 1] != '/' && len < MAX_PATH_LEN - 1) {
+            full[len] = '/';
+            full[len + 1] = '\0';
+        }
+        if (strlen(full) + strlen(src) < MAX_PATH_LEN) {
+            strcat(full, src);
+        }
     }
 
     const char *p = full;
     while (*p && depth < MAX_PATH_DEPTH) {
         while (*p == '/') p++;
         if (!*p) break;
-
-        const char *start = p;
+        const char *s = p;
         while (*p && *p != '/') p++;
-        int len = p - start;
+        int len = p - s;
         if (len <= 0) continue;
         if (len >= MAX_NAME_LEN) len = MAX_NAME_LEN - 1;
+        char tmp[MAX_NAME_LEN];
+        memcpy(tmp, s, len);
+        tmp[len] = '\0';
 
-        for (int i = 0; i < len; i++)
-            parts[depth][i] = start[i];
-        parts[depth][len] = '\0';
-
-        if (len == 1 && parts[depth][0] == '.') {
-        } else if (len == 2 && parts[depth][0] == '.' && parts[depth][1] == '.') {
+        if (strcmp(tmp, ".") == 0) continue;
+        if (strcmp(tmp, "..") == 0) {
             if (depth > 0) depth--;
         } else {
+            strcpy(parts[depth], tmp);
             depth++;
         }
-
-        if (*p == '/') p++;
     }
 
-    char *d = dst;
     if (depth == 0) {
-        const char *s = current_path;
-        while (*s && (d - dst) < MAX_PATH_LEN - 1)
-            *d++ = *s++;
-        *d = '\0';
+        strcpy(dst, "/");
         return;
     }
 
+    char *d = dst;
     for (int i = 0; i < depth; i++) {
         *d++ = '/';
-        const char *s = parts[i];
-        while (*s && (d - dst) < MAX_PATH_LEN - 1)
-            *d++ = *s++;
+        int len = strlen(parts[i]);
+        memcpy(d, parts[i], len);
+        d += len;
     }
     *d = '\0';
 }
+
 
 
 
@@ -874,7 +868,8 @@ int handle_device_write(struct inode *ip, const void *buf, int n, int *pos) {
         print_string(" minor=");
         print_num(ip->minor);
         print_string("\n");
-        print_num(driver_table[ip->major].write);
+        print_num((int)(uintptr_t)driver_table[ip->major].write);
+
     }
     if (ip->major < 0 || ip->major >= MAX_MAJOR || !driver_table[ip->major].write)
         return -1;

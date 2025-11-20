@@ -124,6 +124,8 @@ static int setup_shell(void) {
 
 
 void main(void) {
+print_num(sizeof(struct inode));
+
     platform_print_string("Kernel starting...\n");
 
     if (fs_init() < 0) {
@@ -146,6 +148,7 @@ void main(void) {
     if (setup_shell() == 0) {
         print_string("Setting trap handler and starting shell...\n");
         set_trap_handler(trap_handler, &shell_tf);
+
         trap_ret(&shell_tf);
     }
 

@@ -125,4 +125,8 @@ int fs_getcwd(char *buf, int size);
 int fs_get_cwd_inum(void);
 void normalize_path(const char *src, char *dst);
 void truncate_inode(struct inode *ip, int inum);
+int iopen(int inum);
+int fs_lookup(int start_inum, const char *path);
+int flush_inode(int inum);
+
 #endif
