@@ -13,7 +13,6 @@ int strncmp(const char *a, const char *b, unsigned int n);
 int memcmp(const void *s1, const void *s2, unsigned int n);
 char *strcpy(char *dest, const char *src);
 char *strchr(const char *s, int c);
-char *strchr(const char *s, int c);
 char *strtok(char *str, const char *delim);
 char *strncat(char *dest, const char *src, int n);
 char *itoa(int value, char *str, int base);

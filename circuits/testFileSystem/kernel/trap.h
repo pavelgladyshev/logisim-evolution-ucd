@@ -71,7 +71,8 @@ typedef struct trap_frame trap_frame_t;
 /* writes address of the asembly language trap_handler routine into CPU's mtvec register 
  * and writes the address of the trap_frame structure into CPU's mscratch register 
  */
-void set_trap_handler(void (*trap_handler)(trap_frame_t *),trap_frame_t *trap_frame);
+void set_trap_handler(void (*trap_handler)(), trap_frame_t *trap_frame);
+
 
 /* Functions to read and write mie Status and Control Register from C program*/
 void set_mie(uint32 mie_value);

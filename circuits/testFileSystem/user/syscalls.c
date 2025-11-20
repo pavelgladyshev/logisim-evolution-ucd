@@ -1,5 +1,5 @@
 #include "syscall.h"
-
+#include "utils.h"
 static inline int do_syscall(int num, int arg0, int arg1, int arg2, int arg3) {
     register int a0 asm("a0") = arg0;
     register int a1 asm("a1") = arg1;
@@ -15,9 +15,7 @@ static inline int do_syscall(int num, int arg0, int arg1, int arg2, int arg3) {
     return a0;
 }
 
-struct dirent {
-    char name[32];
-};
+
 
 int sys_open(const char *path, int flags) {
     return do_syscall(SYS_OPEN, (int)path, flags, 0, 0);

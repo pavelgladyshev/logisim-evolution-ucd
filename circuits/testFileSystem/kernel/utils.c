@@ -1,3 +1,4 @@
+#include "utils.h"
 #ifndef WINDOWS
 int strlen(const char *s) {
 
