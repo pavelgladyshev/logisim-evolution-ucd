@@ -124,12 +124,11 @@ static int setup_shell(void) {
 
 
 void main(void) {
-print_num(sizeof(struct inode));
 
     platform_print_string("Kernel starting...\n");
 
     if (fs_init() < 0) {
-        platform_print_string("Failed to initialize filesystem\n");
+        platform_print_string("Failed to initialize filesystem (check hard_drive.bin path and its slashes/backslashes in hard drive component)\n");
         return;
     }
     console_init();

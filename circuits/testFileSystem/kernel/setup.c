@@ -178,11 +178,16 @@ static void create_root_directory(void) {
     inodes[ROOT_INODE_NUMBER].size = 2 * sizeof(struct dirent);
     flush_inode(ROOT_INODE_NUMBER);
 
-    struct dirent dots[2] = {
-        { ROOT_INODE_NUMBER, "." },
-        { ROOT_INODE_NUMBER, ".."}
-    };
-    write_block(block_num, dots);
+    uint8_t block[BLOCK_SIZE];
+    memset(block, 0, BLOCK_SIZE);
+
+    struct dirent *d = (struct dirent *)block;
+    d[0].inum = ROOT_INODE_NUMBER;
+    strcpy(d[0].name, ".");
+    d[1].inum = ROOT_INODE_NUMBER;
+    strcpy(d[1].name, "..");
+
+    write_block(block_num, block);
 }
 
 static int create_file(const char* filename) {
