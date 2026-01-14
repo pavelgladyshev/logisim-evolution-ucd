@@ -139,7 +139,7 @@ public class ArithmeticInstruction {
             }
         }
         // Signed Overflow (−2^XLEN−1, is divided by −1):
-        if (rs1 == (Math.pow(-2,31)) && rs2 == -1) {
+        if (rs1 == (long) Integer.MIN_VALUE && rs2 == -1) {
             // div by zero
             if(ir.func3() == 0x4) {
                 hartData.setX(ir.rd(), rs1);
