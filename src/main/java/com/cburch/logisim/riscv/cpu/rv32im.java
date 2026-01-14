@@ -14,8 +14,6 @@ import com.cburch.logisim.instance.*;
 import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
-import java.util.Arrays;
-
 import static com.cburch.logisim.riscv.cpu.CpuDrawSupport.*;
 import static com.cburch.logisim.riscv.Strings.S;
 import static com.cburch.logisim.riscv.cpu.HardDrive.*;
@@ -35,6 +33,16 @@ public class rv32im extends InstanceFactory {
   public static final String _ID = "RV32IM CPU";
 
   static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
+
+  // Cached byte enable patterns to avoid array allocation on every cycle
+  private static final Value[] BE_NONE = {Value.FALSE, Value.FALSE, Value.FALSE, Value.FALSE};
+  private static final Value[] BE_ALL = {Value.TRUE, Value.TRUE, Value.TRUE, Value.TRUE};
+  private static final Value[] BE_BYTE_0 = {Value.TRUE, Value.FALSE, Value.FALSE, Value.FALSE};
+  private static final Value[] BE_BYTE_1 = {Value.FALSE, Value.TRUE, Value.FALSE, Value.FALSE};
+  private static final Value[] BE_BYTE_2 = {Value.FALSE, Value.FALSE, Value.TRUE, Value.FALSE};
+  private static final Value[] BE_BYTE_3 = {Value.FALSE, Value.FALSE, Value.FALSE, Value.TRUE};
+  private static final Value[] BE_HALF_0 = {Value.TRUE, Value.TRUE, Value.FALSE, Value.FALSE};
+  private static final Value[] BE_HALF_2 = {Value.FALSE, Value.FALSE, Value.TRUE, Value.TRUE};
 
   public static final int CLOCK = 0;
   public static final int RESET = 1;
@@ -251,7 +259,7 @@ public class rv32im extends InstanceFactory {
       if (cpu.getMemWrite() == Value.TRUE) {
         state.setPort(DATA, cpu.getOutputData(), 1);
       } else {
-        state.setPort(DATA, Value.createUnknown(BitWidth.create(32)), 1);
+        state.setPort(DATA, HiZ32, 1);
       }
 
       Value[] byteEnable = calculateByteEnables(cpu);
@@ -265,28 +273,27 @@ public class rv32im extends InstanceFactory {
   }
 
   private Value[] calculateByteEnables(rv32imData cpu) {
-    Value[] enables = new Value[4];
-    Arrays.fill(enables, Value.FALSE);
-
-    if (cpu.isMemoryAccessActive()) {
-      long addr = cpu.getAddress().toLongValue();
-      int width = cpu.getAccessWidth();
-      int offset = (int) (addr & 0x03);
-
-      switch (width) {
-        case 1:
-          enables[offset] = Value.TRUE;
-          break;
-        case 2:
-          enables[offset] = Value.TRUE;
-          enables[(offset + 1) % 4] = Value.TRUE;
-          break;
-        case 4:
-          Arrays.fill(enables, Value.TRUE);
-          break;
-      }
+    if (!cpu.isMemoryAccessActive()) {
+      return BE_NONE;
     }
-    return enables;
+
+    int width = cpu.getAccessWidth();
+    if (width == 4) {
+      return BE_ALL;
+    }
+
+    int offset = (int) (cpu.getAddress().toLongValue() & 0x03);
+    if (width == 1) {
+      return switch (offset) {
+        case 0 -> BE_BYTE_0;
+        case 1 -> BE_BYTE_1;
+        case 2 -> BE_BYTE_2;
+        default -> BE_BYTE_3;
+      };
+    } else if (width == 2) {
+      return (offset == 0) ? BE_HALF_0 : BE_HALF_2;
+    }
+    return BE_NONE;
   }
 
 }
