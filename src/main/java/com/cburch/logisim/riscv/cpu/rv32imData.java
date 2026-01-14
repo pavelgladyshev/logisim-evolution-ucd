@@ -19,8 +19,8 @@ import com.cburch.logisim.riscv.cpu.gdb.DebuggerRequest;
 
 import javax.swing.*;
 import java.io.IOException;
-import java.util.Map;
-import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
 
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
@@ -80,7 +80,7 @@ public class rv32imData implements InstanceData, Cloneable {
   private GDBServer gdbServer = null;
   private DebuggerRequest debuggerRequest = null;
 
-  private Map<Long, Boolean> breakpoints;
+  private Set<Long> breakpoints;
   private boolean breakpointsEnabled;
 
   /** Memory cache */
@@ -116,7 +116,7 @@ public class rv32imData implements InstanceData, Cloneable {
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
 
-    this.breakpoints = new HashMap<>();
+    this.breakpoints = new HashSet<>();
     this.breakpointsEnabled = true;
   }
 
@@ -479,7 +479,7 @@ public class rv32imData implements InstanceData, Cloneable {
 
   // Breakpoint handling
   public void setBreakpoint(long address) {
-    breakpoints.put(address, true);
+    breakpoints.add(address);
   }
 
   public void removeBreakpoint(long address) {
@@ -491,7 +491,7 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   public boolean isBreakpointHit() {
-    return breakpointsEnabled && breakpoints.containsKey(pc.get());
+    return breakpointsEnabled && breakpoints.contains(pc.get());
   }
 
 }
