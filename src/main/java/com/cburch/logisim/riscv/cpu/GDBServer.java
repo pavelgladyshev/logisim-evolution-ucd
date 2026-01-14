@@ -34,23 +34,34 @@ public class GDBServer implements Runnable {
 
     public void stopGDBServer() {
         shouldRun = false;
-        if (null != serverSocket) {
+
+        // Close client socket if connected
+        if (socket != null && !socket.isClosed()) {
+            try {
+                socket.close();
+            } catch (IOException ex) {
+                logger.info("Error closing client socket: " + ex.toString());
+            }
+        }
+
+        // Close server socket
+        if (serverSocket != null && !serverSocket.isClosed()) {
             try {
                 serverSocket.close();
             } catch (IOException ex) {
-                //TODO inform user / log error info
-                logger.info(ex.toString());
+                logger.info("Error closing server socket: " + ex.toString());
             }
         }
-        if (null != thread) {
-            while (thread.isAlive()) {
-                try {
-                    Thread.sleep(10);
-                } catch(InterruptedException ex) {
-                    continue;
-                }
+
+        // Interrupt and wait for thread to finish
+        if (thread != null) {
+            thread.interrupt();
+            try {
+                thread.join(1000); // Wait up to 1 second
+            } catch (InterruptedException ex) {
+                logger.info("Interrupted while waiting for GDB server thread to stop");
             }
-        };
+        }
     }
 
     public void setDebuggerResponse(String response) {
