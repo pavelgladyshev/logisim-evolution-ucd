@@ -24,11 +24,11 @@ public class MemoryCache {
     public boolean isValid(long addr) {
         int idx = index(addr);
         boolean hit = valid[idx] && tags[idx] == addr;
-        if (hit) {
-            hitCount++;
-        } else {
-            missCount++;
-        }
+        // if (hit) {
+        //     hitCount++;
+        // } else {
+        //     missCount++;
+        // }
         return hit;
     }
 
