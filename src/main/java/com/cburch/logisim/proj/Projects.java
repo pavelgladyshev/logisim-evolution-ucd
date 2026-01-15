@@ -30,6 +30,12 @@ public final class Projects {
     @Override
     public void windowActivated(WindowEvent event) {
       mostRecentFrame = (Frame) event.getSource();
+      // Update macOS screen menu bar to use the activated window's menu bar
+      if (MacCompatibility.isSwingUsingScreenMenuBar()) {
+        // Force re-set the menu bar to ensure it's the active screen menu bar
+        // and keyboard accelerators work properly
+        mostRecentFrame.setJMenuBar(mostRecentFrame.getLogisimMenuBar());
+      }
     }
 
     @Override
