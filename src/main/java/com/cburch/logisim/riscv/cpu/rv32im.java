@@ -200,8 +200,10 @@ public class rv32im extends InstanceFactory {
 
     if (reset == Value.TRUE) {
       long resetAddr = state.getAttributeValue(ATTR_RESET_ADDR);
-      cpuState.reset(resetAddr);
-      cpuState.setCpuState(rv32imData.CPUState.RUNNING);
+      int port = state.getAttributeValue(ATTR_TCP_PORT);
+      boolean gdbServerRunning = state.getAttributeValue(ATTR_GDB_SERVER_RUNNING);
+      cpuState.reset(resetAddr, port, gdbServerRunning);
+      cpuState.setCpuState(gdbServerRunning ? rv32imData.CPUState.STOPPED : rv32imData.CPUState.RUNNING);
       updateOutputSignals(state, cpuState);
       return;
     }

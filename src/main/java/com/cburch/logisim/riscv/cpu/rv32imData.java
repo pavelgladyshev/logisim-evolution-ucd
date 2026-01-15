@@ -26,7 +26,7 @@ import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
 
 /** Represents the state of a cpu. */
-public class rv32imData implements InstanceData, Cloneable {
+public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
   /** The last values observed. */
   private Value lastClock;
@@ -157,6 +157,13 @@ public class rv32imData implements InstanceData, Cloneable {
     synchronized (rv32imData.class) {
       rv32imData ret = (rv32imData) state.getData();
       if (ret == null) {
+        // Before creating new data, stop any existing GDB server connection
+        // (the server object is stored as an instance attribute and persists across resets)
+        GDBServer gdbServer = (GDBServer) state.getAttributeValue(rv32im.ATTR_GDB_SERVER);
+        if (gdbServer != null) {
+          gdbServer.stopGDBServer();
+        }
+
         // If it doesn't yet exist, then we'll set it up with our default
         // values and put it into the circuit state so it can be retrieved
         // in future propagations.
@@ -164,7 +171,7 @@ public class rv32imData implements InstanceData, Cloneable {
                 state.getAttributeValue(rv32im.ATTR_TCP_PORT),
                 state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING),
                 state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING) ? CPUState.STOPPED : CPUState.RUNNING,
-                (GDBServer)state.getAttributeValue(rv32im.ATTR_GDB_SERVER));
+                gdbServer);
         state.setData(ret);
       }
       return ret;
@@ -195,8 +202,35 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   /** reset CPU state to initial values */
-  public void reset(long pcInit) {
+  public void reset(long pcInit, int port, boolean startGDBServer) {
     pc.set(pcInit);
+    cache.invalidate();
+
+    // Reset debugger-related state
+    synchronized (this) {
+      debuggerRequest = null;
+    }
+
+    // Stop and restart GDB server to force client reconnection
+    if (gdbServer != null) {
+      gdbServer.stopGDBServer();
+      if (startGDBServer) {
+        try {
+          gdbServer.startGDBServer(port, this);
+        } catch (IOException ex) {
+          String message = "Cannot start GDB server at port " + port;
+          SwingUtilities.invokeLater(
+                  () -> OptionPane.showMessageDialog(null, message,
+                          "GDB Server",
+                          OptionPane.ERROR_MESSAGE));
+          gdbServer = null;
+        }
+      }
+    }
+
+    // Reset CPU execution state
+    waitingForMemory = false;
+    fetchNextInstruction();
   }
 
   public void update(long dataIn, long timerInterruptRequest, long externalInterruptRequest, long waitRequest) {
@@ -492,6 +526,18 @@ public class rv32imData implements InstanceData, Cloneable {
 
   public boolean isBreakpointHit() {
     return breakpointsEnabled && breakpoints.contains(pc.get());
+  }
+
+  /**
+   * Closes resources associated with this CPU state, including stopping the GDB server.
+   * Called when simulation is reset or the component is removed.
+   */
+  @Override
+  public void close() {
+    if (gdbServer != null) {
+      gdbServer.stopGDBServer();
+      gdbServer = null;
+    }
   }
 
 }
