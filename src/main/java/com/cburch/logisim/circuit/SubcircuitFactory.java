@@ -413,10 +413,13 @@ public class SubcircuitFactory extends InstanceFactory {
     final var attrs = (CircuitAttributes) painter.getAttributeSet();
     if (attrs.getValue(CircuitAttributes.APPEARANCE_ATTR).equals(CircuitAttributes.APPEAR_CLASSIC)) {
       paintClasicIcon(g2);
-    else if (attrs
+    } else if (attrs
             .getValue(CircuitAttributes.APPEARANCE_ATTR)
-            .equals(CircuitAttributes.APPEAR_FPGA)) paintHCIcon(g2);
-    else paintEvolutionIcon(g2);
+            .equals(CircuitAttributes.APPEAR_FPGA)) {
+      paintHCIcon(g2);
+    } else {
+      paintEvolutionIcon(g2);
+    }
     g2.dispose();
   }
 
