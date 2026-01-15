@@ -1,12 +1,16 @@
-package com.cburch.logisim.riscv.cpu;
+package com.cburch.logisim.riscv.blockstorage;
 
 import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.InstanceData;
 import java.io.*;
 import java.util.Arrays;
 
-public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
-    public static final int SECTOR_SIZE = 512;
+public class BlockStorageData implements InstanceData, Cloneable, AutoCloseable {
+    public static final int BLOCK_SIZE = 512;
+
+    // High-impedance values for tri-state outputs
+    public static final Value HI_Z = Value.createUnknown(BitWidth.create(1));
+    public static final Value HI_Z_32 = Value.createUnknown(BitWidth.create(32));
 
     // Cached BitWidth to avoid repeated creation
     private static final BitWidth BIT_WIDTH_32 = BitWidth.create(32);
@@ -15,47 +19,47 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
     private String errorMessage;
     public static final int REG_COMMAND = 0x0;
     public static final int REG_MEM_ADDR = 0x4;
-    public static final int REG_SECTOR_ADDR = 0x8;
+    public static final int REG_BLOCK_ADDR = 0x8;
     public static final int REG_STATUS = 0xC;
     public static final int REG_RESULT = 0x10;
 
     // Command values
     public static final int CMD_NOP = 0;
-    public static final int CMD_READ_SECTOR = 1;
-    public static final int CMD_WRITE_SECTOR = 2;
+    public static final int CMD_READ_BLOCK = 1;
+    public static final int CMD_WRITE_BLOCK = 2;
 
     // Status flags
     public static final int STATUS_BUSY = 0x1;
     public static final int STATUS_ERROR = 0x2;
 
     private RandomAccessFile file;
-    private byte[] buffer = new byte[SECTOR_SIZE];
-    private int currentSector = -1;
+    private byte[] buffer = new byte[BLOCK_SIZE];
+    private int currentBlock = -1;
     boolean prevClock = false;
 
     // DMA Control
     public enum DmaState { IDLE, READING, WRITING, BUS_REQUEST_READING, BUS_REQUEST_WRITING }
     public DmaState dmaState = DmaState.IDLE;
-    private byte[] dmaBuffer = new byte[SECTOR_SIZE];
+    private byte[] dmaBuffer = new byte[BLOCK_SIZE];
     private int dmaPosition = 0;
     private int dmaMemoryAddress = 0;
 
     private int command = CMD_NOP;
     private int memoryAddress = 0;
-    private int sectorAddress = 0;
+    private int blockAddress = 0;
     private int status = 0;
     private int result = 0;
-    private int numSectors = 0;
+    private int numBlocks = 0;
     private long fileLength = 0;  // Cached file length to avoid repeated I/O
 
-    public HardDriveData(String filePath) {
+    public BlockStorageData(String filePath) {
         this.filePath = filePath;
         try {
             File f = new File(filePath);
 
             if (!f.exists()) {
-                int defaultNumSectors = 1024;
-                long totalBytes = (long) defaultNumSectors * SECTOR_SIZE;
+                int defaultNumBlocks = 1024;
+                long totalBytes = (long) defaultNumBlocks * BLOCK_SIZE;
 
                 try (RandomAccessFile raf = new RandomAccessFile(f, "rw")) {
                     raf.setLength(totalBytes);
@@ -64,9 +68,9 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
 
             file = new RandomAccessFile(f, "rw");
             fileLength = file.length();
-            numSectors = (int) (fileLength / SECTOR_SIZE);
+            numBlocks = (int) (fileLength / BLOCK_SIZE);
         } catch (IOException e) {
-            throw new RuntimeException("Cannot open disk file", e);
+            throw new RuntimeException("Cannot open storage file", e);
         }
     }
 
@@ -75,10 +79,10 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
         dmaPosition = 0;
         command = CMD_NOP;
         memoryAddress = 0;
-        sectorAddress = 0;
+        blockAddress = 0;
         status = 0;
         result = 0;
-        currentSector = -1;
+        currentBlock = -1;
         Arrays.fill(buffer, (byte)0);
         Arrays.fill(dmaBuffer, (byte)0);
     }
@@ -94,8 +98,8 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
                 memoryAddress = (int) value;
                 break;
 
-            case REG_SECTOR_ADDR:
-                sectorAddress = (int) value;
+            case REG_BLOCK_ADDR:
+                blockAddress = (int) value;
                 break;
         }
     }
@@ -108,8 +112,8 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
             case REG_MEM_ADDR:
                 return Value.createKnown(32, memoryAddress);
 
-            case REG_SECTOR_ADDR:
-                return Value.createKnown(32, sectorAddress);
+            case REG_BLOCK_ADDR:
+                return Value.createKnown(32, blockAddress);
 
             case REG_STATUS:
                 return Value.createKnown(32, status);
@@ -128,18 +132,18 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
 
         try {
             switch (command) {
-                case CMD_READ_SECTOR:
-                    if (sectorAddress >= numSectors) throw new IOException("Invalid sector");
-                    loadSector(sectorAddress);
-                    System.arraycopy(buffer, 0, dmaBuffer, 0, SECTOR_SIZE);
+                case CMD_READ_BLOCK:
+                    if (blockAddress >= numBlocks) throw new IOException("Invalid block");
+                    loadBlock(blockAddress);
+                    System.arraycopy(buffer, 0, dmaBuffer, 0, BLOCK_SIZE);
                     dmaState = DmaState.BUS_REQUEST_READING;
                     dmaPosition = 0;
                     dmaMemoryAddress = memoryAddress;
                     break;
 
-                case CMD_WRITE_SECTOR:
-                    if (sectorAddress >= numSectors) throw new IOException("Invalid sector");
-                    loadSector(sectorAddress);
+                case CMD_WRITE_BLOCK:
+                    if (blockAddress >= numBlocks) throw new IOException("Invalid block");
+                    loadBlock(blockAddress);
                     dmaState = DmaState.BUS_REQUEST_WRITING;
                     dmaPosition = 0;
                     dmaMemoryAddress = memoryAddress;
@@ -152,12 +156,11 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
         } catch (IOException e) {
             status |= STATUS_ERROR;
             result = 1;
-            //dmaState = DmaState.IDLE;
         }
     }
 
     public Value getCurrentDmaWord() {
-        if (dmaPosition >= SECTOR_SIZE - 3) {
+        if (dmaPosition >= BLOCK_SIZE - 3) {
             return Value.createError(BIT_WIDTH_32);
         }
 
@@ -170,7 +173,7 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
     }
 
     public void writeNextDmaWord(Value data) {
-        if (dmaPosition >= SECTOR_SIZE) return;
+        if (dmaPosition >= BLOCK_SIZE) return;
 
         long word = data.toLongValue();
         dmaBuffer[dmaPosition] = (byte) (word);
@@ -182,8 +185,8 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
         dmaPosition += 4;
         dmaMemoryAddress += 4;
 
-        if (dmaPosition >= SECTOR_SIZE) {
-            System.arraycopy(dmaBuffer, 0, buffer, 0, SECTOR_SIZE);
+        if (dmaPosition >= BLOCK_SIZE) {
+            System.arraycopy(dmaBuffer, 0, buffer, 0, BLOCK_SIZE);
             flushBuffer();
             finishTransfer();
         }
@@ -206,32 +209,32 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
 
 
 
-    private void loadSector(int sector) throws IOException {
+    private void loadBlock(int block) throws IOException {
         if (file == null) {
             throw new IOException("File not open");
         }
-        if (sector == currentSector) return;
+        if (block == currentBlock) return;
 
-        long pos = (long) sector * SECTOR_SIZE;
+        long pos = (long) block * BLOCK_SIZE;
         if (pos >= fileLength) {
             Arrays.fill(buffer, (byte) 0);
         } else {
             file.seek(pos);
             file.readFully(buffer);
         }
-        currentSector = sector;
+        currentBlock = block;
     }
 
     private void flushBuffer() {
         try {
-            long pos = (long) currentSector * SECTOR_SIZE;
+            long pos = (long) currentBlock * BLOCK_SIZE;
             file.seek(pos);
             file.write(buffer);
-            long newLength = pos + SECTOR_SIZE;
+            long newLength = pos + BLOCK_SIZE;
             if (newLength > fileLength) {
                 file.setLength(newLength);
                 fileLength = newLength;
-                numSectors = (int) (fileLength / SECTOR_SIZE);
+                numBlocks = (int) (fileLength / BLOCK_SIZE);
             }
         } catch (IOException e) {
             status |= STATUS_ERROR;
@@ -247,10 +250,10 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
         prevClock = clockState;
     }
 
-    public Value readSectorWord(int sector, int offset, boolean[] byteEnables) {
+    public Value readBlockWord(int block, int offset, boolean[] byteEnables) {
         try {
-            if (sector != currentSector) {
-                loadSector(sector);
+            if (block != currentBlock) {
+                loadBlock(block);
             }
 
             int value = 0;
@@ -271,7 +274,7 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
     public boolean advanceDma() {
         dmaPosition += 4;
         dmaMemoryAddress += 4;
-        return dmaPosition >= SECTOR_SIZE;
+        return dmaPosition >= BLOCK_SIZE;
     }
 
 
@@ -291,8 +294,8 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
 
             File f = new File(filePath);
             if (!f.exists()) {
-                int defaultNumSectors = 32;
-                long totalBytes = (long) defaultNumSectors * SECTOR_SIZE;
+                int defaultNumBlocks = 32;
+                long totalBytes = (long) defaultNumBlocks * BLOCK_SIZE;
 
                 try (RandomAccessFile raf = new RandomAccessFile(f, "rw")) {
                     raf.setLength(totalBytes);
@@ -301,12 +304,12 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
 
             file = new RandomAccessFile(f, "rw");
             fileLength = file.length();
-            numSectors = (int) (fileLength / SECTOR_SIZE);
-            currentSector = -1;  // Invalidate sector cache
+            numBlocks = (int) (fileLength / BLOCK_SIZE);
+            currentBlock = -1;  // Invalidate block cache
             errorMessage = null;
         } catch (IOException e) {
             errorMessage = e.getMessage();
-            numSectors = 0;
+            numBlocks = 0;
             fileLength = 0;
             file = null;
         }
@@ -329,12 +332,12 @@ public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
     }
 
     @Override
-    public HardDriveData clone() {
+    public BlockStorageData clone() {
         try {
-            HardDriveData clone = (HardDriveData) super.clone();
-            clone.buffer = Arrays.copyOf(buffer, buffer.length);
-            clone.dmaBuffer = Arrays.copyOf(dmaBuffer, dmaBuffer.length);
-            return clone;
+            BlockStorageData copy = (BlockStorageData) super.clone();
+            copy.buffer = Arrays.copyOf(buffer, buffer.length);
+            copy.dmaBuffer = Arrays.copyOf(dmaBuffer, dmaBuffer.length);
+            return copy;
         } catch (CloneNotSupportedException e) {
             throw new AssertionError();
         }

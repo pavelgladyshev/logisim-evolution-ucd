@@ -16,7 +16,7 @@ import com.cburch.logisim.util.GraphicsUtil;
 import java.awt.*;
 import static com.cburch.logisim.riscv.cpu.CpuDrawSupport.*;
 import static com.cburch.logisim.riscv.Strings.S;
-import static com.cburch.logisim.riscv.cpu.HardDrive.*;
+import static com.cburch.logisim.riscv.blockstorage.BlockStorage.*;
 import static com.cburch.logisim.riscv.cpu.rv32imData.HiZ;
 
 /**

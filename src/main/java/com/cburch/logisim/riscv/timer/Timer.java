@@ -18,14 +18,14 @@ public class Timer extends InstanceFactory {
      */
     public static final String _ID = "Timer";
 
+    // Port indices
     public static final int ADDRESS = 0;
-    public static final int STORE = 1;
-    public static final int LOAD = 2;
-    public static final int DATA_IN = 3;
+    public static final int READ_ENABLE = 1;
+    public static final int WRITE_ENABLE = 2;
+    public static final int DATA = 3;
     public static final int INTERRUPT_OUT = 4;
     public static final int RESET = 5;
     public static final int CLOCK = 6;
-    public static final int DATA_OUT = 7;
 
     public static final long RISCV_MTIMECMP_ADDR_DEFAULT = (0x2000000 + 0x4000);
 
@@ -41,31 +41,35 @@ public class Timer extends InstanceFactory {
             Attributes.forBoolean("hexRegisters", S.getter("timerHexRegisters"));
 
 
-    static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
+    private static final Value HI_Z_32 = Value.createUnknown(BitWidth.create(32));
 
     public Timer() {
         super(_ID);
         setOffsetBounds(Bounds.create(-40, -50, 90, 100));
 
-        Port[] ps = new Port[8];
-        ps[ADDRESS] = new Port(-40, -10, Port.INPUT, 32);
-        ps[STORE] = new Port(-40, 0, Port.INPUT, 1);
-        ps[LOAD] = new Port(-40, 10, Port.INPUT, 1);
-        ps[DATA_IN] = new Port(-40, 20, Port.INPUT, 32);
-        ps[INTERRUPT_OUT] = new Port(50, 20, Port.OUTPUT, 1);
-        ps[RESET] = new Port(-10, 50, Port.INPUT, 1);
-        ps[CLOCK] = new Port(10, 50, Port.INPUT, 1);
-        ps[DATA_OUT] = new Port(50, 0, Port.OUTPUT, 32);
+        Port[] ports = new Port[7];
+        ports[ADDRESS] = new Port(-40, -10, Port.INPUT, 32);
+        ports[ADDRESS].setToolTip(S.getter("timerAddress"));
 
-        ps[ADDRESS].setToolTip(S.getter("timerAddressIn"));
-        ps[STORE].setToolTip(S.getter("timerStore"));
-        ps[LOAD].setToolTip(S.getter("timerLoad"));
-        ps[DATA_IN].setToolTip(S.getter("timerDataIn"));
-        ps[INTERRUPT_OUT].setToolTip(S.getter("timerInterruptRequestOut"));
-        ps[RESET].setToolTip(S.getter("timerReset"));
-        ps[CLOCK].setToolTip(S.getter("timerClock"));
-        ps[DATA_OUT].setToolTip(S.getter("timerDataOut"));
-        setPorts(ps);
+        ports[READ_ENABLE] = new Port(-40, 0, Port.INPUT, 1);
+        ports[READ_ENABLE].setToolTip(S.getter("timerReadEnable"));
+
+        ports[WRITE_ENABLE] = new Port(-40, 10, Port.INPUT, 1);
+        ports[WRITE_ENABLE].setToolTip(S.getter("timerWriteEnable"));
+
+        ports[DATA] = new Port(50, 0, Port.INOUT, 32);
+        ports[DATA].setToolTip(S.getter("timerData"));
+
+        ports[INTERRUPT_OUT] = new Port(50, 20, Port.OUTPUT, 1);
+        ports[INTERRUPT_OUT].setToolTip(S.getter("timerInterruptRequestOut"));
+
+        ports[RESET] = new Port(-10, 50, Port.INPUT, 1);
+        ports[RESET].setToolTip(S.getter("timerReset"));
+
+        ports[CLOCK] = new Port(10, 50, Port.INPUT, 1);
+        ports[CLOCK].setToolTip(S.getter("timerClock"));
+
+        setPorts(ports);
 
         setAttributes(
                 new Attribute[] {RISCV_MTIMECMP_ADDR, RISCV_MTIME_ADDR, ATTR_HEX_REGS},
@@ -109,39 +113,48 @@ public class Timer extends InstanceFactory {
 
     @Override
     public void propagate(InstanceState state) {
-
-        final var cur = TimerRegisters.get(state);
+        final var regs = TimerRegisters.get(state);
 
         // Check if clock signal is changing from low/false to high/true
-        final var trigger = cur.updateClock(state.getPortValue(6));
+        final var clockTriggered = regs.updateClock(state.getPortValue(CLOCK));
 
-        if(state.getPortValue(RESET) == Value.TRUE) {
-            cur.setCounter(0);
-            cur.setCounterComparator(0xffffffffL);
+        if (state.getPortValue(RESET) == Value.TRUE) {
+            regs.setCounter(0);
+            regs.setCounterComparator(0xFFFFFFFFL);
         }
 
-        if (state.getPortValue(STORE) == Value.TRUE && trigger &&
-                (state.getPortValue(ADDRESS).toLongValue() == state.getAttributeValue(RISCV_MTIMECMP_ADDR) ))  {
-            cur.setCounterComparator((state.getPortValue(DATA_IN).toLongValue()) & 0xFFFFFFFFL);
-        } else if (state.getPortValue(STORE) == Value.TRUE && trigger &&
-                (state.getPortValue(ADDRESS).toLongValue() == state.getAttributeValue(RISCV_MTIME_ADDR) ))  {
-            cur.setCounter((state.getPortValue(DATA_IN).toLongValue()) & 0xFFFFFFFFL);
+        long address = state.getPortValue(ADDRESS).toLongValue();
+        long mtimecmpAddr = state.getAttributeValue(RISCV_MTIMECMP_ADDR);
+        long mtimeAddr = state.getAttributeValue(RISCV_MTIME_ADDR);
+
+        // Handle register write on clock edge
+        if (state.getPortValue(WRITE_ENABLE) == Value.TRUE && clockTriggered) {
+            long dataValue = state.getPortValue(DATA).toLongValue() & 0xFFFFFFFFL;
+            if (address == mtimecmpAddr) {
+                regs.setCounterComparator(dataValue);
+            } else if (address == mtimeAddr) {
+                regs.setCounter(dataValue);
+            }
         }
 
-        if (state.getPortValue(LOAD) == Value.TRUE &&
-                (state.getPortValue(ADDRESS).toLongValue() == state.getAttributeValue(RISCV_MTIMECMP_ADDR) ))  {
-            state.setPort(DATA_OUT, Value.createKnown(32, cur.getCounterComparator()), 9);
-        } else if (state.getPortValue(LOAD) == Value.TRUE &&
-                (state.getPortValue(ADDRESS).toLongValue() == state.getAttributeValue(RISCV_MTIME_ADDR) ))  {
-            state.setPort(DATA_OUT, Value.createKnown(32, cur.getCounter()), 9);
+        // Handle register read (directly drives data bus when enabled)
+        if (state.getPortValue(READ_ENABLE) == Value.TRUE) {
+            if (address == mtimecmpAddr) {
+                state.setPort(DATA, Value.createKnown(32, regs.getCounterComparator()), 9);
+            } else if (address == mtimeAddr) {
+                state.setPort(DATA, Value.createKnown(32, regs.getCounter()), 9);
+            } else {
+                state.setPort(DATA, HI_Z_32, 9);
+            }
         } else {
-            state.setPort(DATA_OUT, HiZ32, 9);
+            state.setPort(DATA, HI_Z_32, 9);
         }
 
-        if (trigger) {
-            cur.setCounter((cur.getCounter() + 1) & 0x7FFFFFFFL);
+        // Increment counter on clock edge
+        if (clockTriggered) {
+            regs.setCounter((regs.getCounter() + 1) & 0x7FFFFFFFL);
 
-            if (cur.getCounter() >= cur.getCounterComparator()) {
+            if (regs.getCounter() >= regs.getCounterComparator()) {
                 state.setPort(INTERRUPT_OUT, Value.TRUE, 9);
             } else {
                 state.setPort(INTERRUPT_OUT, Value.FALSE, 9);

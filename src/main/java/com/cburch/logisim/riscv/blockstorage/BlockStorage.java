@@ -1,27 +1,27 @@
-// File: HardDrive.java
-package com.cburch.logisim.riscv.cpu;
+// File: BlockStorage.java
+package com.cburch.logisim.riscv.blockstorage;
 
 import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.*;
 import com.cburch.logisim.util.GraphicsUtil;
 import static com.cburch.logisim.riscv.Strings.S;
 import static com.cburch.logisim.riscv.cpu.CpuDrawSupport.*;
-import static com.cburch.logisim.riscv.cpu.rv32imData.HiZ;
-import static com.cburch.logisim.riscv.cpu.rv32imData.HiZ32;
+import static com.cburch.logisim.riscv.blockstorage.BlockStorageData.HI_Z;
+import static com.cburch.logisim.riscv.blockstorage.BlockStorageData.HI_Z_32;
 
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
 
-public class HardDrive extends InstanceFactory {
+public class BlockStorage extends InstanceFactory {
 
-    public static final String _ID = "Hard Drive DMA";
+    public static final String _ID = "Block Storage";
 
     // Cached Font objects to avoid creating new ones on every paint
     private static final Font TITLE_FONT = new Font("SansSerif", Font.BOLD, 20);
     private static final Font STATUS_FONT = new Font("SansSerif", Font.PLAIN, 12);
     public static final Attribute<String> FILE_NAME_ATTR =
-            Attributes.forString("file_name", S.getter("hardDriveFileName"));
+            Attributes.forString("file_name", S.getter("blockStorageFileName"));
     // Port indices
     public static final int ADDR = 0;
     public static final int DATA = 1;
@@ -40,7 +40,7 @@ public class HardDrive extends InstanceFactory {
     public static final int DMA_ADDR = 14;
 
 
-    public HardDrive() {
+    public BlockStorage() {
         super(_ID);
         setOffsetBounds(Bounds.create(-50, -50, 180, 280));
 
@@ -65,7 +65,7 @@ public class HardDrive extends InstanceFactory {
 
 
         // tooltips
-        ports[ADDR].setToolTip(    S.getter("Sector Address"));
+        ports[ADDR].setToolTip(    S.getter("Block Address"));
         ports[DATA].setToolTip(    S.getter("Data Bus"));
         ports[READ_ENABLE].setToolTip(    S.getter("Read Enable"));
         ports[WRITE_ENABLE].setToolTip(   S.getter("Write Enable"));
@@ -94,7 +94,7 @@ public class HardDrive extends InstanceFactory {
                 new Object[]{
                         "",
                         StdAttr.DEFAULT_LABEL_FONT,
-                        "hard_drive.bin"
+                        "block_storage.bin"
                 }
         );
     }
@@ -132,7 +132,7 @@ public class HardDrive extends InstanceFactory {
         GraphicsUtil.drawText(
                 graphics,
                 TITLE_FONT,
-                "Hard Drive DMA",
+                "Block Storage",
                 posX + 80,
                 posY - 127,
                 GraphicsUtil.H_CENTER,
@@ -154,7 +154,7 @@ public class HardDrive extends InstanceFactory {
                 statusText = fileName + " (Will be created)";
                 statusColor = Color.BLUE;
             } else {
-                statusText = fileName + " (" + status.getSectorCount() + " sectors)";
+                statusText = fileName + " (" + status.getBlockCount() + " blocks)";
                 statusColor = Color.BLACK;
             }
         } else {
@@ -177,23 +177,23 @@ public class HardDrive extends InstanceFactory {
         );
 
         if (painter.getShowState()) {
-            HardDriveData data = (HardDriveData) painter.getData();
+            BlockStorageData data = (BlockStorageData) painter.getData();
             if (data != null) {
                 drawHexReg(graphics, posX,       posY - 80, false,
-                        (int) data.readRegister(HardDriveData.REG_COMMAND).toLongValue(),
+                        (int) data.readRegister(BlockStorageData.REG_COMMAND).toLongValue(),
                         "Command", true);
 
                 drawHexReg(graphics, posX + 80, posY - 80, false,
-                        (int) data.readRegister(HardDriveData.REG_STATUS).toLongValue(),
+                        (int) data.readRegister(BlockStorageData.REG_STATUS).toLongValue(),
                         "Status", true);
 
                 drawHexReg(graphics, posX,posY - 40, false,
-                        (int) data.readRegister(HardDriveData.REG_MEM_ADDR).toLongValue(),
+                        (int) data.readRegister(BlockStorageData.REG_MEM_ADDR).toLongValue(),
                         "Mem Addr", true);
 
                 drawHexReg(graphics, posX + 80, posY - 40, false,
-                        (int) data.readRegister(HardDriveData.REG_SECTOR_ADDR).toLongValue(),
-                        "Sector Addr", true);
+                        (int) data.readRegister(BlockStorageData.REG_BLOCK_ADDR).toLongValue(),
+                        "Block Addr", true);
             }
         }
     }
@@ -213,11 +213,11 @@ public class HardDrive extends InstanceFactory {
                 return new FileStatus("File not writable");
             }
             long length = file.length();
-            if (length % HardDriveData.SECTOR_SIZE != 0) {
+            if (length % BlockStorageData.BLOCK_SIZE != 0) {
                 return new FileStatus("Size not multiple of 512");
             }
-            int sectorCount = (int) (length / HardDriveData.SECTOR_SIZE);
-            return new FileStatus(sectorCount);
+            int blockCount = (int) (length / BlockStorageData.BLOCK_SIZE);
+            return new FileStatus(blockCount);
         } else {
             File parent = file.getParentFile();
             if (parent == null) {
@@ -236,27 +236,27 @@ public class HardDrive extends InstanceFactory {
         private final boolean valid;
         private final boolean willBeCreated;
         private final String errorMessage;
-        private final int sectorCount;
+        private final int blockCount;
 
-        public FileStatus(int sectorCount) {
+        public FileStatus(int blockCount) {
             this.valid = true;
             this.willBeCreated = false;
             this.errorMessage = null;
-            this.sectorCount = sectorCount;
+            this.blockCount = blockCount;
         }
 
         public FileStatus(boolean willBeCreated) {
             this.valid = true;
             this.willBeCreated = willBeCreated;
             this.errorMessage = null;
-            this.sectorCount = 0;
+            this.blockCount = 0;
         }
 
         public FileStatus(String errorMessage) {
             this.valid = false;
             this.willBeCreated = false;
             this.errorMessage = errorMessage;
-            this.sectorCount = 0;
+            this.blockCount = 0;
         }
 
         public boolean isValid() {
@@ -271,18 +271,18 @@ public class HardDrive extends InstanceFactory {
             return errorMessage;
         }
 
-        public int getSectorCount() {
-            return sectorCount;
+        public int getBlockCount() {
+            return blockCount;
         }
     }
 
     @Override
     public void propagate(InstanceState state) {
         String fileName = state.getAttributeValue(FILE_NAME_ATTR);
-        HardDriveData data = (HardDriveData) state.getData();
+        BlockStorageData data = (BlockStorageData) state.getData();
 
         if (data == null) {
-            data = new HardDriveData(fileName);
+            data = new BlockStorageData(fileName);
             state.setData(data);
         } else if (!data.getFilePath().equals(fileName)) {
             data.setFilePath(fileName);
@@ -311,13 +311,13 @@ public class HardDrive extends InstanceFactory {
 
                 case BUS_REQUEST_READING:
                     if (state.getPortValue(BUS_ACK) == Value.TRUE) {
-                        data.dmaState = HardDriveData.DmaState.READING;
+                        data.dmaState = BlockStorageData.DmaState.READING;
                     }
                     break;
 
                 case BUS_REQUEST_WRITING:
                     if (state.getPortValue(BUS_ACK) == Value.TRUE) {
-                        data.dmaState = HardDriveData.DmaState.WRITING;
+                        data.dmaState = BlockStorageData.DmaState.WRITING;
                     }
                     break;
 
@@ -339,19 +339,19 @@ public class HardDrive extends InstanceFactory {
         updateControlSignals(state, data);
     }
 
-    private void updateControlSignals(InstanceState state, HardDriveData data) {
+    private void updateControlSignals(InstanceState state, BlockStorageData data) {
 
         switch (data.dmaState) {
             case IDLE:
-                state.setPort(BE0, HiZ, 1);
-                state.setPort(BE1, HiZ, 1);
-                state.setPort(BE2, HiZ, 1);
-                state.setPort(BE3, HiZ, 1);
-                state.setPort(DATA, HiZ32, 1);
-                state.setPort(BUS_REQUEST, HiZ, 1);
-                state.setPort(MEM_READ, HiZ, 1);
-                state.setPort(MEM_WRITE, HiZ, 1);
-                state.setPort(DMA_ADDR, HiZ32, 1);
+                state.setPort(BE0, HI_Z, 1);
+                state.setPort(BE1, HI_Z, 1);
+                state.setPort(BE2, HI_Z, 1);
+                state.setPort(BE3, HI_Z, 1);
+                state.setPort(DATA, HI_Z_32, 1);
+                state.setPort(BUS_REQUEST, HI_Z, 1);
+                state.setPort(MEM_READ, HI_Z, 1);
+                state.setPort(MEM_WRITE, HI_Z, 1);
+                state.setPort(DMA_ADDR, HI_Z_32, 1);
                 break;
 
             case BUS_REQUEST_READING:
@@ -384,7 +384,7 @@ public class HardDrive extends InstanceFactory {
 
 
 
-    private void handleRegisterWrite(InstanceState state, HardDriveData data, long address) {
+    private void handleRegisterWrite(InstanceState state, BlockStorageData data, long address) {
         int regOffset = (int) (address & 0xFF);
         Value dataBus = state.getPortValue(DATA);
         Value writeEnable = state.getPortValue(WRITE_ENABLE);
@@ -395,7 +395,7 @@ public class HardDrive extends InstanceFactory {
         }
     }
 
-    private void handleRegisterRead(InstanceState state, HardDriveData data, long address) {
+    private void handleRegisterRead(InstanceState state, BlockStorageData data, long address) {
         int regOffset = (int) (address & 0xFF);
         Value dataBus = state.getPortValue(DATA);
         Value writeEnable = state.getPortValue(WRITE_ENABLE);
@@ -406,10 +406,4 @@ public class HardDrive extends InstanceFactory {
             state.setPort(DATA, regValue, 1);
         }
     }
-
-
-    //@Override
-   // public HardDriveData clone() {
-    //    return new HardDriveData(filePath);
-    //}
 }
