@@ -5,9 +5,12 @@ import com.cburch.logisim.instance.InstanceData;
 import java.io.*;
 import java.util.Arrays;
 
-public class HardDriveData implements InstanceData, Cloneable {
+public class HardDriveData implements InstanceData, Cloneable, AutoCloseable {
     public static final int SECTOR_SIZE = 512;
-    private static final String FILE_PATH = "C:\\Users\\vltet\\IdeaProjects\\logisim-evolution-ucd\\circuits\\testFileSystem\\test_dir_drive.bin";  //temporary
+
+    // Cached BitWidth to avoid repeated creation
+    private static final BitWidth BIT_WIDTH_32 = BitWidth.create(32);
+
     private String filePath;
     private String errorMessage;
     public static final int REG_COMMAND = 0x0;
@@ -43,6 +46,7 @@ public class HardDriveData implements InstanceData, Cloneable {
     private int status = 0;
     private int result = 0;
     private int numSectors = 0;
+    private long fileLength = 0;  // Cached file length to avoid repeated I/O
 
     public HardDriveData(String filePath) {
         this.filePath = filePath;
@@ -59,7 +63,8 @@ public class HardDriveData implements InstanceData, Cloneable {
             }
 
             file = new RandomAccessFile(f, "rw");
-            numSectors = (int) (file.length() / SECTOR_SIZE);
+            fileLength = file.length();
+            numSectors = (int) (fileLength / SECTOR_SIZE);
         } catch (IOException e) {
             throw new RuntimeException("Cannot open disk file", e);
         }
@@ -113,7 +118,7 @@ public class HardDriveData implements InstanceData, Cloneable {
                 return Value.createKnown(32, result);
 
             default:
-                return Value.createUnknown(BitWidth.create(32));
+                return Value.createUnknown(BIT_WIDTH_32);
         }
     }
 
@@ -126,7 +131,7 @@ public class HardDriveData implements InstanceData, Cloneable {
                 case CMD_READ_SECTOR:
                     if (sectorAddress >= numSectors) throw new IOException("Invalid sector");
                     loadSector(sectorAddress);
-                    dmaBuffer = Arrays.copyOf(buffer, SECTOR_SIZE);
+                    System.arraycopy(buffer, 0, dmaBuffer, 0, SECTOR_SIZE);
                     dmaState = DmaState.BUS_REQUEST_READING;
                     dmaPosition = 0;
                     dmaMemoryAddress = memoryAddress;
@@ -153,16 +158,15 @@ public class HardDriveData implements InstanceData, Cloneable {
 
     public Value getCurrentDmaWord() {
         if (dmaPosition >= SECTOR_SIZE - 3) {
-            return Value.createError(BitWidth.create(32));
+            return Value.createError(BIT_WIDTH_32);
         }
-
 
         int word = ((dmaBuffer[dmaPosition] & 0xFF))
                 | ((dmaBuffer[dmaPosition+1] & 0xFF) << 8)
                 | ((dmaBuffer[dmaPosition+2] & 0xFF) << 16)
                 | ((dmaBuffer[dmaPosition+3] & 0xFF) << 24);
 
-        return Value.createKnown(BitWidth.create(32), word);
+        return Value.createKnown(BIT_WIDTH_32, word);
     }
 
     public void writeNextDmaWord(Value data) {
@@ -209,7 +213,7 @@ public class HardDriveData implements InstanceData, Cloneable {
         if (sector == currentSector) return;
 
         long pos = (long) sector * SECTOR_SIZE;
-        if (pos >= file.length()) {
+        if (pos >= fileLength) {
             Arrays.fill(buffer, (byte) 0);
         } else {
             file.seek(pos);
@@ -223,8 +227,11 @@ public class HardDriveData implements InstanceData, Cloneable {
             long pos = (long) currentSector * SECTOR_SIZE;
             file.seek(pos);
             file.write(buffer);
-            if (pos + SECTOR_SIZE > file.length()) {
-                file.setLength(pos + SECTOR_SIZE);
+            long newLength = pos + SECTOR_SIZE;
+            if (newLength > fileLength) {
+                file.setLength(newLength);
+                fileLength = newLength;
+                numSectors = (int) (fileLength / SECTOR_SIZE);
             }
         } catch (IOException e) {
             status |= STATUS_ERROR;
@@ -254,7 +261,7 @@ public class HardDriveData implements InstanceData, Cloneable {
             }
             return Value.createKnown(32, value);
         } catch (IOException e) {
-            return Value.createError(BitWidth.create(32));
+            return Value.createError(BIT_WIDTH_32);
         }
     }
 
@@ -277,6 +284,11 @@ public class HardDriveData implements InstanceData, Cloneable {
     public void setFilePath(String filePath) {
         this.filePath = filePath;
         try {
+            // Close existing file if open
+            if (file != null) {
+                file.close();
+            }
+
             File f = new File(filePath);
             if (!f.exists()) {
                 int defaultNumSectors = 32;
@@ -288,15 +300,33 @@ public class HardDriveData implements InstanceData, Cloneable {
             }
 
             file = new RandomAccessFile(f, "rw");
-            numSectors = (int) (file.length() / SECTOR_SIZE);
+            fileLength = file.length();
+            numSectors = (int) (fileLength / SECTOR_SIZE);
+            currentSector = -1;  // Invalidate sector cache
             errorMessage = null;
         } catch (IOException e) {
             errorMessage = e.getMessage();
             numSectors = 0;
+            fileLength = 0;
             file = null;
         }
     }
 
+
+    /**
+     * Closes the underlying file. Called when the component is removed or simulation ends.
+     */
+    @Override
+    public void close() {
+        if (file != null) {
+            try {
+                file.close();
+            } catch (IOException e) {
+                // Ignore close errors
+            }
+            file = null;
+        }
+    }
 
     @Override
     public HardDriveData clone() {

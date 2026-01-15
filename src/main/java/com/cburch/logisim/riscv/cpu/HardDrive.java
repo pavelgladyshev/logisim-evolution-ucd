@@ -16,6 +16,10 @@ import java.io.IOException;
 public class HardDrive extends InstanceFactory {
 
     public static final String _ID = "Hard Drive DMA";
+
+    // Cached Font objects to avoid creating new ones on every paint
+    private static final Font TITLE_FONT = new Font("SansSerif", Font.BOLD, 20);
+    private static final Font STATUS_FONT = new Font("SansSerif", Font.PLAIN, 12);
     public static final Attribute<String> FILE_NAME_ATTR =
             Attributes.forString("file_name", S.getter("hardDriveFileName"));
     // Port indices
@@ -125,10 +129,9 @@ public class HardDrive extends InstanceFactory {
         int posX = bds.getX() + 10;
         int posY = bds.getY() + 170;
 
-        Font titleFont = new Font("SansSerif", Font.BOLD, 20);
         GraphicsUtil.drawText(
                 graphics,
-                titleFont,
+                TITLE_FONT,
                 "Hard Drive DMA",
                 posX + 80,
                 posY - 127,
@@ -142,7 +145,6 @@ public class HardDrive extends InstanceFactory {
         String fileName = painter.getAttributeValue(FILE_NAME_ATTR);
         FileStatus status = getFileStatus(fileName);
 
-        Font statusFont = new Font("SansSerif", Font.PLAIN, 12);
         Color statusColor = Color.BLACK;
         String statusText = fileName;
 
@@ -164,7 +166,7 @@ public class HardDrive extends InstanceFactory {
         int statusY = bds.getY() + bds.getHeight() - 15;
         GraphicsUtil.drawText(
                 graphics,
-                statusFont,
+                STATUS_FONT,
                 statusText,
                 statusX,
                 statusY,
