@@ -17,7 +17,7 @@ public class JumpAndLinkTest {
     @BeforeEach
     void setup() {
         //create new CPU state
-        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         //set registers
         cpu.setX(20, x20);
         //set link

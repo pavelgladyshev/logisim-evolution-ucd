@@ -19,7 +19,7 @@ public class ExceptionTest {
     @BeforeEach
     void setup(){
         //create new CPU state
-        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         mtvec = (MTVEC_CSR) MMCSR.getCSR(cpu, MTVEC);
         mcause = (MCAUSE_CSR) MMCSR.getCSR(cpu, MCAUSE);
         mstatus = (MSTATUS_CSR) MMCSR.getCSR(cpu, MSTATUS);

@@ -86,10 +86,12 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   /** Memory cache */
   public final MemoryCache cache = new MemoryCache();
   private boolean cache_hit = false;
+  private boolean instructionCacheEnabled;
 
   // More To Do
 
-  public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, CPUState initialCpuState, GDBServer gdbServerAttr) {
+  public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, boolean instructionCacheEnabled, CPUState initialCpuState, GDBServer gdbServerAttr) {
+    this.instructionCacheEnabled = instructionCacheEnabled;
 
     // initial values for registers
     this.lastClock = lastClock;
@@ -130,7 +132,7 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
     long pcVal = pc.get();
 
-    if (cache.isValid(pcVal)) {
+    if (instructionCacheEnabled && cache.isValid(pcVal)) {
       cache_hit = true;
       // The output data bus is in High Z
       address = HiZ32;
@@ -170,6 +172,7 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
                 state.getAttributeValue(rv32im.ATTR_TCP_PORT),
                 state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING),
+                state.getAttributeValue(rv32im.ATTR_INSTRUCTION_CACHE),
                 state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING) ? CPUState.STOPPED : CPUState.RUNNING,
                 gdbServer);
         state.setData(ret);
@@ -285,15 +288,14 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
     if (fetching) {
       long pcVal = pc.get();
-      //System.out.println(pcVal + " " + cache.isValid(pcVal));
-      if (cache.isValid(pcVal)) {
-        //System.out.println("Cache hit: " + cache.get(pcVal ));
+      if (instructionCacheEnabled && cache.isValid(pcVal)) {
         ir.set(cache.get(pcVal));
       } else {
-        //System.out.println("Cache miss: Fetching from memory");
         cache_hit = false;
         ir.set(dataIn);
-        cache.update(pcVal, dataIn);
+        if (instructionCacheEnabled) {
+          cache.update(pcVal, dataIn);
+        }
       }
     }
 

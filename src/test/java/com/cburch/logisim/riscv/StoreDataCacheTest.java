@@ -13,7 +13,7 @@ public class StoreDataCacheTest {
 
     @BeforeEach
     void setUp() {
-        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
     }
 
     @Test

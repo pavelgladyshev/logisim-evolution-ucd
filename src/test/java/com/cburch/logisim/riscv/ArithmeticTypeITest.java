@@ -13,7 +13,7 @@ public class ArithmeticTypeITest {
     void instructionTest_addi() {
 
         out.println("rv32imData test: addi x5,x0,12 should load 12 into x5");
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         // perform addi x5,x0,12
         cpu.update(0x00c00293,0,0, 0);
         out.printf("\tTesting CPU state after addi x5,x0,12 ...\n");
@@ -23,7 +23,7 @@ public class ArithmeticTypeITest {
         assertRegistersEqual(cpu, expected);
 
         out.println("rv32imData test: addi x5,x0,-1 should load -1 into x5");
-        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         // perform addi x5,x0,-1
         cpu.update(0xfff00293,0,0, 0);
         out.printf("\tTesting CPU state after addi x5,x0,-1 ...\n");
@@ -37,7 +37,7 @@ public class ArithmeticTypeITest {
     void instructionTest_slli() {
         out.println("rv32imData test: slli x6,x5,5 should set x6 to shift left logical x5 by 5 and ");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 123);   // Initially, x5 = 123
         // perform addi x5,x0,12
         cpu.update(0x00529313,0,0, 0);
@@ -53,7 +53,7 @@ public class ArithmeticTypeITest {
     void instructionTest_slti() {
         out.println("rv32imData test: slti x6,x5,10 should set x6 to 1 if x5 is less than 10");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 5);   // Initially, x5 = 5
         // perform slti x6,x5,10
         cpu.update(0x00a2b313,0,0, 0);
@@ -65,7 +65,7 @@ public class ArithmeticTypeITest {
         assertRegistersEqual(cpu, expected);
 
         out.println("rv32imData test: slti x6,x5,5 should set x6 to 0 if x5 is not less than 5");
-        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 5);   // Initially, x5 = 5
         // perform slti x6,x5,5
         cpu.update(0x0052b313,0,0, 0);
@@ -81,7 +81,7 @@ public class ArithmeticTypeITest {
     void instructionTest_sltiu() {
         out.println("rv32imData test: sltiu x6,x5,10 should set x6 to 1 if x5 is less than 10 (unsigned comparison)");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 5);   // Initially, x5 = 5
         // perform sltiu x6,x5,10
         cpu.update(0x00a2b313,0,0, 0);
@@ -93,7 +93,7 @@ public class ArithmeticTypeITest {
         assertRegistersEqual(cpu, expected);
 
         out.println("rv32imData test: sltiu x6,x5,5 should set x6 to 0 if x5 is not less than 5 (unsigned comparison)");
-        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 5);   // Initially, x5 = 5
         // perform sltiu x6,x5,5
         cpu.update(0x0052b313,0,0, 0);
@@ -109,7 +109,7 @@ public class ArithmeticTypeITest {
     void instructionTest_xori() {
         out.println("rv32imData test: xori x6,x5,0xff should perform bitwise xor of x5 and 0xff and store in x6");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 0xff00ff00L);   // Initially, x5 = 0xff00ff00
         // perform xori x6,x5,0xff
         cpu.update(0x0ff2c313,0,0, 0);
@@ -125,7 +125,7 @@ public class ArithmeticTypeITest {
     void instructionTest_srli() {
         out.println("rv32imData test: srli x6,x5,2 should shift right logical x5 by 2 and store in x6");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 123);   // Initially, x5 = 123
         // perform srli x6,x5,2
         cpu.update(0x0022d313,0,0, 0);
@@ -141,7 +141,7 @@ public class ArithmeticTypeITest {
     void instructionTest_srai() {
         out.println("rv32imData test: srai x6,x5,2 should shift right arithmetic x5 by 2 and store in x6");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, -123);   // Initially, x5 = -123
         // perform srai x6,x5,2
         cpu.update(0x4022d313,0,0, 0);
@@ -157,7 +157,7 @@ public class ArithmeticTypeITest {
     void instructionTest_ori() {
         out.println("rv32imData test: ori x6,x5,0xff should perform bitwise or of x5 and 0xff and store in x6");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 0xff00ff00L);   // Initially, x5 = 0xff00ff00
         // perform ori x6,x5,0xff
         cpu.update(0x0ff2e313,0,0, 0);
@@ -173,7 +173,7 @@ public class ArithmeticTypeITest {
     void instructionTest_andi() {
         out.println("rv32imData test: andi x6,x5,0xff should perform bitwise and of x5 and 0xff and store in x6");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         cpu.setX(5, 0xff00ff00L);   // Initially, x5 = 0xff00ff00
         // perform andi x6,x5,0xff
         cpu.update(0x0ff2f313,0,0, 0);

@@ -72,6 +72,9 @@ public class rv32im extends InstanceFactory {
   public static final Attribute<Boolean> ATTR_GDB_SERVER_RUNNING =
           Attributes.forBoolean("gdbServerRunning", S.getter("rv32imStartGDBServer"));
 
+  public static final Attribute<Boolean> ATTR_INSTRUCTION_CACHE =
+          Attributes.forBoolean("instructionCache", S.getter("rv32imInstructionCache"));
+
   protected static class GDBServerAttribute extends Attribute<GDBServer> {
     @Override
     public GDBServer parse(String value) {
@@ -137,9 +140,9 @@ public class rv32im extends InstanceFactory {
     // Add attributes
     setAttributes(
             new Attribute[] {
-                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_GDB_SERVER, StdAttr.LABEL, StdAttr.LABEL_FONT
+                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_INSTRUCTION_CACHE, ATTR_GDB_SERVER, StdAttr.LABEL, StdAttr.LABEL_FONT
             },
-            new Object[] {Long.valueOf(0), false, 3333, false, new GDBServer(), "", StdAttr.DEFAULT_LABEL_FONT});
+            new Object[] {Long.valueOf(0), false, 3333, false, false, new GDBServer(), "", StdAttr.DEFAULT_LABEL_FONT});
   }
 
   @Override

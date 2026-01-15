@@ -26,7 +26,7 @@ public class ArithmeticTypeRMulAndDivTest {
     @BeforeEach
     void setup(){
         //create new CPU state
-        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         //set registers
         cpu.setX(1, x1);
         cpu.setX(2, x2);

@@ -13,7 +13,7 @@ public class rv32imDataTest {
     void defaultConstructor_shouldProduceZeroedState() {
         out.println("rv32imData test: default constructor should produce zeroed initial state with specified initial PC value");
 
-        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, rv32imData.CPUState.RUNNING, null);
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         out.printf("\tTesting newly created CPU for initial values ...\n");
 
         long[] expected = new long[32];
