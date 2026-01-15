@@ -51,7 +51,7 @@ public class rv32im extends InstanceFactory {
   public static final int MEMREAD = 4;
   public static final int MEMWRITE = 5;
   public static final int TIMER_INTERRUPT_REQUEST = 6;
-  public static final int PLIC_INTERRUPT_REQUEST = 7;
+  public static final int EXTERNAL_INTERRUPT_REQUEST = 7;
   public static final int BUS_REQUEST = 8;
   public static final int BUS_ACK = 9;
   public static final int BE0 = 10;
@@ -109,7 +109,7 @@ public class rv32im extends InstanceFactory {
     ps[MEMREAD] = new Port(120, 60, Port.OUTPUT, 1);
     ps[MEMWRITE] = new Port(120, 90, Port.OUTPUT, 1);
     ps[TIMER_INTERRUPT_REQUEST] = new Port(-60, 140, Port.INPUT, 1);
-    ps[PLIC_INTERRUPT_REQUEST] = new Port(-60, 190, Port.INPUT, 1);
+    ps[EXTERNAL_INTERRUPT_REQUEST] = new Port(-60, 190, Port.INPUT, 1);
     ps[BUS_REQUEST] = new Port(-60, 220, Port.INPUT, 1);
     ps[BUS_ACK] = new Port(120, 120, Port.OUTPUT, 1);
     ps[BE0] = new Port(120, 150, Port.OUTPUT, 1);
@@ -126,7 +126,7 @@ public class rv32im extends InstanceFactory {
     ps[MEMREAD].setToolTip(S.getter("rv32imMemRead"));
     ps[MEMWRITE].setToolTip(S.getter("rv32imMemWrite"));
     ps[TIMER_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imTimerInterruptRequestIn"));
-    ps[PLIC_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imPLICInterruptRequestIn"));
+    ps[EXTERNAL_INTERRUPT_REQUEST].setToolTip(S.getter("rv32imExternalInterruptRequestIn"));
     ps[BUS_REQUEST].setToolTip(S.getter("rv32imWaitRequestIn"));
     ps[BUS_ACK].setToolTip(S.getter("rv32imWaitAckOut"));
     ps[BE0].setToolTip(S.getter("rv32imByteEnable0"));
@@ -197,7 +197,7 @@ public class rv32im extends InstanceFactory {
     Value reset = state.getPortValue(RESET);
     Value dataIn = state.getPortValue(DATA);
     Value timerInterrupt = state.getPortValue(TIMER_INTERRUPT_REQUEST);
-    Value plicInterrupt = state.getPortValue(PLIC_INTERRUPT_REQUEST);
+    Value externalInterrupt = state.getPortValue(EXTERNAL_INTERRUPT_REQUEST);
     Value busRequest = state.getPortValue(BUS_REQUEST);
 
 
@@ -235,10 +235,10 @@ public class rv32im extends InstanceFactory {
       }
 
       long timerIrq = timerInterrupt == Value.TRUE ? 1 : 0;
-      long plicIrq = plicInterrupt == Value.TRUE ? 1 : 0;
+      long externalIrq = externalInterrupt == Value.TRUE ? 1 : 0;
       long waitRequest = busRequest == Value.TRUE ? 1 : 0;
       long dataValue = dataIn.toLongValue();
-      cpuState.update(dataValue, timerIrq, plicIrq, 0);
+      cpuState.update(dataValue, timerIrq, externalIrq, 0);
     }
 
     updateOutputSignals(state, cpuState);
