@@ -112,10 +112,10 @@ public class rv32im extends InstanceFactory {
     ps[EXTERNAL_INTERRUPT_REQUEST] = new Port(-60, 190, Port.INPUT, 1);
     ps[BUS_REQUEST] = new Port(-60, 220, Port.INPUT, 1);
     ps[BUS_ACK] = new Port(120, 120, Port.OUTPUT, 1);
-    ps[BE0] = new Port(120, 150, Port.OUTPUT, 1);
-    ps[BE1] = new Port(120, 180, Port.OUTPUT, 1);
-    ps[BE2] = new Port(120, 210, Port.OUTPUT, 1);
-    ps[BE3] = new Port(120, 240, Port.OUTPUT, 1);
+    ps[BE0] = new Port(120, 180, Port.OUTPUT, 1);
+    ps[BE1] = new Port(120, 170, Port.OUTPUT, 1);
+    ps[BE2] = new Port(120, 160, Port.OUTPUT, 1);
+    ps[BE3] = new Port(120, 150, Port.OUTPUT, 1);
 
 
 

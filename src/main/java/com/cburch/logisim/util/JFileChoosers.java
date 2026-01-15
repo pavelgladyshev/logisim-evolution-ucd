@@ -75,13 +75,22 @@ public final class JFileChoosers {
             return new LogisimFileChooser(dir);
           }
         }
+      } catch (NullPointerException e) {
+        // macOS JDK bug in getChooserShortcutPanelFiles - try next directory
+        if (first == null) first = e;
       } catch (RuntimeException t) {
         if (first == null) first = t;
         final var u = t.getCause();
         if (!(u instanceof IOException)) throw t;
       }
     }
-    throw first;
+    // Last resort: try creating without any directory
+    try {
+      return new LogisimFileChooser();
+    } catch (Exception e) {
+      if (first != null) throw first;
+      throw new RuntimeException("Unable to create file chooser", e);
+    }
   }
 
   public static JFileChooser createAt(File openDirectory) {
@@ -91,10 +100,12 @@ public final class JFileChoosers {
       try {
         return new LogisimFileChooser(openDirectory);
       } catch (RuntimeException t) {
-        if (t.getCause() instanceof IOException) {
+        // Handle IOException cause or NullPointerException (macOS JDK bug)
+        if (t.getCause() instanceof IOException || t instanceof NullPointerException) {
           try {
             return create();
           } catch (RuntimeException ignored) {
+            return new LogisimFileChooser();
           }
         }
         throw t;
