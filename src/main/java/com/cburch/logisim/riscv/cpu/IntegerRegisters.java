@@ -1,5 +1,7 @@
 package com.cburch.logisim.riscv.cpu;
 
+import java.util.Arrays;
+
 public class IntegerRegisters {
 
     public static final String[] registerABINames = {
@@ -22,4 +24,5 @@ public class IntegerRegisters {
             x[index] = value;
         }
     }
+
 }

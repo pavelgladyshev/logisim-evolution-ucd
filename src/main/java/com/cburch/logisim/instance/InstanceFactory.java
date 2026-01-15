@@ -10,7 +10,6 @@
 package com.cburch.logisim.instance;
 
 import com.cburch.logisim.LogisimVersion;
-import com.cburch.logisim.circuit.CircuitState;
 import com.cburch.logisim.comp.AbstractComponentFactory;
 import com.cburch.logisim.comp.Component;
 import com.cburch.logisim.comp.ComponentDrawContext;
@@ -22,6 +21,7 @@ import com.cburch.logisim.data.Direction;
 import com.cburch.logisim.data.Location;
 import com.cburch.logisim.fpga.hdlgenerator.HdlGeneratorFactory;
 import com.cburch.logisim.gui.log.LoggableContract;
+import com.cburch.logisim.prefs.AppPreferences;
 import com.cburch.logisim.tools.Pokable;
 import com.cburch.logisim.tools.key.KeyConfigurator;
 import com.cburch.logisim.util.IconsUtil;
@@ -145,14 +145,6 @@ public abstract class InstanceFactory extends AbstractComponentFactory {
     final var ret = new InstanceComponent(this, loc, attrs);
     configureNewInstance(ret.getInstance());
     return ret;
-  }
-
-  public final InstanceState createInstanceState(CircuitState state, Component comp) {
-    return createInstanceState(state, ((InstanceComponent) comp).getInstance());
-  }
-
-  public final InstanceState createInstanceState(CircuitState state, Instance instance) {
-    return new InstanceStateImpl(state, instance.getComponent());
   }
 
   @Override
@@ -284,6 +276,7 @@ public abstract class InstanceFactory extends AbstractComponentFactory {
     painter.setFactory(this, attrs);
     final var gfx = painter.getGraphics();
     gfx.translate(x, y);
+    gfx.setColor(new Color(AppPreferences.COMPONENT_ICON_COLOR.get()));
     paintIcon(painter);
     gfx.translate(-x, -y);
 
@@ -372,4 +365,5 @@ public abstract class InstanceFactory extends AbstractComponentFactory {
   public boolean providesSubCircuitMenu() {
     return false;
   }
+
 }

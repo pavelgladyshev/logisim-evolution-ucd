@@ -11,36 +11,53 @@ package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Value;
+import com.cburch.logisim.gui.generic.OptionPane;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
 import com.cburch.logisim.riscv.cpu.csrs.*;
-import com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest;
+import com.cburch.logisim.riscv.cpu.gdb.DebuggerRequest;
+
+import javax.swing.*;
+import java.io.IOException;
+import java.util.Set;
+import java.util.HashSet;
 
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIP;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.MIE;
 
 /** Represents the state of a cpu. */
-public class rv32imData implements InstanceData, Cloneable {
+public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
   /** The last values observed. */
   private Value lastClock;
-  private long lastDataIn;
-  private long lastAddress;
 
-  /** Output values */
   static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
+  static final Value HiZ = Value.createUnknown(BitWidth.create(1));
+  /** Output values */
+
+  static final Value ALL1s = Value.createKnown(32,0xffffffff);
+  static final Value ALL0s = Value.createKnown(32,0x0);
+  static final Value [] byteMasks = {Value.createKnown(32,0xffffff00),
+          Value.createKnown(32,0xffff00ff),
+          Value.createKnown(32,0xff00ffff),
+          Value.createKnown(32,0x00ffffff)};
+  static final Value [] hwMasks = {Value.createKnown(32,0xffff0000),
+          Value.createKnown(32,0x0000ffff)};
+
   private Value address;          // value to be placed on the address bus;
-  private Value outputData;       // value to be placed on data bus
+  private Value outputData;        // value to be placed on data bus, possibly after shifting and mixing
   private int outputDataWidth;    // width of the data to be written in bytes (1,2,or 4)
   private Value memRead;
   private Value memWrite;
-  private Value isSync;
+  private Value waitAck = Value.FALSE;
+  private boolean busGranted = false;
+  private boolean busRequestPending = false;
+
+  private boolean waitingForMemory;
 
   /** Boolean flags */
   private boolean fetching;
   private boolean addressing;
-  private boolean intermixFlag;
-  private boolean pressedContinue;
 
   /** Registers */
   private final ProgramCounter pc;
@@ -54,91 +71,114 @@ public class rv32imData implements InstanceData, Cloneable {
   private CPUState cpuState;
 
   public enum CPUState {
-    OPERATIONAL,
-    HALTED
+    RUNNING,
+    STOPPED,
+    SINGLE_STEP
   }
-
 
   /** GDB server */
-  private GDBServer server;
-  private GDB_SERVICE service;
+  private GDBServer gdbServer = null;
+  private DebuggerRequest debuggerRequest = null;
 
-  public enum GDB_SERVICE {
-    NONE,
-    STEPPING,
-    CONTINUING,
-    MEMORY_ACCESS,
-  }
+  private Set<Long> breakpoints;
+  private boolean breakpointsEnabled;
+
+  /** Memory cache */
+  public final MemoryCache cache = new MemoryCache();
+  private boolean cache_hit = false;
+  private boolean instructionCacheEnabled;
 
   // More To Do
 
-  public rv32imData(Value lastClock, long resetAddress){
-    // initial values for registers
-    this.lastClock = lastClock;
-    this.pc = new ProgramCounter(resetAddress);
-    this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
-    this.x = new IntegerRegisters();
-    this.csr = new ControlAndStatusRegisters();
-    this.cpuState = CPUState.OPERATIONAL;
-    this.intermixFlag = false;
-    this.pressedContinue = false;
-    // In the first clock cycle we are fetching the first instruction
-    fetchNextInstruction();
-  }
+  public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, boolean instructionCacheEnabled, CPUState initialCpuState, GDBServer gdbServerAttr) {
+    this.instructionCacheEnabled = instructionCacheEnabled;
 
-  /** Constructs a state with the given values. */
-  public rv32imData(Value lastClock, long resetAddress, int port, CPUState state, Boolean runGDB) {
     // initial values for registers
     this.lastClock = lastClock;
     this.pc = new ProgramCounter(resetAddress);
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
     this.csr = new ControlAndStatusRegisters();
-    this.cpuState = state;
-    this.intermixFlag = false;
-    this.pressedContinue = false;
-    this.service = GDB_SERVICE.NONE;
-    if(runGDB) {
-      this.server = new GDBServer(port, this);
-      this.cpuState = CPUState.HALTED;
+    this.cpuState = initialCpuState;
+
+    if(startGDBServer) {
+      try {
+        this.gdbServer = gdbServerAttr;
+        this.gdbServer.startGDBServer(port,this);
+      } catch (IOException ex) {
+        String message = "Cannot start GDB server at port "+port;
+        SwingUtilities.invokeLater(
+                ()->OptionPane.showMessageDialog(null,message,
+                        "GDB Server",
+                        OptionPane.ERROR_MESSAGE));
+        this.gdbServer = null;
+      }
     }
+
     // In the first clock cycle we are fetching the first instruction
     fetchNextInstruction();
+
+    this.breakpoints = new HashSet<>();
+    this.breakpointsEnabled = true;
   }
 
   /**
    * Set up outputs to fetch next instruction
    */
-   public void fetchNextInstruction()
-   {
-       fetching = true;
-       addressing = false;
+  public void fetchNextInstruction()
+  {
+    fetching = true;
+    addressing = false;
 
-       // Values for outputs fetching instruction
-       address = Value.createKnown(32, pc.get());
-       outputData = HiZ32;     // The output data bus is in High Z
-       outputDataWidth = 4;    // all 4 bytes of the output
-       memRead = Value.TRUE;   // MemRead active
-       memWrite = Value.FALSE; // MemWrite not active
-       isSync = Value.TRUE;
-   }
+    long pcVal = pc.get();
+
+    if (instructionCacheEnabled && cache.isValid(pcVal)) {
+      cache_hit = true;
+      // The output data bus is in High Z
+      address = HiZ32;
+      outputData = HiZ32;
+      outputDataWidth = 0;
+      memRead = Value.FALSE;
+      memWrite = Value.FALSE;
+    } else {
+      // Values for outputs fetching instruction
+      cache_hit = false;
+      address = Value.createKnown(32, pcVal);
+      outputData = HiZ32;     // The output data bus is in High Z
+      outputDataWidth = 0;    // all 4 bytes of the output
+      memRead = Value.TRUE;   // MemRead active
+      memWrite = Value.FALSE; // MemWrite not active
+    }
+  }
 
   /**
    * Retrieves the state associated with this counter in the circuit state, generating the state if
    * necessary.
    */
   public static rv32imData get(InstanceState state) {
-    rv32imData ret = (rv32imData) state.getData();
-    if (ret == null) {
-      // If it doesn't yet exist, then we'll set it up with our default
-      // values and put it into the circuit state so it can be retrieved
-      // in future propagations.
-      CPUState initialCPUState = state.getAttributeValue(rv32im.ATTR_CPU_STATE).getValue().equals("Halted") ? CPUState.HALTED : CPUState.OPERATIONAL;
-      ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
-              state.getAttributeValue(rv32im.ATTR_TCP_PORT), initialCPUState, state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING));
-      state.setData(ret);
+    synchronized (rv32imData.class) {
+      rv32imData ret = (rv32imData) state.getData();
+      if (ret == null) {
+        // Before creating new data, stop any existing GDB server connection
+        // (the server object is stored as an instance attribute and persists across resets)
+        GDBServer gdbServer = (GDBServer) state.getAttributeValue(rv32im.ATTR_GDB_SERVER);
+        if (gdbServer != null) {
+          gdbServer.stopGDBServer();
+        }
+
+        // If it doesn't yet exist, then we'll set it up with our default
+        // values and put it into the circuit state so it can be retrieved
+        // in future propagations.
+        ret = new rv32imData(null, state.getAttributeValue(rv32im.ATTR_RESET_ADDR),
+                state.getAttributeValue(rv32im.ATTR_TCP_PORT),
+                state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING),
+                state.getAttributeValue(rv32im.ATTR_INSTRUCTION_CACHE),
+                state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING) ? CPUState.STOPPED : CPUState.RUNNING,
+                gdbServer);
+        state.setData(ret);
+      }
+      return ret;
     }
-    return ret;
   }
 
   /** Returns a copy of this object. */
@@ -157,7 +197,6 @@ public class rv32imData implements InstanceData, Cloneable {
       return null;
     }
   }
-
   /** Updates the last clock observed, returning true if triggered. */
   public boolean updateClock(Value value) {
     Value old = lastClock;
@@ -166,71 +205,109 @@ public class rv32imData implements InstanceData, Cloneable {
   }
 
   /** reset CPU state to initial values */
-  public void reset(long pcInit) {
-     pc.set(pcInit);
-  }
+  public void reset(long pcInit, int port, boolean startGDBServer) {
+    pc.set(pcInit);
+    cache.invalidate();
 
-  /* GDB memory access handling */
-  public void processMemoryAccessRequest(MemoryAccessRequest request, long dataIn){
-    //check for failure to read memory?   fail request
-    //check for failure to write memory?  fail request
-    switch(request.getType()){
-        case MEMREAD -> {
-          if(!addressing){
-            System.out.println("addressing at : 0x"+Long.toHexString(request.getNextAddress().toLongValue()));
-            LoadInstruction.performAddressing(this, request.getNextAddress());
-          }
-          else {
-            System.out.println("data in : 0x"+Long.toHexString(dataIn));
-            System.out.println("current address : 0x"+Long.toHexString(request.getNextAddress().toLongValue()));
-            long nextByte =  LoadInstruction.getUnsignedDataByte(dataIn, request.getNextAddress().toLongValue());
-            request.getDataBuffer().append(String.format("%02X",nextByte));
-            request.incrementAccessed();
-            fetchNextInstruction();
-          }
-        }
-        case MEMWRITE -> {
-          long nextDataByte = request.getNextDataByte();
-          System.out.println("Written : " + nextDataByte);
-          StoreInstruction.performAddressing(this, nextDataByte, request.getNextAddress());
-          intermixFlag = (addressing);
-          request.incrementAccessed();
-        }
+    // Reset debugger-related state
+    synchronized (this) {
+      debuggerRequest = null;
     }
+
+    // Stop and restart GDB server to force client reconnection
+    if (gdbServer != null) {
+      gdbServer.stopGDBServer();
+      if (startGDBServer) {
+        try {
+          gdbServer.startGDBServer(port, this);
+        } catch (IOException ex) {
+          String message = "Cannot start GDB server at port " + port;
+          SwingUtilities.invokeLater(
+                  () -> OptionPane.showMessageDialog(null, message,
+                          "GDB Server",
+                          OptionPane.ERROR_MESSAGE));
+          gdbServer = null;
+        }
+      }
+    }
+
+    // Reset CPU execution state
+    waitingForMemory = false;
+    fetchNextInstruction();
   }
 
-  /** update CPU state (execute) */
-  public boolean update(long dataIn) {
-      boolean instructionCompleted = false;
+  public void update(long dataIn, long timerInterruptRequest, long externalInterruptRequest, long waitRequest) {
 
-    lastDataIn = dataIn;
-    lastAddress = address.toLongValue();
+    boolean result = false;
 
-      if(fetching) {
+    if (fetching) {
+      // check for and process debugger requests only during instruction fetch phase,
+      // so that instruction execution is not stopped midway.
+      synchronized (this) {
+        if (debuggerRequest != null) {
+          result = debuggerRequest.process(dataIn);
+          if (result) {
+            debuggerRequest = null;
+          }
+        }
+      }
+      // always return after finishing processing of a debugger request to allow for next instruction addressing when resuming.
+      if (result) { return; }
+    }
+
+    if (cpuState == CPUState.STOPPED) {
+      // do not perform instructions or state updates.
+      return;
+    }
+
+    // Check for breakpoint before executing instruction
+    if (isBreakpointHit()) {
+      cpuState = CPUState.STOPPED;
+      addDebuggerResponse("T05"); // Signal 5 is SIGTRAP
+      return;
+    }
+
+    // update interrupt pending bits in MIP CSR to reflect the state of input pins
+    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
+    mip.MTIP.set(timerInterruptRequest);
+    mip.MEIP.set(externalInterruptRequest);
+
+    // Check for external interrupts first
+    if (isExternalInterruptPending()) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
+      fetchNextInstruction();
+      return;
+    }
+
+    // Check for timer interrupts as the second priority
+    if (isTimerInterruptPending()) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
+      fetchNextInstruction();
+      return;
+    }
+
+    if (fetching) {
+      long pcVal = pc.get();
+      if (instructionCacheEnabled && cache.isValid(pcVal)) {
+        ir.set(cache.get(pcVal));
+      } else {
+        cache_hit = false;
         ir.set(dataIn);
-      }
-
-      if (!isHalted()) {
-        // Check for timer interrupts
-        if (isTimerInterruptPending()) {
-          TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
-          fetchNextInstruction();
-        }
-        // Check for external interrupts
-        else if (isExternalInterruptPending()) {
-          TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
-          fetchNextInstruction();
-        }
-        else {
-          instructionCompleted = handleNextInstruction(dataIn);
+        if (instructionCacheEnabled) {
+          cache.update(pcVal, dataIn);
         }
       }
-      return instructionCompleted;
     }
 
-  // Boolean flag indicates whether an instruction was completed in this cycle.
-  public boolean handleNextInstruction(long dataIn){
-    boolean instructionCompleted = true;
+    if (waitingForMemory) {
+      if (waitRequest == 1) {
+        // Still waiting, do not proceed
+        return;
+      } else {
+        waitingForMemory = false;
+      }
+    }
+
     switch(ir.opcode()) {
       case 0x13:  // I-type arithmetic instruction
         ArithmeticInstruction.executeImmediate(this);
@@ -241,19 +318,59 @@ public class rv32imData implements InstanceData, Cloneable {
         fetchNextInstruction();
         break;
       case 0x03:  // load instruction (I-type)
-        if(!addressing) {
-          LoadInstruction.performAddressing(this);
-          instructionCompleted = false;
+        if (!addressing) {
+        LoadInstruction.performAddressing(this);
+        addressing = true;
         } else {
+          if (waitRequest == 1) {
+            waitingForMemory = true;
+            return;
+          }
           LoadInstruction.latch(this, dataIn);
+          addressing = false;
+          fetchNextInstruction();
+        }
+
+
+        //using cache
+//        if (!addressing) {
+//          LoadInstruction.performAddressing(this);
+//        } else {
+//          long addr = getAddress().toLongValue();
+//
+//          if (cache.isValid(addr)) {
+//            LoadInstruction.latch(this, cache.get(addr));
+//          } else {
+//            LoadInstruction.latch(this, dataIn);
+//            cache.update(addr, dataIn);
+//          }
+//
+//          fetchNextInstruction();
+//        }
+        break;
+      case 0x23:  // storing instruction (S-type)
+        if (!addressing) {
+          StoreInstruction.performAddressing(this);
+          addressing = true;
+        } else {
+          if (waitRequest == 1) {
+            waitingForMemory = true;
+            return;
+          }
+          long addr = getAddress().toLongValue();
+          cache.invalidateEntry(addr);
+          pc.increment();
+          addressing = false;
           fetchNextInstruction();
         }
         break;
-      case 0x23:  // storing instruction (S-type)
-        StoreInstruction.performAddressing(this);
-        intermixFlag = (addressing);
-        instructionCompleted = false;
-        break;
+
+        //if(!addressing) {
+        //  StoreInstruction.performAddressing(this);
+        //} else {
+        //  pc.increment();
+        //  fetchNextInstruction();
+        //}
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
         fetchNextInstruction();
@@ -285,18 +402,18 @@ public class rv32imData implements InstanceData, Cloneable {
       default:  // Unknown instruction
         TrapHandler.throwIllegalInstructionException(this);
     }
-    return instructionCompleted;
+
+    // After updating PC, check for breakpoint again
+    if (isBreakpointHit() || (fetching && (cpuState == CPUState.SINGLE_STEP))) {
+      cpuState = CPUState.STOPPED;
+      addDebuggerResponse("T05"); // Signal 5 is SIGTRAP
+      return;
+    }
   }
 
-  public void stopGDBServer() {
-    if(isGDBRunning()) server.terminate();
+  public void stop() {
+    cpuState = CPUState.STOPPED;
   }
-
-  public void halt() {
-    isSync = Value.FALSE;
-    cpuState = CPUState.HALTED;
-  }
-
 
   public boolean isTimerInterruptPending() {
     MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
@@ -320,58 +437,109 @@ public class rv32imData implements InstanceData, Cloneable {
     return (machineInterruptsEnabled && machineExternalInterruptsEnabled && machineExternalInterruptPending);
   }
 
-  public Boolean isHalted() {
-    return getCpuState() == CPUState.HALTED;
+  // Handling debugger requests
+  public boolean setDebuggerRequest(DebuggerRequest r) {
+    synchronized (this) {
+      if (debuggerRequest != null) {
+        return false;
+      } else {
+        debuggerRequest = r;
+        return true;
+      }
+    }
   }
 
-  public boolean isGDBRequestPending() {
-    if(server == null) return false;
-    return server.isRequestPending();
+  public void setGDBServer(GDBServer server) {
+    this.gdbServer = server;
   }
 
-  public boolean isGDBRunning(){
-    return (server != null);
+  public void addDebuggerResponse(String response) {
+    if (gdbServer != null) {
+      gdbServer.setDebuggerResponse(response);
+    }
   }
 
   /** getters and setters*/
-  public long getLastDataIn() { return lastDataIn; }
-  public long getLastAddress() { return lastAddress; }
   public Value getAddress() { return address; }
-  public Value getOutputData() { return outputData; }
-  public int getOutputDataWidth() { return outputDataWidth; }
   public Value getMemRead() { return memRead; }
   public Value getMemWrite() { return memWrite;  }
+  public boolean getWaitingForMemory() { return waitingForMemory;  }
   public ProgramCounter getPC() { return pc; }
   public CPUState getCpuState() { return cpuState; }
   public InstructionRegister getIR() { return ir; }
-  public Value getIsSync() { return isSync; }
   public long getX(int index) { return x.get(index); }
   public void setX(int index, long value) { x.set(index,value); }
   public boolean getAddressing() { return addressing; }
-  public boolean getIntermixFlag() { return intermixFlag; }
-  public boolean getPressedContinue() { return pressedContinue; }
   public long getCSRValue(int csr) {return this.csr.read(this, csr);}
   public CSR getCSR(int csr) { return this.csr.get(csr); }
-  public GDBServer getServer() {
-    return server;
+  public IntegerRegisters getIntegerRegisters() {return this.x;}
+
+  public int getOutputDataWidth() {
+    return outputDataWidth;
   }
-  public GDB_SERVICE getService() {
-    return service;
+  // build output data value based on data width and the address
+  public Value getOutputData() {
+    return switch (outputDataWidth) {
+      case 1 -> Value.createKnown(32,
+              (outputData.toLongValue() & 0xFF) << ((getAddress().toLongValue() & 0x3) * 8));
+      case 2 -> Value.createKnown(32,
+              (outputData.toLongValue() & 0xFFFF) << ((getAddress().toLongValue() & 0x3) * 8));
+      default -> outputData;
+    };
   }
 
-  public void setLastDataIn(long value) { lastDataIn = value; }
-  public void setLastAddress(long value) { lastAddress = value; }
-  public void setOutputData(Value value) { outputData = value; }
+
+
+  public int getAccessWidth() {
+    return outputDataWidth;
+  }
+
+
+  public boolean isBusGranted() { return busGranted; }
+  public void setBusGranted(boolean granted) { busGranted = granted; }
+  public boolean isBusRequestPending() { return busRequestPending; }
+  public void setBusRequestPending(boolean pending) { busRequestPending = pending; }
+  public boolean isMemoryAccessActive() {
+    return getMemRead() == Value.TRUE || getMemWrite() == Value.TRUE;
+  }
+
+  public void setOutputData(long value) { outputData = Value.createKnown(32, value); }
+  public void setOutputDataWidth(int value) { outputDataWidth = value; }
   public void setCpuState(CPUState newCpuState) { cpuState = newCpuState; }
   public void setFetching(boolean value) { fetching = value; }
   public void setAddressing(boolean value) { addressing = value; }
   public void setAddress(Value newAddress) { address = newAddress; }
-  public void setOutputDataWidth(int value) { outputDataWidth = value; }
   public void setMemRead(Value value) { memRead = value; }
   public void setMemWrite(Value value) { memWrite = value; }
-  public void setIsSync(Value value) { isSync = value; }
-  public void setIntermixFlag(boolean value) { intermixFlag = value; }
-  public void setPressedContinue(boolean value) { pressedContinue = value; }
   public void setCSR(int csr, long value) { this.csr.write(this, csr, value); }
-  public void setService(GDB_SERVICE service) {this.service = service;}
+
+  // Breakpoint handling
+  public void setBreakpoint(long address) {
+    breakpoints.add(address);
+  }
+
+  public void removeBreakpoint(long address) {
+    breakpoints.remove(address);
+  }
+
+  public void setBreakpointsEnabled(boolean enabled) {
+    this.breakpointsEnabled = enabled;
+  }
+
+  public boolean isBreakpointHit() {
+    return breakpointsEnabled && breakpoints.contains(pc.get());
+  }
+
+  /**
+   * Closes resources associated with this CPU state, including stopping the GDB server.
+   * Called when simulation is reset or the component is removed.
+   */
+  @Override
+  public void close() {
+    if (gdbServer != null) {
+      gdbServer.stopGDBServer();
+      gdbServer = null;
+    }
+  }
+
 }

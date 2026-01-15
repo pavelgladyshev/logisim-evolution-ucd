@@ -19,7 +19,7 @@ public class ExceptionTest {
     @BeforeEach
     void setup(){
         //create new CPU state
-        cpu = new rv32imData(Value.FALSE, 0x400000);
+        cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
         mtvec = (MTVEC_CSR) MMCSR.getCSR(cpu, MTVEC);
         mcause = (MCAUSE_CSR) MMCSR.getCSR(cpu, MCAUSE);
         mstatus = (MSTATUS_CSR) MMCSR.getCSR(cpu, MSTATUS);
@@ -27,7 +27,8 @@ public class ExceptionTest {
 
     @Test
     void instructionTest_ebreak(){
-        cpu.update(0x100073); // perform ebreak
+        // perform ebreak
+        cpu.update(0x100073,0,0, 0);
         assertEquals(0x400000, MMCSR.getValue(cpu, MEPC));
         assertEquals(mtvec.BASE.get(), cpu.getPC().get());
         assertEquals(mcause.INTERRUPT.get(), 0);
@@ -39,7 +40,8 @@ public class ExceptionTest {
     //tests ecall from machine mode as default (starting cpu privilege mode)
     @Test
     void instructionTest_ecall(){
-        cpu.update(0x73); // perform ecall
+        // perform ecall
+        cpu.update(0x73,0,0, 0);
         assertEquals(0x400000, MMCSR.getValue(cpu, MEPC));
         assertEquals(mtvec.BASE.get(), cpu.getPC().get());
         assertEquals(mcause.INTERRUPT.get(), 0);
@@ -50,7 +52,8 @@ public class ExceptionTest {
 
     @Test
     void exceptionTest_illegal_instruction_unknown() {
-        cpu.update(0x024859348); // illegal instruction passed to cpu
+        // illegal instruction passed to cpu
+        cpu.update(0x024859348,0,0, 0);
         assertEquals(0x400000, MMCSR.getValue(cpu, MEPC));
         assertEquals(mtvec.BASE.get(), cpu.getPC().get());
         assertEquals(mcause.INTERRUPT.get(), 0);

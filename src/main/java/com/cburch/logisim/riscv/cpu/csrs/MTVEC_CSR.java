@@ -1,6 +1,6 @@
 package com.cburch.logisim.riscv.cpu.csrs;
 
-public class MTVEC_CSR extends CSR_RW {
+public class  MTVEC_CSR extends CSR_RW {
 
     public BITFIELD MODE;
     public BITFIELD BASE;

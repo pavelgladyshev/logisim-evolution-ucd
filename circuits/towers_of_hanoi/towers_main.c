@@ -19,7 +19,7 @@
 
 // This is the number of discs in the puzzle.
 
-#define NUM_DISCS 9 
+#define NUM_DISCS 6 
 
 // debug output
 

@@ -1,273 +1,383 @@
 package com.cburch.logisim.riscv.cpu;
 
-import com.cburch.logisim.riscv.cpu.gdb.*;
+import com.cburch.logisim.data.Value;
+import com.cburch.logisim.riscv.cpu.gdb.DebuggerRequest;
+import com.cburch.logisim.riscv.cpu.gdb.Packet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.SynchronousQueue;
 
-import static com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest.TYPE.MEMREAD;
-import static com.cburch.logisim.riscv.cpu.gdb.MemoryAccessRequest.TYPE.MEMWRITE;
-
-public class GDBServer implements Runnable{
-
+public class GDBServer implements Runnable {
 
     private ServerSocket serverSocket;
     private Socket socket;
-    private InputStream in;
-    private OutputStream out;
-    private Thread gdbserver;
-    private rv32imData cpu;
-    private Request request;
-    private List<Breakpoint> breakpoints;
+    private rv32imData cpuData;
+    public SynchronousQueue<String> debuggerResponse;
+    private boolean shouldRun;
+    private Thread thread;
 
-    public GDBServer(int port, rv32imData cpuData) {
-        try {
-            serverSocket = new ServerSocket(port);
-            cpu = cpuData;
-            gdbserver = new Thread(this);
-            gdbserver.start();
-            breakpoints = new ArrayList<>();
+    static final Logger logger = LoggerFactory.getLogger(GDBServer.class);
+
+    public void startGDBServer(int port, rv32imData cpuData) throws IOException {
+        this.serverSocket = new ServerSocket(port);
+        this.debuggerResponse = new SynchronousQueue<>();
+        this.cpuData = cpuData;
+        this.cpuData.setGDBServer(this);
+        this.thread = new Thread(this);
+        this.shouldRun = true;
+        this.thread.start();
+    }
+
+    public void stopGDBServer() {
+        shouldRun = false;
+
+        // Close client socket if connected
+        if (socket != null && !socket.isClosed()) {
+            try {
+                socket.close();
+            } catch (IOException ex) {
+                logger.info("Error closing client socket: " + ex.toString());
+            }
         }
-        catch(IOException ex){
-            System.err.println("Failed to start GDB server on port " + port);
-            ex.printStackTrace();
+
+        // Close server socket
+        if (serverSocket != null && !serverSocket.isClosed()) {
+            try {
+                serverSocket.close();
+            } catch (IOException ex) {
+                logger.info("Error closing server socket: " + ex.toString());
+            }
+        }
+
+        // Interrupt and wait for thread to finish
+        if (thread != null) {
+            thread.interrupt();
+            try {
+                thread.join(1000); // Wait up to 1 second
+            } catch (InterruptedException ex) {
+                logger.info("Interrupted while waiting for GDB server thread to stop");
+            }
+        }
+    }
+
+    public void setDebuggerResponse(String response) {
+        try {
+            debuggerResponse.put(response);
+        } catch (InterruptedException e) {
+            logger.error("Interrupted while adding response", e);
         }
     }
 
     @Override
     public void run() {
-        while (true) {
+        byte[] data = new byte[65536];
+        while (shouldRun) {
             try {
-                    System.out.println("Waiting for TCP connection");
-                    socket = serverSocket.accept();  // wait for incoming connection
-                    System.out.println("Accepted incoming TCP connection");
+                logger.info("Waiting for incoming TCP connection on port " + serverSocket.getLocalPort());
+                socket = serverSocket.accept();  // wait for incoming connection
+                logger.info("Accepted incoming TCP connection");
+                socket.setKeepAlive(true);
 
-                    in = socket.getInputStream();
-                    out = socket.getOutputStream();
+                InputStream in = socket.getInputStream();
+                PrintStream out = new PrintStream(socket.getOutputStream(), true);
+                Packet packetResponse = new Packet("");
 
-                    PrintStream printer = new PrintStream(out, true);
-                    Packet packetResponse = new Packet("");
+                // stop CPU if currently running (as if GDB user pressed Ctrl-C)
+                handle("\u0003",cpuData);
 
-                    while (socket.isConnected()) {
+                while (shouldRun) {
+                    // Check if there's incoming data
+                    if (in.available() > 0) {
+                        int len = in.read(data);
+                        if (len < 0) break; // socket has closed
 
-                        byte[] data = new byte[65536];
-                        int len;
+                        int processedBytes = 0;
+                        while (processedBytes < len) {
+                            Packet packetReceived = new Packet(data, len, processedBytes);
+                            processedBytes += packetReceived.getProcessedBytes();
 
-                        // in.read();
-                        len = in.read(data);
-
-                        if (Thread.interrupted()) {
-                            terminate();
-                            return;
-                        }
-
-                        Packet packetReceived = new Packet(data, len);
-                        //System.out.println("received : " + packetReceived.getPacketData());
-
-                        if (packetReceived.isValid()) {
-                            printer.print("+");
-                            // analyse data and manipulate cpu object accordingly
-                            String response = handle(packetReceived.getPacketData());
-                            // send response;
-                            packetResponse = new Packet(response);
-                            printer.print(packetResponse.wrapped());
-                        }
-                        //if NACK ("-") is received retransmit response
-                        else if (packetReceived.isNACK()) {
-                            printer.print(packetResponse.wrapped());
-                        }
-                        //else if checksum is invalid transmit NACK ("-")
-                        else if (!packetReceived.isACK()) {
-                            printer.print("-");
+                            if (packetReceived.isValid()) {
+                                out.print("+");
+                                // analyse data and generate response string, send debugger requests to cpu if necessary
+                                String response = handle(packetReceived.getPacketData(), cpuData);
+                                // send response;
+                                if (null != response) {
+                                    packetResponse = new Packet(response);
+                                    out.print(packetResponse.wrapped());
+                                }
+                                // if this was a debugging termination request "D",
+                                // close the socket and go back to listening for incoming connections
+                                if (packetReceived.getPacketData().equals("D")) {
+                                    out.flush();
+                                    socket.close();
+                                    break;
+                                }
+                            } else if (packetReceived.isNACK()) {
+                                out.print(packetResponse.wrapped());
+                            } else if (packetReceived.isCtrlC()) {
+                                handle(packetReceived.getPacketData(), cpuData);
+                                packetResponse = new Packet("OK");
+                                out.print(packetResponse.wrapped());
+                            } else if (!packetReceived.isACK()) {
+                                out.print("-");
+                            }
                         }
                     }
-            } catch (IOException ex) {
-                System.err.println("GDB server running failed ");
-                ex.printStackTrace();
+
+                    // Check for debugger responses (including breakpoint hits)
+                    String debuggerResponse = this.debuggerResponse.poll();
+                    if (debuggerResponse != null) {
+                        Packet responsePacket = new Packet(debuggerResponse);
+                        out.print(responsePacket.wrapped());
+                    }
+
+                    Thread.sleep(10); // Small delay to avoid busy waiting
+                }
+            } catch (Exception e) {
+                //TODO improve exception handling
+                if (serverSocket.isClosed()) {
+                    // gdbServer is being stopped
+                    logger.info("Stopping");
+                    return;
+                }
+                logger.info("Incoming TCP connection closed");
+                continue; // try again
             }
         }
     }
 
-    public void terminate() {
-        // do any cleanup required
-        if(gdbserver != null) gdbserver.interrupt();
-    }
-
-    public String handle(String command) {
+    private String handle(String command, rv32imData cpu) throws InterruptedException {
         String[] fields = command.split("[:,;,,]");
-        StringBuilder response = new StringBuilder();
-        String errorMessage;
+        String response = "";
 
-        String field1 = fields[0];
+        String field0 = fields[0];
 
-        System.out.println(command);
-        System.out.println(Arrays.toString(fields));
+        //System.out.println(command);
+        //System.out.println(Arrays.toString(fields));
 
-        if(field1.startsWith("q")){
-            switch (field1.substring(1)) {
-                case "Supported" -> {
-                    response.append("PacketSize=65536;qXfer:features:read+");
+        if(field0.startsWith("q")){
+            switch(field0.substring(1)){
+                case "Supported" : {
+                    response = "PacketSize=65536;qXfer:features:read+";
+                    break;
                 }
-                case "Xfer" -> {
-                    response.append("l<target version=\"1.0\"><architecture>riscv:rv32</architecture></target>");
+                case "Xfer" : {
+                    response = "l<target version=\"1.0\"><architecture>riscv:rv32</architecture></target>";
+                    break;
                 }
-                case "Attached" -> {
-                    response.append("1");
+                case "Attached" : {
+                    response = "1";
+                    break;
                 }
             }
         }
-        else if(field1.startsWith("Q")){
-            switch(field1.substring(1)){
+        else if(field0.startsWith("Q")){
+            switch(field0.substring(1)){
 
             }
         }
-        else if(field1.startsWith("v")){
-            if (field1.substring(1).equals("MustReplyEmpty")) {
-            }
-        }
-        else if(field1.startsWith("m")){
-            parseMemoryAccessRequest(MEMREAD, fields);
-            if(!(errorMessage = parseMemoryAccessRequest(MEMREAD, fields)).isBlank()) {
-                response.append(errorMessage);
-            }
-            else if (request.isSuccess()) response.append(((MemoryAccessRequest)request).getDataBuffer());
-            else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
+        else if(field0.startsWith("v")){
+            switch(field0.substring(1)){
+                case "Cont?" :
+                    response = "vCont;s;c;";
+                    break;
 
-        }
-        else if(field1.startsWith("M")){
-                if(!(errorMessage = parseMemoryAccessRequest(MEMWRITE, fields)).isBlank()) {
-                    response.append(errorMessage);
-                }
-                else if(request.isSuccess()) response.append("OK");
-                else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
-        }
-        else if(field1.startsWith("s")){
-            try {
-                request = new StepRequest(1);
-                request.waitForAcknowledgement();
-            } catch (Exception ex){
-                ex.printStackTrace();
+                case "MustReplyEmpty" :
+                    response = "";
+                    break;
             }
-            if (request.isSuccess()) response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
-            else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
         }
-        else if(field1.startsWith("c")){
-            try {
-                request = new ContinueRequest(breakpoints);
-                request.waitForAcknowledgement();
-            } catch (Exception ex){
-                ex.printStackTrace();
-            }
-            if (request.isSuccess()) response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
-            else if(request.isStale()) response.append(SIGNAL.GDB_SIGNAL_XCPU.getCode());
-        }
-        else if (field1.startsWith("Z") || field1.startsWith("z")) {
-            response.append(handleBreakpoint(field1, fields));
-        }
-        else switch (field1) {
-                case "?" -> {
-                    response.append(SIGNAL.GDB_SIGNAL_TRAP.getCode());
+        else if(field0.startsWith("g")){
+            cpu.setDebuggerRequest((long dataIn)->{
+                StringBuilder resp = new StringBuilder();
+                for (int i=0; i<32; i++) {
+                    resp.append(formatWordString(cpu.getX(i)));
                 }
-                case "g" -> {
-                    for (int i = 0; i < 32; i++) {
-                        response.append(bigToLittleEndian4(cpu.getX(i)));
+                resp.append(formatWordString(cpu.getPC().get()));
+                cpu.addDebuggerResponse(resp.toString());
+                    return true;
+            });
+            response = debuggerResponse.take();
+        }
+        else if(field0.startsWith("p")){
+            cpu.setDebuggerRequest((long dataIn)->{
+                    cpu.addDebuggerResponse(formatWordString(cpu.getX(Integer.valueOf(field0.substring(2)))));
+                    return true;
+            });
+            response = debuggerResponse.take();
+        }
+        else if(field0.startsWith("P")){
+            String[] parts = field0.substring(1).split("=");
+            int regNum = Integer.parseInt(parts[0], 16);
+            int regValue = Integer.reverseBytes((int) Long.parseLong(parts[1], 16));
+            cpu.setDebuggerRequest((long dataIn)->{
+                    if (regNum == 32) {
+                        cpu.getPC().set(regValue);
+                    } else {
+                        cpu.setX(regNum, regValue);
                     }
-                    response.append(bigToLittleEndian4(cpu.getPC().get()));
-                }
-            }
-        return response.toString();
-    }
+                    cpu.addDebuggerResponse("OK");
+                    return true;
+            });
+            response = debuggerResponse.take();
+        }
+        else if(field0.startsWith("s")){
+            cpu.setDebuggerRequest((long dataIn) -> {
+                    cpu.setCpuState(rv32imData.CPUState.SINGLE_STEP);
+                    cpu.fetchNextInstruction();
+                    return true;
+            });
+            return null; // Don't send immediate response, wait for CPU to stop
+        }
+        else if(field0.startsWith("m")){
+            cpu.setDebuggerRequest(new DebuggerRequest() {
+                    long address = Long.parseLong(field0.substring(1),16);
+                    long count = Long.valueOf(fields[1],16);
+                    boolean addressing = false;
+                    StringBuilder resp = new StringBuilder();
 
-    public Boolean isRequestPending(){
-        if(request == null) return false;
-        else return request.isPending();
-    }
+                    @Override
+                    public boolean process(long dataIn) {
+                        if (addressing) {
+                            // add read byte to string.
+                            long shiftBits = (address & 0x3) * 8;
+                            resp.append(String.format("%02x", (dataIn >> shiftBits) & 0xff));
+                            address++;
+                            count--;
+                        }
+                        if (count == 0) {
+                            cpu.addDebuggerResponse(resp.toString());
+                            addressing = false;
+                            cpu.setMemRead(Value.FALSE);
+                            cpu.setMemWrite(Value.FALSE);
+                            return true;
+                        } else {
+                            cpu.setAddress(Value.createKnown(32, address));
+                            cpu.setMemRead(Value.TRUE);
+                            cpu.setMemWrite(Value.FALSE);
+                            addressing = true;
+                            return false;
+                        }
+                    }
+            });
+            response = debuggerResponse.take();
+        }
+        else if(field0.startsWith("M")){
+            cpu.setDebuggerRequest(new DebuggerRequest() {
+                    long address = Long.parseLong(field0.substring(1),16);
+                    long count = Long.valueOf(fields[1],16);
+                    byte[] data = hexStringToByteArray(fields[2]);
+                    int i=0;
 
-    public Request getRequest(){
-        return request;
-    }
-
-    public void acknowledgeRequest(Request.STATUS status){
-        request.acknowledgeRequest(status);
-    }
-
-
-    private String handleBreakpoint(String command, String[] fields) {
-        StringBuilder response = new StringBuilder();
-        try {
-            char action = command.charAt(0);
-            int breakpointType = Character.getNumericValue(command.charAt(1));
+                    @Override
+                    public boolean process(long dataIn) {
+                        if (count == i) {
+                            cpu.addDebuggerResponse("OK");
+                            cpu.setOutputDataWidth(0);
+                            cpu.setMemRead(Value.FALSE);
+                            cpu.setMemWrite(Value.FALSE);
+                            return true;
+                        } else {
+                            cpu.setAddress(Value.createKnown(32, address));
+                            cpu.setOutputData(data[i]);
+                            cpu.setOutputDataWidth(1);
+                            cpu.setMemRead(Value.TRUE);
+                            cpu.setMemWrite(Value.TRUE);
+                            i++;
+                            address++;
+                            return false;
+                        }
+                    }
+            });
+            response = debuggerResponse.take();
+        }
+        else if(field0.startsWith("Z")) {
+            // Set breakpoint
+            int type = Integer.parseInt(field0.substring(1, 2));
             long address = Long.parseLong(fields[1], 16);
-            int kind = Integer.parseInt(fields[2], 16);
-
-            System.out.println("ADDRESS: " + address);
-
-            if (action == 'Z') {
-                boolean success = addBreakpoint(Breakpoint.Type.HARDWARE, address, kind);
-                response.append(success ? "OK" : "E01");
-            } else if (action == 'z') {
-                boolean success = removeBreakpoint(Breakpoint.Type.HARDWARE, address, kind);
-                response.append(success ? "OK" : "E01");
+            
+            if (type == 0 || type == 1) {  // Software or hardware breakpoint
+                cpu.setDebuggerRequest((long dataIn) -> {
+                        cpu.setBreakpoint(address);
+                        cpu.addDebuggerResponse("OK");
+                        return true;
+                });
+                response = debuggerResponse.take();
+            } else {
+                response = "";  // Unsupported breakpoint type
             }
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            response.append("E01");
         }
-        return response.toString();
-    }
-
-    public boolean addBreakpoint(Breakpoint.Type breakpointType, long address, int kind) {
-        Breakpoint breakpoint = new Breakpoint(breakpointType, address, kind);
-        breakpoints.add(breakpoint);
-        return true;
-    }
-
-    public boolean removeBreakpoint(Breakpoint.Type breakpointType, long address, int kind) {
-        Breakpoint.Type type = breakpointType;
-        return breakpoints.removeIf(bp -> bp.getType() == type && bp.getAddress() == address && bp.getKind() == kind);
-    }
-
-    private String parseMemoryAccessRequest(MemoryAccessRequest.TYPE type, String[] fields) {
-        long address = Long.parseLong(fields[0].substring(1), 16);
-        int bytes = (int) Long.parseLong(fields[1], 16);
-        String errorMessage = "";
-        //check if out of memory bounds
-        if(!((address >= 0x00400000 && address < 0x00404000) || (address >= 0x10010000 && address < 0x10014000))){
-            errorMessage = SIGNAL.GDB_EXC_BAD_ACCESS.getCode();
-        }
-        //else create request
-        else try {
-            if (type.equals(MEMWRITE)) {
-                String data = fields[2];
-                request = new MemoryAccessRequest(MEMWRITE, address, bytes, data);
+        else if(field0.startsWith("z")) {
+            // Remove breakpoint
+            int type = Integer.parseInt(field0.substring(1, 2));
+            long address = Long.parseLong(fields[1], 16);
+            
+            if (type == 0 || type == 1) {  // Software or hardware breakpoint
+                cpu.setDebuggerRequest((long dataIn) -> {
+                        cpu.removeBreakpoint(address);
+                        cpu.addDebuggerResponse("OK");
+                        return true;
+                });
+                response = debuggerResponse.take();
+            } else {
+                response = "";  // Unsupported breakpoint type
             }
-            else {
-                request = new MemoryAccessRequest(MEMREAD, address, bytes);
-            }
-            request.waitForAcknowledgement();
-        } catch (IOException e) {
-                throw new RuntimeException(e);
         }
-        return errorMessage;
+        else if(field0.equals("c")) {
+            // Continue execution
+            cpu.setDebuggerRequest((long dataIn) -> {
+                    cpu.setBreakpointsEnabled(true);
+                    cpu.setCpuState(rv32imData.CPUState.RUNNING);
+                    cpu.fetchNextInstruction();
+                    return true;
+            });
+            return null; // Don't send immediate response, wait for CPU to stop
+        }
+        else if(field0.startsWith("\u0003")) {
+            // Ctrl-C interruption
+            cpu.setDebuggerRequest((long dataIn) -> {
+                    if (cpu.getCpuState() != rv32imData.CPUState.STOPPED) {
+                        cpu.setCpuState(rv32imData.CPUState.SINGLE_STEP);
+                    }
+                    //cpu.addDebuggerResponse("T05");
+                    return true;
+            });
+            return "OK";
+        }
+        else if(field0.startsWith("D")) {
+            // termination of debug session by the remote: resume CPU
+            cpu.setDebuggerRequest((long dataIn) -> {
+                    cpu.setBreakpointsEnabled(false);
+                    cpu.setCpuState(rv32imData.CPUState.RUNNING);
+                    cpu.fetchNextInstruction();
+                    return true;
+            });
+            return "OK";
+        }
+        else switch (field0) {
+                case "?" : {
+                    response = "S05";
+                    break;
+                }
+        }
+        return response;
     }
 
-    public String bigToLittleEndian4(long x){
-        ByteBuffer buffer = bigToLittleEndian(x, 4);
-        return String.format("%08x",buffer.asIntBuffer().get());
+    private static String formatWordString(long val) {
+        return String.format("%08x",Integer.reverseBytes((int)val));
     }
 
-    private ByteBuffer bigToLittleEndian(long x, int bytes){
-        int value = (int) x;
-        ByteBuffer buffer = ByteBuffer.allocate(bytes);
-        buffer.order(ByteOrder.BIG_ENDIAN);
-        buffer.asIntBuffer().put(value);
-        buffer.order(ByteOrder.LITTLE_ENDIAN);
-        return buffer;
+    public static byte[] hexStringToByteArray(String s) {
+        int len = s.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
+                    + Character.digit(s.charAt(i+1), 16));
+        }
+        return data;
     }
 }

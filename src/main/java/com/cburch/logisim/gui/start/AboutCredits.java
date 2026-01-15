@@ -12,6 +12,7 @@ package com.cburch.logisim.gui.start;
 import static com.cburch.logisim.gui.Strings.S;
 
 import com.cburch.logisim.generated.BuildInfo;
+import com.cburch.logisim.prefs.AppPreferences;
 import com.cburch.logisim.util.LineBuffer;
 
 import java.awt.Color;
@@ -21,6 +22,7 @@ import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
+import java.awt.RenderingHints;
 import java.awt.image.ImageObserver;
 import java.net.URL;
 import java.util.ArrayList;
@@ -52,32 +54,32 @@ class AboutCredits extends JComponent {
     lines = new Lines();
     lines
         .title(BuildInfo.displayName)
-        .h2(String.format("Copyright \u00A92001-%s %s developers", BuildInfo.year, BuildInfo.name))
+        .h2(String.format("Copyright \u00A9 2001-%s %s developers", BuildInfo.year, BuildInfo.name))
         .url(BuildInfo.url)
         .space()
         .h1(S.get("creditsDevelopedBy"))
-        .text("David H. Hutchens")
-        .text("Kevin Walsh")
         .text("Moshe Berman")
         .text("Theldo Cruz Franqueira")
+        .text("Zhao Hanyuan")
+        .text("David H. Hutchens")
         .text("Theo Kluter")
-        .text("Marcin Orłowski")
+        .text("Torsten Maehne")
         .text("Tom Niget")
+        .text("Marcin Orłowski")
+        .text("Kevin Walsh")
         .text("Liu Yuchen")
         .tiny(S.get("creditsDevelopedByAndOthers"))
         .space()
         .h1(S.get("creditsRoleFork"))
+        .text("Berner Fachhochschule | Haute école spécialisée bernoise")
+        .url("https://www.bfh.ch/")
         .text("College of the Holy Cross")
         .url("https://www.holycross.edu")
-        .text("Haute \u00C9cole Sp\u00E9cialis\u00E9e Bernoise/")
-        .text("Berner Fachhochschule")
-        .url("https://www.bfh.ch/")
-        .text("Haute \u00C9cole du paysage, d'ing\u00E9nierie")
-        .text("et d'architecture de Gen\u00E8ve")
-        .url("https://hepia.hesge.ch")
-        .text("Haute \u00C9cole d'Ing\u00E9nierie")
-        .text("et de Gestion du Canton de Vaud")
+        .text("Haute École d'Ingénierie et de Gestion du Canton de Vaud")
         .url("https://www.heig-vd.ch/")
+        .text("Haute école du paysage, d'ingénierie")
+        .text("et d'architecture de Genève")
+        .url("https://hepia.hesge.ch")
         .space()
         .h1(S.get("creditsRoleOriginal"))
         .text("Carl Burch")
@@ -98,6 +100,13 @@ class AboutCredits extends JComponent {
 
   @Override
   protected void paintComponent(Graphics g) {
+    if (AppPreferences.AntiAliassing.getBoolean()) {
+      Graphics2D g2 = (Graphics2D) g;
+      g2.setRenderingHint(
+          RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+      g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    }
+
     if (startMillis == 0) {
       startMillis = System.currentTimeMillis();
       lines.initialize(getGraphics(), getWidth(), getHeight());

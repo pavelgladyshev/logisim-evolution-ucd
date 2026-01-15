@@ -23,6 +23,7 @@ import com.cburch.logisim.instance.InstanceComponent;
 import com.cburch.logisim.instance.InstanceFactory;
 import com.cburch.logisim.instance.InstancePainter;
 import com.cburch.logisim.instance.InstanceState;
+import com.cburch.logisim.instance.InstanceStateImpl;
 import com.cburch.logisim.instance.Port;
 import com.cburch.logisim.instance.StdAttr;
 import com.cburch.logisim.prefs.AppPreferences;
@@ -60,10 +61,7 @@ public class SubcircuitFactory extends InstanceFactory {
     public void actionPerformed(ActionEvent e) {
       final var superState = proj.getCircuitState();
       if (superState == null) return;
-
-      final var subState = getSubstate(superState, instance);
-      if (subState == null) return;
-      proj.setCircuitState(subState);
+      proj.setCircuitState(getSubstate(superState, instance.getComponent()));
     }
 
     @Override
@@ -222,8 +220,11 @@ public class SubcircuitFactory extends InstanceFactory {
       var backs = false;
       while (back >= 0 && back <= label.length() - 2) {
         final var c = label.charAt(back + 1);
-        if (c == 'n') lines++;
-        else if (c == '\\') backs = true;
+        if (c == 'n') {
+          lines++;
+        } else if (c == '\\') {
+          backs = true;
+        }
         back = label.indexOf('\\', back + 2);
       }
 
@@ -296,24 +297,25 @@ public class SubcircuitFactory extends InstanceFactory {
   }
 
   public CircuitState getSubstate(CircuitState superState, Component comp) {
-    return getSubstate(createInstanceState(superState, comp));
-  }
-
-  //
-  // propagation-oriented methods
-  //
-  public CircuitState getSubstate(CircuitState superState, Instance instance) {
-    return getSubstate(createInstanceState(superState, instance));
-  }
-
-  private CircuitState getSubstate(InstanceState instanceState) {
-    var subState = (CircuitState) instanceState.getData();
+    var subState = (CircuitState) superState.getData(comp);
     if (subState == null) {
-      subState = new CircuitState(instanceState.getProject(), source);
-      instanceState.setData(subState);
-      instanceState.fireInvalidated();
+      subState = superState.createCircuitSubstateFor(comp, source);
+      if (comp instanceof InstanceComponent) {
+        ((InstanceComponent) comp).fireInvalidated();
+      } else {
+        System.out.println("wrong kind... " + comp);
+      }
     }
     return subState;
+  }
+
+  private CircuitState getSubstate(InstanceState stateInContext) {
+    if (stateInContext instanceof InstanceStateImpl) {
+      return getSubstate(((InstanceStateImpl) stateInContext).getCircuitState(),
+          ((InstanceStateImpl) stateInContext).getComponent());
+    } else {
+      throw new IllegalArgumentException("getSubstate on wrong type " + stateInContext);
+    }
   }
 
   @Override
@@ -383,24 +385,24 @@ public class SubcircuitFactory extends InstanceFactory {
   }
 
   @Override
-  public void propagate(InstanceState superState) {
-    final var subState = getSubstate(superState);
+  public void propagate(InstanceState stateInContext) {
+    final var subState = getSubstate(stateInContext);
 
-    final var attrs = (CircuitAttributes) superState.getAttributeSet();
+    final var attrs = (CircuitAttributes) stateInContext.getAttributeSet();
     final var pins = attrs.getPinInstances();
     for (var i = 0; i < pins.length; i++) {
       final var pin = pins[i];
       final var pinState = subState.getInstanceState(pin);
       if (Pin.FACTORY.isInputPin(pin)) {
-        final var newVal = superState.getPortValue(i);
+        final var newVal = stateInContext.getPortValue(i);
         final var oldVal = Pin.FACTORY.getValue(pinState);
         if (!newVal.equals(oldVal)) {
-          Pin.FACTORY.setValue(pinState, newVal);
+          Pin.FACTORY.driveInputPin(pinState, newVal);
           Pin.FACTORY.propagate(pinState);
         }
       } else { // it is output-only
         final var val = pinState.getPortValue(0);
-        superState.setPort(i, val, 1);
+        stateInContext.setPort(i, val, 1);
       }
     }
   }
@@ -409,12 +411,15 @@ public class SubcircuitFactory extends InstanceFactory {
   public void paintIcon(InstancePainter painter) {
     final var g2 = (Graphics2D) painter.getGraphics().create();
     final var attrs = (CircuitAttributes) painter.getAttributeSet();
-    if (attrs.getValue(CircuitAttributes.APPEARANCE_ATTR).equals(CircuitAttributes.APPEAR_CLASSIC))
+    if (attrs.getValue(CircuitAttributes.APPEARANCE_ATTR).equals(CircuitAttributes.APPEAR_CLASSIC)) {
       paintClasicIcon(g2);
-    else if (attrs
-        .getValue(CircuitAttributes.APPEARANCE_ATTR)
-        .equals(CircuitAttributes.APPEAR_FPGA)) paintHCIcon(g2);
-    else paintEvolutionIcon(g2);
+    } else if (attrs
+            .getValue(CircuitAttributes.APPEARANCE_ATTR)
+            .equals(CircuitAttributes.APPEAR_FPGA)) {
+      paintHCIcon(g2);
+    } else {
+      paintEvolutionIcon(g2);
+    }
     g2.dispose();
   }
 
@@ -422,22 +427,21 @@ public class SubcircuitFactory extends InstanceFactory {
     g2.setStroke(new BasicStroke(AppPreferences.getScaled(2)));
     g2.setColor(Color.GRAY);
     g2.drawArc(
-        AppPreferences.getScaled(6),
-        AppPreferences.getScaled(-2),
-        AppPreferences.getScaled(4),
-        AppPreferences.getScaled(6),
-        180,
-        180);
+            AppPreferences.getScaled(6),
+            AppPreferences.getScaled(-2),
+            AppPreferences.getScaled(4),
+            AppPreferences.getScaled(6),
+            180,
+            180);
     g2.setColor(Color.BLACK);
     g2.drawRect(
-        AppPreferences.getScaled(2),
-        AppPreferences.getScaled(1),
-        AppPreferences.getScaled(12),
-        AppPreferences.getScaled(14));
+            AppPreferences.getScaled(2),
+            AppPreferences.getScaled(1),
+            AppPreferences.getScaled(12),
+            AppPreferences.getScaled(14));
     final var wh = AppPreferences.getScaled(3);
     for (var y = 0; y < 3; y++) {
-      if (y == 1) g2.setColor(Value.trueColor);
-      else g2.setColor(Value.falseColor);
+      g2.setColor(y == 1 ? Value.trueColor : Value.falseColor);
       g2.fillOval(AppPreferences.getScaled(1), AppPreferences.getScaled(y * 4 + 3), wh, wh);
       if (y < 2) {
         g2.setColor(Value.unknownColor);
@@ -450,20 +454,19 @@ public class SubcircuitFactory extends InstanceFactory {
     g2.setStroke(new BasicStroke(AppPreferences.getScaled(2)));
     g2.setColor(Color.BLACK);
     g2.drawRect(
-        AppPreferences.getScaled(1),
-        AppPreferences.getScaled(1),
-        AppPreferences.getScaled(14),
-        AppPreferences.getScaled(14));
+            AppPreferences.getScaled(1),
+            AppPreferences.getScaled(1),
+            AppPreferences.getScaled(14),
+            AppPreferences.getScaled(14));
     final var f = g2.getFont().deriveFont((float) AppPreferences.getIconSize() / 4);
     final var l = new TextLayout("main", f, g2.getFontRenderContext());
     l.draw(
-        g2,
-        (float) (AppPreferences.getIconSize() / 2 - l.getBounds().getCenterX()),
-        (float) (AppPreferences.getIconSize() / 4 - l.getBounds().getCenterY()));
+            g2,
+            (float) (AppPreferences.getIconSize() / 2 - l.getBounds().getCenterX()),
+            (float) (AppPreferences.getIconSize() / 4 - l.getBounds().getCenterY()));
     final var wh = AppPreferences.getScaled(3);
     for (int y = 1; y < 3; y++) {
-      if (y == 1) g2.setColor(Value.trueColor);
-      else g2.setColor(Value.falseColor);
+      g2.setColor(y == 1 ? Value.trueColor : Value.falseColor);
       g2.fillOval(AppPreferences.getScaled(0), AppPreferences.getScaled(y * 4 + 3), wh, wh);
       if (y < 2) {
         g2.setColor(Value.unknownColor);
@@ -475,24 +478,24 @@ public class SubcircuitFactory extends InstanceFactory {
   public static void paintEvolutionIcon(Graphics2D g2) {
     g2.setStroke(new BasicStroke(AppPreferences.getScaled(2)));
     g2.drawRect(
-        AppPreferences.getScaled(2), 0, AppPreferences.getScaled(12), AppPreferences.getScaled(16));
+            AppPreferences.getScaled(2), 0, AppPreferences.getScaled(12), AppPreferences.getScaled(16));
     g2.fillRect(
-        AppPreferences.getScaled(2),
-        (3 * AppPreferences.getIconSize()) / 4,
-        AppPreferences.getScaled(12),
-        AppPreferences.getIconSize() / 4);
+            AppPreferences.getScaled(2),
+            (3 * AppPreferences.getIconSize()) / 4,
+            AppPreferences.getScaled(12),
+            AppPreferences.getIconSize() / 4);
     for (int y = 0; y < 3; y++) {
       g2.drawLine(
-          0,
-          AppPreferences.getScaled(y * 4 + 2),
-          AppPreferences.getScaled(2),
-          AppPreferences.getScaled(y * 4 + 2));
+              0,
+              AppPreferences.getScaled(y * 4 + 2),
+              AppPreferences.getScaled(2),
+              AppPreferences.getScaled(y * 4 + 2));
       if (y < 2)
         g2.drawLine(
-            AppPreferences.getScaled(13),
-            AppPreferences.getScaled(y * 4 + 2),
-            AppPreferences.getScaled(15),
-            AppPreferences.getScaled(y * 4 + 2));
+                AppPreferences.getScaled(13),
+                AppPreferences.getScaled(y * 4 + 2),
+                AppPreferences.getScaled(15),
+                AppPreferences.getScaled(y * 4 + 2));
     }
     g2.setColor(Color.WHITE);
     final var f = g2.getFont().deriveFont((float) AppPreferences.getIconSize() / 4);

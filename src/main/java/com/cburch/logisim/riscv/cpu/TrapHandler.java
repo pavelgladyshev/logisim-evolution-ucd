@@ -7,11 +7,10 @@ public class TrapHandler {
 
     public static void handle(rv32imData hartData, MCAUSE_CSR.TRAP_CAUSE cause) {
 
-        MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(hartData, MSTATUS);
-        MEPC_CSR mepc = (MEPC_CSR) MMCSR.getCSR(hartData, MEPC);
-        MTVEC_CSR mtvec = (MTVEC_CSR) MMCSR.getCSR(hartData, MTVEC);
-        MCAUSE_CSR mcause = (MCAUSE_CSR) MMCSR.getCSR(hartData, MCAUSE);
-        CSR mtval = MMCSR.getCSR(hartData, MTVAL);
+        MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(hartData, MMCSR.MSTATUS);
+        MTVEC_CSR mtvec = (MTVEC_CSR) MMCSR.getCSR(hartData, MMCSR.MTVEC);
+        MCAUSE_CSR mcause = (MCAUSE_CSR) MMCSR.getCSR(hartData, MMCSR.MCAUSE);
+        CSR mtval = MMCSR.getCSR(hartData, MMCSR.MTVAL);
         ProgramCounter pc = hartData.getPC();
 
         // mepc = PC ( points to instruction that caused the exception / instruction to resume after interrupt )
