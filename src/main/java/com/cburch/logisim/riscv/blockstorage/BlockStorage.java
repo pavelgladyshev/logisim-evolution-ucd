@@ -45,13 +45,13 @@ public class BlockStorage extends InstanceFactory {
         setOffsetBounds(Bounds.create(-50, -50, 180, 280));
 
         Port[] ports = new Port[15];
-        ports[ADDR]  = new Port(-50,   0, Port.INPUT,  32);
+        ports[ADDR]  = new Port(-50,   0, Port.INPUT,  8);
         ports[READ_ENABLE]  = new Port(-50,  20, Port.INPUT,   1);
         ports[WRITE_ENABLE] = new Port(-50,  40, Port.INPUT,   1);
-        ports[BE0]   = new Port(-50,  60, Port.INOUT,   1);
-        ports[BE1]   = new Port(-50,  80, Port.INOUT,   1);
+        ports[BE0]   = new Port(-50, 120, Port.INOUT,   1);
+        ports[BE1]   = new Port(-50, 110, Port.INOUT,   1);
         ports[BE2]   = new Port(-50, 100, Port.INOUT,   1);
-        ports[BE3]   = new Port(-50, 120, Port.INOUT,   1);
+        ports[BE3]   = new Port(-50,  90, Port.INOUT,   1);
         ports[RESET] = new Port(-50, 140, Port.INPUT,   1);
         ports[BUS_REQUEST] = new Port(130, 160, Port.OUTPUT, 1);
         ports[BUS_ACK] = new Port(-50, 180, Port.INPUT, 1);
@@ -65,15 +65,15 @@ public class BlockStorage extends InstanceFactory {
 
 
         // tooltips
-        ports[ADDR].setToolTip(    S.getter("Block Address"));
+        ports[ADDR].setToolTip(    S.getter("Address"));
         ports[DATA].setToolTip(    S.getter("Data Bus"));
-        ports[READ_ENABLE].setToolTip(    S.getter("Read Enable"));
-        ports[WRITE_ENABLE].setToolTip(   S.getter("Write Enable"));
+        ports[READ_ENABLE].setToolTip(    S.getter("Load: if 1 load from memory to data bus"));
+        ports[WRITE_ENABLE].setToolTip(   S.getter("Store: if 1 store from data bus to memory"));
         ports[BE0].setToolTip(     S.getter("Byte Enable 0"));
         ports[BE1].setToolTip(     S.getter("Byte Enable 1"));
         ports[BE2].setToolTip(     S.getter("Byte Enable 2"));
         ports[BE3].setToolTip(     S.getter("Byte Enable 3"));
-        ports[RESET].setToolTip(   S.getter("Reset Pointer"));
+        ports[RESET].setToolTip(   S.getter("Reset"));
         ports[CLOCK].setToolTip(   S.getter("Clock"));
 
 
@@ -146,19 +146,20 @@ public class BlockStorage extends InstanceFactory {
         FileStatus status = getFileStatus(fileName);
 
         Color statusColor = Color.BLACK;
-        String statusText = fileName;
+        String statusText1 = fileName;
+        String statusText2 = "";
 
 
         if (status.isValid()) {
             if (status.willBeCreated()) {
-                statusText = fileName + " (Will be created)";
+                statusText2 = "(Will be created)";
                 statusColor = Color.BLUE;
             } else {
-                statusText = fileName + " (" + status.getBlockCount() + " blocks)";
+                statusText2 = "(" + status.getBlockCount() + " blocks)";
                 statusColor = Color.BLACK;
             }
         } else {
-            statusText = fileName + ": " + status.getErrorMessage();
+            statusText2 = status.getErrorMessage();
             statusColor = Color.RED;
         }
 
@@ -167,9 +168,20 @@ public class BlockStorage extends InstanceFactory {
         GraphicsUtil.drawText(
                 graphics,
                 STATUS_FONT,
-                statusText,
+                statusText1,
                 statusX,
                 statusY,
+                GraphicsUtil.H_CENTER,
+                GraphicsUtil.V_BOTTOM,
+                statusColor,
+                Color.GREEN
+        );
+        GraphicsUtil.drawText(
+                graphics,
+                STATUS_FONT,
+                statusText2,
+                statusX,
+                statusY+STATUS_FONT.getSize(),
                 GraphicsUtil.H_CENTER,
                 GraphicsUtil.V_BOTTOM,
                 statusColor,
