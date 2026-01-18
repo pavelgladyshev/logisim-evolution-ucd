@@ -516,7 +516,7 @@ public class AppPreferences {
   // Window preferences
   public static final String TOOLBAR_HIDDEN = "hidden";
   public static final PrefMonitor<Boolean> SHOW_TICK_RATE =
-      create(new PrefMonitorBoolean("showTickRate", false));
+      create(new PrefMonitorBoolean("showTickRate", true));
   public static final PrefMonitor<String> TOOLBAR_PLACEMENT =
       create(
           new PrefMonitorStringOpts(
@@ -828,7 +828,7 @@ public class AppPreferences {
   private static final RecentProjects recentProjects = new RecentProjects();
 
   public static final PrefMonitor<Double> TICK_FREQUENCY =
-      create(new PrefMonitorDouble("tickFrequency", 1.0));
+      create(new PrefMonitorDouble("tickFrequency", 8000.0));
 
   public static final PrefMonitor<Boolean> LAYOUT_SHOW_GRID =
       create(new PrefMonitorBoolean("layoutGrid", true));
