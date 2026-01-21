@@ -223,11 +223,7 @@ public class rv32im extends InstanceFactory {
 
       if (!cpuState.isBusGranted() && busRequest == Value.TRUE) {
         cpuState.setBusGranted(true);
-     }
-
-
-      //cpuState.setBusGranted(busRequest == Value.TRUE);
-
+      }
 
       if (cpuState.isBusGranted()) {
         updateOutputSignals(state, cpuState);
@@ -238,7 +234,7 @@ public class rv32im extends InstanceFactory {
       long externalIrq = externalInterrupt == Value.TRUE ? 1 : 0;
       long waitRequest = busRequest == Value.TRUE ? 1 : 0;
       long dataValue = dataIn.toLongValue();
-      cpuState.update(dataValue, timerIrq, externalIrq, 0);
+      cpuState.update(dataValue, timerIrq, externalIrq, waitRequest);
     }
 
     updateOutputSignals(state, cpuState);

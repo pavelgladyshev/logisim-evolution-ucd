@@ -45,7 +45,7 @@ public class BlockStorage extends InstanceFactory {
         setOffsetBounds(Bounds.create(-50, -50, 180, 280));
 
         Port[] ports = new Port[15];
-        ports[ADDR]  = new Port(-50,   0, Port.INPUT,  8);
+        ports[ADDR]  = new Port(-50,   0, Port.INPUT,  3);
         ports[READ_ENABLE]  = new Port(-50,  20, Port.INPUT,   1);
         ports[WRITE_ENABLE] = new Port(-50,  40, Port.INPUT,   1);
         ports[BE0]   = new Port(-50, 120, Port.INOUT,   1);
@@ -359,7 +359,7 @@ public class BlockStorage extends InstanceFactory {
                 state.setPort(BE1, HI_Z, 1);
                 state.setPort(BE2, HI_Z, 1);
                 state.setPort(BE3, HI_Z, 1);
-                state.setPort(DATA, HI_Z_32, 1);
+                //state.setPort(DATA, HI_Z_32, 1);
                 state.setPort(BUS_REQUEST, HI_Z, 1);
                 state.setPort(MEM_READ, HI_Z, 1);
                 state.setPort(MEM_WRITE, HI_Z, 1);
@@ -397,7 +397,7 @@ public class BlockStorage extends InstanceFactory {
 
 
     private void handleRegisterWrite(InstanceState state, BlockStorageData data, long address) {
-        int regOffset = (int) (address & 0xFF);
+        int regOffset = ((int) (address & 0xFF)) << 2;
         Value dataBus = state.getPortValue(DATA);
         Value writeEnable = state.getPortValue(WRITE_ENABLE);
         Value readEnable = state.getPortValue(READ_ENABLE);
@@ -408,7 +408,7 @@ public class BlockStorage extends InstanceFactory {
     }
 
     private void handleRegisterRead(InstanceState state, BlockStorageData data, long address) {
-        int regOffset = (int) (address & 0xFF);
+        int regOffset = ((int) (address & 0xFF)) << 2;
         Value dataBus = state.getPortValue(DATA);
         Value writeEnable = state.getPortValue(WRITE_ENABLE);
         Value readEnable = state.getPortValue(READ_ENABLE);
@@ -416,6 +416,8 @@ public class BlockStorage extends InstanceFactory {
         if (readEnable == Value.TRUE) {
             Value regValue = data.readRegister(regOffset);
             state.setPort(DATA, regValue, 1);
+        } else {
+            state.setPort(DATA, HI_Z_32, 1);
         }
     }
 }

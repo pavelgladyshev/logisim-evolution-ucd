@@ -105,25 +105,28 @@ public class BlockStorageData implements InstanceData, Cloneable, AutoCloseable 
     }
 
     public Value readRegister(int regOffset) {
-        switch (regOffset) {
-            case REG_COMMAND:
-                return Value.createKnown(32, command);
+        if (dmaState.equals(DmaState.IDLE)) {
+            switch (regOffset) {
+                case REG_COMMAND:
+                    return Value.createKnown(32, command);
 
-            case REG_MEM_ADDR:
-                return Value.createKnown(32, memoryAddress);
+                case REG_MEM_ADDR:
+                    return Value.createKnown(32, memoryAddress);
 
-            case REG_BLOCK_ADDR:
-                return Value.createKnown(32, blockAddress);
+                case REG_BLOCK_ADDR:
+                    return Value.createKnown(32, blockAddress);
 
-            case REG_STATUS:
-                return Value.createKnown(32, status);
+                case REG_STATUS:
+                    return Value.createKnown(32, status);
 
-            case REG_RESULT:
-                return Value.createKnown(32, result);
+                case REG_RESULT:
+                    return Value.createKnown(32, result);
 
-            default:
-                return Value.createUnknown(BIT_WIDTH_32);
+                default:
+                    return HI_Z_32;
+            }
         }
+        return HI_Z_32;
     }
 
     private void handleCommand() {
