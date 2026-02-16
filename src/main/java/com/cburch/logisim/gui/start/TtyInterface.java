@@ -22,6 +22,7 @@ import com.cburch.logisim.file.LoadFailedException;
 import com.cburch.logisim.file.Loader;
 import com.cburch.logisim.file.LogisimFile;
 import com.cburch.logisim.gui.hex.HexFile;
+import com.cburch.logisim.comp.Component;
 import com.cburch.logisim.instance.Instance;
 import com.cburch.logisim.instance.InstanceState;
 import com.cburch.logisim.instance.StdAttr;
@@ -246,7 +247,9 @@ public class TtyInterface {
     return found;
   }
 
-  private static boolean prepareForTty(CircuitState circState, ArrayList<InstanceState> keybStates) {
+  private record KeyboardRef(CircuitState circuitState, Component component) {}
+
+  private static boolean prepareForTty(CircuitState circState, ArrayList<KeyboardRef> keybRefs) {
     var found = false;
     for (final var comp : circState.getCircuit().getNonWires()) {
       final Object factory = comp.getFactory();
@@ -255,13 +258,13 @@ public class TtyInterface {
         ttyFactory.sendToStdout(ttyState);
         found = true;
       } else if (factory instanceof Keyboard) {
-        keybStates.add(circState.getInstanceState(comp));
+        keybRefs.add(new KeyboardRef(circState, comp));
         found = true;
       }
     }
 
     for (CircuitState sub : circState.getSubstates()) {
-      found |= prepareForTty(sub, keybStates);
+      found |= prepareForTty(sub, keybRefs);
     }
     return found;
   }
@@ -458,17 +461,17 @@ public class TtyInterface {
     final var showTty = (format & FORMAT_TTY) != 0;
     final var showHalt = (format & FORMAT_HALT) != 0;
 
-    ArrayList<InstanceState> keyboardStates = null;
+    ArrayList<KeyboardRef> keyboardRefs = null;
     StdinThread stdinThread = null;
     if (showTty) {
-      keyboardStates = new ArrayList<>();
-      final var ttyFound = prepareForTty(circState, keyboardStates);
+      keyboardRefs = new ArrayList<>();
+      final var ttyFound = prepareForTty(circState, keyboardRefs);
       if (!ttyFound) {
         logger.error("{}", S.get("ttyNoTtyError"));
         System.exit(-1);
       }
-      if (keyboardStates.isEmpty()) {
-        keyboardStates = null;
+      if (keyboardRefs.isEmpty()) {
+        keyboardRefs = null;
       } else {
         stdinThread = new StdinThread();
         stdinThread.start();
@@ -504,11 +507,11 @@ public class TtyInterface {
         retCode = 1; // abnormal exit
         break;
       }
-      if (keyboardStates != null) {
+      if (keyboardRefs != null) {
         final var buffer = stdinThread.getBuffer();
         if (buffer != null) {
-          for (final var keyState : keyboardStates) {
-            Keyboard.addToBuffer(keyState, buffer);
+          for (final var ref : keyboardRefs) {
+            Keyboard.addToBuffer(ref.circuitState().getInstanceState(ref.component()), buffer);
           }
         }
       }
