@@ -39,6 +39,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+import org.jline.utils.NonBlockingReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +57,12 @@ public class TtyInterface {
   public static final int FORMAT_TABLE_CSV = 64;
   public static final int FORMAT_TABLE_BIN = 128;
   public static final int FORMAT_TABLE_HEX = 256;
+  public static final int FORMAT_TTY_RAW = 512;
+
+  private interface InputProvider {
+    char[] getBuffer();
+  }
+
   static final Logger logger = LoggerFactory.getLogger(TtyInterface.class);
   private static boolean lastIsNewline = true;
 
@@ -458,11 +468,13 @@ public class TtyInterface {
   private static int runSimulation(CircuitState circState, ArrayList<Instance> outputPins, Instance haltPin, int format) {
     final var showTable = (format & FORMAT_TABLE) != 0;
     final var showSpeed = (format & FORMAT_SPEED) != 0;
-    final var showTty = (format & FORMAT_TTY) != 0;
+    final var showTty = (format & (FORMAT_TTY | FORMAT_TTY_RAW)) != 0;
+    final var rawMode = (format & FORMAT_TTY_RAW) != 0;
     final var showHalt = (format & FORMAT_HALT) != 0;
 
     ArrayList<KeyboardRef> keyboardRefs = null;
-    StdinThread stdinThread = null;
+    InputProvider inputProvider = null;
+    RawStdinThread rawStdinThread = null;
     if (showTty) {
       keyboardRefs = new ArrayList<>();
       final var ttyFound = prepareForTty(circState, keyboardRefs);
@@ -472,9 +484,19 @@ public class TtyInterface {
       }
       if (keyboardRefs.isEmpty()) {
         keyboardRefs = null;
+      } else if (rawMode) {
+        try {
+          rawStdinThread = new RawStdinThread();
+          rawStdinThread.start();
+          inputProvider = rawStdinThread;
+        } catch (IOException e) {
+          logger.error("Failed to initialize raw terminal mode: {}", e.getMessage());
+          System.exit(-1);
+        }
       } else {
-        stdinThread = new StdinThread();
+        final var stdinThread = new StdinThread();
         stdinThread.start();
+        inputProvider = stdinThread;
       }
     }
 
@@ -507,8 +529,8 @@ public class TtyInterface {
         retCode = 1; // abnormal exit
         break;
       }
-      if (keyboardRefs != null) {
-        final var buffer = stdinThread.getBuffer();
+      if (keyboardRefs != null && inputProvider != null) {
+        final var buffer = inputProvider.getBuffer();
         if (buffer != null) {
           for (final var ref : keyboardRefs) {
             Keyboard.addToBuffer(ref.circuitState().getInstanceState(ref.component()), buffer);
@@ -521,6 +543,9 @@ public class TtyInterface {
       prop.propagate();
     }
     final var elapse = System.currentTimeMillis() - start;
+    if (rawStdinThread != null) {
+      rawStdinThread.shutdown();
+    }
     if (showTty) ensureLineTerminated();
     if (showHalt || retCode != 0) {
       if (retCode == 0) {
@@ -544,7 +569,7 @@ public class TtyInterface {
   // System.in.available(),
   // but this doesn't quite work because on some systems, the keyboard input
   // is not interactively echoed until System.in.read() is invoked.
-  private static class StdinThread extends UniquelyNamedThread {
+  private static class StdinThread extends UniquelyNamedThread implements InputProvider {
     private final LinkedList<char[]> queue; // of char[]
 
     public StdinThread() {
@@ -571,6 +596,66 @@ public class TtyInterface {
             synchronized (queue) {
               queue.addLast(add);
             }
+          }
+        } catch (IOException ignored) {
+        }
+      }
+    }
+  }
+
+  private static class RawStdinThread extends UniquelyNamedThread implements InputProvider {
+    private static final int CTRL_C = 3;
+    private final LinkedList<char[]> queue;
+    private final Terminal terminal;
+    private final Attributes savedAttributes;
+    private final NonBlockingReader reader;
+    private volatile boolean running = true;
+
+    public RawStdinThread() throws IOException {
+      super("TtyInterface-RawStdInThread");
+      queue = new LinkedList<>();
+      terminal = TerminalBuilder.builder().system(true).build();
+      savedAttributes = terminal.enterRawMode();
+      reader = terminal.reader();
+
+      Runtime.getRuntime().addShutdownHook(new Thread(this::restoreTerminal));
+    }
+
+    public char[] getBuffer() {
+      synchronized (queue) {
+        return queue.isEmpty() ? null : queue.removeFirst();
+      }
+    }
+
+    public void shutdown() {
+      running = false;
+      restoreTerminal();
+    }
+
+    private void restoreTerminal() {
+      try {
+        terminal.setAttributes(savedAttributes);
+        terminal.close();
+      } catch (IOException ignored) {
+      }
+    }
+
+    @Override
+    public void run() {
+      while (running) {
+        try {
+          int c = reader.read(100L);
+          if (c == NonBlockingReader.READ_EXPIRED || c == NonBlockingReader.EOF) {
+            continue;
+          }
+          if (c == CTRL_C) {
+            running = false;
+            restoreTerminal();
+            System.exit(0);
+            return;
+          }
+          synchronized (queue) {
+            queue.addLast(new char[]{(char) c});
           }
         } catch (IOException ignored) {
         }

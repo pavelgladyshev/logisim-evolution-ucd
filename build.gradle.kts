@@ -42,6 +42,7 @@ dependencies {
   implementation("commons-cli:commons-cli:1.10.0")
   implementation("com.vladsch.flexmark:flexmark-all:0.64.8")
   implementation("org.apache.commons:commons-text:1.14.0")
+  implementation("org.jline:jline:3.30.6")
 
   // NOTE: Be aware of reported issues with Eclipse and Batik
   // See: https://github.com/logisim-evolution/logisim-evolution/issues/709
@@ -75,6 +76,13 @@ val TARGET_DIR = "targetDir"
 val TARGET_FILE_PATH_BASE = "targetFilePathBase"
 val TARGET_FILE_PATH_BASE_SHORT = "targetFilePathBaseShort"
 val UPPERCASE_PROJECT_NAME = "uppercaseProjectName"
+
+// macOS code signing and notarization configuration keys
+val MACOS_SIGNING_IDENTITY = "macosSigningIdentity"
+val MACOS_ENTITLEMENTS_FILE = "macosEntitlementsFile"
+val MACOS_NOTARIZATION_APPLE_ID = "macosNotarizationAppleId"
+val MACOS_NOTARIZATION_TEAM_ID = "macosNotarizationTeamId"
+val MACOS_NOTARIZATION_PASSWORD = "macosNotarizationPassword"
 
 java {
   sourceCompatibility = JavaVersion.VERSION_21
@@ -189,6 +197,17 @@ extra.apply {
 
   // All the macOS specific stuff.
   set(APP_DIR_NAME, "${buildDir}/macOS-${osArch}/${uppercaseProjectName}.app")
+
+  // macOS code signing configuration (read from environment variables)
+  // If not set or set to "-", falls back to ad-hoc signing
+  val macosSigningIdentity = System.getenv("MACOS_SIGNING_IDENTITY") ?: "-"
+  set(MACOS_SIGNING_IDENTITY, macosSigningIdentity)
+  set(MACOS_ENTITLEMENTS_FILE, "${supportDir}/macos/entitlements.plist")
+
+  // macOS notarization configuration (read from environment variables)
+  set(MACOS_NOTARIZATION_APPLE_ID, System.getenv("MACOS_NOTARIZATION_APPLE_ID") ?: "")
+  set(MACOS_NOTARIZATION_TEAM_ID, System.getenv("MACOS_NOTARIZATION_TEAM_ID") ?: "")
+  set(MACOS_NOTARIZATION_PASSWORD, System.getenv("MACOS_NOTARIZATION_PASSWORD") ?: "")
 }
 
 java {
@@ -595,10 +614,77 @@ tasks.register("createApp") {
       runCommand(listOf(
           "mv", tempPList, pListFilename
       ), "Error while moving Info.plist into the .app directory.")
+    }
 
+    // Code signing
+    val signingIdentity = ext.get(MACOS_SIGNING_IDENTITY) as String
+    val entitlementsFile = ext.get(MACOS_ENTITLEMENTS_FILE) as String
+
+    if (signingIdentity == "-") {
+      // Ad-hoc signing (fallback when no Developer ID is configured)
+      logger.lifecycle("Performing ad-hoc code signing (no MACOS_SIGNING_IDENTITY set)")
       runCommand(listOf(
           "codesign", "--force", "--sign", "-", appDirName
-      ), "Error while executing: codesign")
+      ), "Error while executing ad-hoc codesign")
+    } else {
+      // Developer ID signing with hardened runtime
+      logger.lifecycle("Signing with Developer ID: ${signingIdentity}")
+
+      // Find and sign all .dylib files first (deepest items must be signed first)
+      val dylibFinder = ProcessBuilder()
+          .command("find", appDirName, "-name", "*.dylib")
+          .redirectErrorStream(true)
+          .start()
+      val dylibs = dylibFinder.inputStream.bufferedReader().readLines().filter { it.isNotBlank() }
+      dylibFinder.waitFor()
+
+      for (dylib in dylibs) {
+        logger.info("Signing dylib: ${dylib}")
+        runCommand(listOf(
+            "codesign", "--force", "--sign", signingIdentity,
+            "--entitlements", entitlementsFile,
+            "--options", "runtime",
+            "--timestamp",
+            dylib
+        ), "Error while signing dylib: ${dylib}")
+      }
+
+      // Find and sign all executables in MacOS directory
+      val macOsDir = "${appDirName}/Contents/MacOS"
+      val execFinder = ProcessBuilder()
+          .command("find", macOsDir, "-type", "f", "-perm", "+111")
+          .redirectErrorStream(true)
+          .start()
+      val executables = execFinder.inputStream.bufferedReader().readLines().filter { it.isNotBlank() }
+      execFinder.waitFor()
+
+      for (executable in executables) {
+        logger.info("Signing executable: ${executable}")
+        runCommand(listOf(
+            "codesign", "--force", "--sign", signingIdentity,
+            "--entitlements", entitlementsFile,
+            "--options", "runtime",
+            "--timestamp",
+            executable
+        ), "Error while signing executable: ${executable}")
+      }
+
+      // Sign the main app bundle
+      logger.info("Signing app bundle: ${appDirName}")
+      runCommand(listOf(
+          "codesign", "--force", "--sign", signingIdentity,
+          "--entitlements", entitlementsFile,
+          "--options", "runtime",
+          "--timestamp",
+          appDirName
+      ), "Error while signing app bundle")
+
+      // Verify the signature
+      logger.lifecycle("Verifying code signature...")
+      runCommand(listOf(
+          "codesign", "--verify", "--verbose=2", "--strict", appDirName
+      ), "Code signature verification failed")
+      logger.lifecycle("Code signature verified successfully")
     }
   }
 }
@@ -641,6 +727,74 @@ tasks.register("createDmg") {
       )
     runCommand(params, "Error while creating the DMG package")
     verifyFileExists(outputFile);
+  }
+}
+
+/**
+ * Task: notarizeDmg
+ *
+ * Notarizes the macOS DMG package with Apple's notarization service.
+ * Requires MACOS_NOTARIZATION_APPLE_ID, MACOS_NOTARIZATION_TEAM_ID, and
+ * MACOS_NOTARIZATION_PASSWORD environment variables to be set.
+ */
+tasks.register("notarizeDmg") {
+  group = "build"
+  description = "Notarizes the macOS DMG package with Apple's notarization service."
+  dependsOn("createDmg")
+
+  val osArch = ext.get(OS_ARCH) as String
+  val dmgFile = "${ext.get(TARGET_FILE_PATH_BASE) as String}-${osArch}.dmg"
+
+  inputs.file(dmgFile)
+  outputs.file(dmgFile)  // Same file, but stapled
+
+  doFirst {
+    if (!OperatingSystem.current().isMacOsX) {
+      throw GradleException("This task runs on macOS only.")
+    }
+
+    val appleId = ext.get(MACOS_NOTARIZATION_APPLE_ID) as String
+    val teamId = ext.get(MACOS_NOTARIZATION_TEAM_ID) as String
+    val password = ext.get(MACOS_NOTARIZATION_PASSWORD) as String
+
+    if (appleId.isBlank() || teamId.isBlank() || password.isBlank()) {
+      throw GradleException(
+          "Notarization requires MACOS_NOTARIZATION_APPLE_ID, MACOS_NOTARIZATION_TEAM_ID, " +
+          "and MACOS_NOTARIZATION_PASSWORD environment variables to be set."
+      )
+    }
+  }
+
+  doLast {
+    val appleId = ext.get(MACOS_NOTARIZATION_APPLE_ID) as String
+    val teamId = ext.get(MACOS_NOTARIZATION_TEAM_ID) as String
+    val password = ext.get(MACOS_NOTARIZATION_PASSWORD) as String
+
+    logger.lifecycle("Submitting DMG for notarization: ${dmgFile}")
+    logger.lifecycle("This may take several minutes...")
+
+    // Submit for notarization and wait for completion
+    runCommand(listOf(
+        "xcrun", "notarytool", "submit", dmgFile,
+        "--apple-id", appleId,
+        "--team-id", teamId,
+        "--password", password,
+        "--wait"
+    ), "Notarization submission failed")
+
+    logger.lifecycle("Notarization successful. Stapling ticket to DMG...")
+
+    // Staple the notarization ticket to the DMG
+    runCommand(listOf(
+        "xcrun", "stapler", "staple", dmgFile
+    ), "Failed to staple notarization ticket")
+
+    // Verify the staple
+    runCommand(listOf(
+        "xcrun", "stapler", "validate", dmgFile
+    ), "Staple validation failed")
+
+    logger.lifecycle("DMG notarization and stapling completed successfully: ${dmgFile}")
   }
 }
 

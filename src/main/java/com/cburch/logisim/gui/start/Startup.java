@@ -471,6 +471,7 @@ public class Startup implements AWTEventListener {
           case "table" -> TtyInterface.FORMAT_TABLE;
           case "speed" -> TtyInterface.FORMAT_SPEED;
           case "tty" -> TtyInterface.FORMAT_TTY;
+          case "raw" -> TtyInterface.FORMAT_TTY_RAW;
           case "halt" -> TtyInterface.FORMAT_HALT;
           case "stats" -> TtyInterface.FORMAT_STATISTICS;
           case "binary" -> TtyInterface.FORMAT_TABLE_BIN;
