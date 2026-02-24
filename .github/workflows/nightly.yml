@@ -230,6 +230,36 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
 
+      # Import Apple Developer ID certificate for code signing (if secrets are configured)
+      - name: "Import code signing certificate"
+        if: ${{ env.MACOS_CERTIFICATE != '' }}
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          MACOS_CI_KEYCHAIN_PWD: ${{ secrets.MACOS_CI_KEYCHAIN_PWD }}
+        run: |
+          # Have no mercy.
+          set -euo pipefail
+
+          # Decode the certificate from base64
+          echo "${MACOS_CERTIFICATE}" | base64 --decode > certificate.p12
+
+          # Create a temporary keychain
+          security create-keychain -p "${MACOS_CI_KEYCHAIN_PWD}" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "${MACOS_CI_KEYCHAIN_PWD}" build.keychain
+
+          # Import the certificate into the keychain
+          security import certificate.p12 -k build.keychain -P "${MACOS_CERTIFICATE_PWD}" -T /usr/bin/codesign
+
+          # Allow codesign to access the keychain without prompting
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${MACOS_CI_KEYCHAIN_PWD}" build.keychain
+
+          # Clean up the certificate file
+          rm certificate.p12
+
+          echo "Code signing certificate imported successfully"
+
       - name: Set up aarch64 JDK ${{ env.JDK_VERSION }} ${{ env.JDK_DISTRO }}
         uses: actions/setup-java@v5
         with:
@@ -237,12 +267,27 @@ jobs:
           distribution: ${{ env.JDK_DISTRO }}
 
       - name: "Build aarch64 DMG"
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_CERTIFICATE_NAME || '-' }}
         run: |
           # Have no mercy.
           set -euo pipefail
 
           chmod +x gradlew
           ./gradlew createDmg -x checkstyleMain -x checkstyleTest
+
+      - name: "Notarize aarch64 DMG"
+        if: ${{ env.MACOS_NOTARIZATION_APPLE_ID != '' }}
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+          MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+        run: |
+          # Have no mercy.
+          set -euo pipefail
+
+          ./gradlew notarizeDmg -x checkstyleMain -x checkstyleTest
 
       - name: 'Upload aarch64 DMG'
         uses: actions/upload-artifact@v4
@@ -259,6 +304,8 @@ jobs:
           architecture: "x64"
 
       - name: "Build x86_64 DMG"
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_CERTIFICATE_NAME || '-' }}
         run: |
           # Have no mercy.
           set -euo pipefail
@@ -266,12 +313,31 @@ jobs:
           chmod +x gradlew
           ./gradlew createDmg -x checkstyleMain -x checkstyleTest
 
+      - name: "Notarize x86_64 DMG"
+        if: ${{ env.MACOS_NOTARIZATION_APPLE_ID != '' }}
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_CERTIFICATE_NAME }}
+          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+          MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+        run: |
+          # Have no mercy.
+          set -euo pipefail
+
+          ./gradlew notarizeDmg -x checkstyleMain -x checkstyleTest
+
       - name: 'Upload x86_64 DMG'
         uses: actions/upload-artifact@v4
         if: success()
         with:
           path: build/dist/${{ needs.git_check.outputs.lse_name }}-${{ needs.git_check.outputs.lse_version }}-x86_64.dmg
           name: ${{ needs.git_check.outputs.base_name }}-x86_64.dmg
+
+      # Cleanup: Delete temporary keychain
+      - name: "Cleanup keychain"
+        if: always()
+        run: |
+          security delete-keychain build.keychain 2>/dev/null || true
 
   # ###############################################################################################
 

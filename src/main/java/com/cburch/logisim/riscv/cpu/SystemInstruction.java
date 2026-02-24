@@ -42,6 +42,21 @@ public class SystemInstruction {
                 } else if (rs1 == 0 && rd == 0 && csr == 0x102) {
                     // sret
                     // PC = sepc
+                } else if (ir.func7() == 0x09) {
+                    // sfence.vma rs1, rs2
+                    TranslationLookasideBuffer tlb = hartData.getTlb();
+                    int rs2Val = ir.rs2();
+                    if (rs1 == 0 && rs2Val == 0) {
+                        tlb.invalidate();
+                    } else if (rs1 != 0 && rs2Val == 0) {
+                        tlb.invalidateAddress(hartData.getX(rs1));
+                    } else if (rs1 == 0) {
+                        tlb.invalidateASID((int) hartData.getX(rs2Val));
+                    } else {
+                        tlb.invalidateAddressAndASID(hartData.getX(rs1), (int) hartData.getX(rs2Val));
+                    }
+                    hartData.getInstructionCache().invalidate();
+                    hartData.getPC().increment();
                 } else if (rs1 == 0 && rd == 0 && csr == 0x302) {
                     // mret
                     hartData.getPC().set(MMCSR.getValue(hartData, MEPC) );

@@ -32,6 +32,12 @@ public class TrapHandler {
                 mtval.write(hartData.getIR().get());
                 break;
             }
+            case INSTRUCTION_PAGE_FAULT:
+            case LOAD_PAGE_FAULT:
+            case STORE_PAGE_FAULT: {
+                mtval.write(hartData.getPendingVirtualAddress());
+                break;
+            }
             default:
                 mtval.write(0);
         }

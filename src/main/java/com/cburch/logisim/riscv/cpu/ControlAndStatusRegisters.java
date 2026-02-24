@@ -15,6 +15,7 @@ public class ControlAndStatusRegisters {
         registers[MMCSR.MTVEC.getAddress()] = new MTVEC_CSR(0);
         registers[MMCSR.MIE.getAddress()] = new MIE_CSR(0);
         registers[MMCSR.MIP.getAddress()] = new MIP_CSR(0);
+        registers[SCSR.SATP.getAddress()] = new SATP_CSR(0);
 
         //csr address mapping conventions
         for(int i = 0; i < 4096; i++) {

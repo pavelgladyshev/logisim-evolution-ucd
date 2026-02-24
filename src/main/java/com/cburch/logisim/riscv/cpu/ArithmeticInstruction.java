@@ -114,8 +114,8 @@ public class ArithmeticInstruction {
         // Refer to specification for division/mod by zero:
         // https://riscv.org/wp-content/uploads/2017/05/riscv-spec-v2.2.pdf
         // (page 36)
-        if (rs2 == 0) {
-            // div by zero
+        if (rs2 == 0 && ir.func3() >= 0x4) {
+            // div/rem by zero
             switch (ir.func3()) {
                 case 0x4:   // div by zero
                     hartData.setX(ir.rd(), -1);
@@ -129,31 +129,19 @@ public class ArithmeticInstruction {
                 case 0x7:   // remu by zero
                     hartData.setX(ir.rd(), rs1);
                     break;
-                default:
-                    illegalInstructionExceptionTriggered = true;
             }
-
-            if (!illegalInstructionExceptionTriggered) {
-                hartData.getPC().increment(); // Ensure PC increment once
-                return;
-            }
+            hartData.getPC().increment();
+            return;
         }
-        // Signed Overflow (−2^XLEN−1, is divided by −1):
+        // Signed Overflow (−2^XLEN−1 divided by −1):
         if (rs1 == (long) Integer.MIN_VALUE && rs2 == -1) {
-            // div by zero
-            if(ir.func3() == 0x4) {
+            if (ir.func3() == 0x4) {       // div overflow
                 hartData.setX(ir.rd(), rs1);
-            }
-            // rem by zero
-            else if(ir.func3() == 0x6) {
+                hartData.getPC().increment();
+                return;
+            } else if (ir.func3() == 0x6) {  // rem overflow
                 hartData.setX(ir.rd(), 0);
-            }
-            else {
-                illegalInstructionExceptionTriggered = true;
-            }
-
-            if (!illegalInstructionExceptionTriggered) {
-                hartData.getPC().increment(); // Ensure PC increment once
+                hartData.getPC().increment();
                 return;
             }
         }

@@ -88,7 +88,12 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   private boolean cache_hit = false;
   private boolean instructionCacheEnabled;
 
-  // More To Do
+  /** SV32 virtual memory */
+  private final TranslationLookasideBuffer tlb = new TranslationLookasideBuffer();
+  private PageTableWalker ptw;
+  private long pendingVirtualAddress;
+  private TranslationLookasideBuffer.AccessType pendingAccessType;
+  private long translatedPhysicalAddress;
 
   public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, boolean instructionCacheEnabled, CPUState initialCpuState, GDBServer gdbServerAttr) {
     this.instructionCacheEnabled = instructionCacheEnabled;
@@ -100,6 +105,7 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     this.x = new IntegerRegisters();
     this.csr = new ControlAndStatusRegisters();
     this.cpuState = initialCpuState;
+    this.ptw = new PageTableWalker(this);
 
     if(startGDBServer) {
       try {
@@ -131,6 +137,40 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     addressing = false;
 
     long pcVal = pc.get();
+
+    // If SV32 translation is enabled, translate PC through TLB
+    if (isTranslationEnabled()) {
+      TranslationLookasideBuffer.TlbResult result = tlb.translate(pcVal, getCurrentASID());
+      if (result.hit) {
+        // Check execute permission
+        if ((result.permissions & TranslationLookasideBuffer.PERM_X) == 0) {
+          handlePageFault(pcVal, TranslationLookasideBuffer.AccessType.FETCH);
+          return;
+        }
+        long physAddr = result.physicalAddress;
+        if (instructionCacheEnabled && cache.isValid(physAddr)) {
+          cache_hit = true;
+          address = HiZ32;
+          outputData = HiZ32;
+          outputDataWidth = 0;
+          memRead = Value.FALSE;
+          memWrite = Value.FALSE;
+        } else {
+          cache_hit = false;
+          address = Value.createKnown(32, physAddr);
+          outputData = HiZ32;
+          outputDataWidth = 0;
+          memRead = Value.TRUE;
+          memWrite = Value.FALSE;
+        }
+        // Store the physical address for cache indexing later
+        translatedPhysicalAddress = physAddr;
+      } else {
+        // TLB miss — start page table walk for instruction fetch
+        ptw.startWalk(pcVal, TranslationLookasideBuffer.AccessType.FETCH);
+      }
+      return;
+    }
 
     if (instructionCacheEnabled && cache.isValid(pcVal)) {
       cache_hit = true;
@@ -208,6 +248,8 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   public void reset(long pcInit, int port, boolean startGDBServer) {
     pc.set(pcInit);
     cache.invalidate();
+    tlb.invalidate();
+    ptw.reset();
 
     // Reset debugger-related state
     synchronized (this) {
@@ -286,15 +328,52 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
       return;
     }
 
+    // If PTW is active (e.g. during instruction fetch TLB miss), step it
+    if (!ptw.isIdle()) {
+      // Save the access type before step(), because step() may trigger a page fault
+      // which internally starts a new walk and overwrites the access type
+      TranslationLookasideBuffer.AccessType walkType = ptw.getAccessType();
+      boolean walkDone = ptw.step(dataIn, waitRequest);
+      if (!walkDone) return;
+      // If a page fault occurred during the walk, handlePageFault() already set up
+      // the trap handler fetch. Detect this by checking if a new walk was started
+      // or if fetchNextInstruction set fetching=true (TLB hit for trap handler).
+      if (!ptw.isIdle() || fetching) return;
+      // Walk completed normally — if it was a fetch walk, re-enter fetchNextInstruction
+      // (the TLB now has the mapping, so it will hit this time).
+      // Note: we use the saved walkType rather than the 'fetching' flag because
+      // setBusForRead() resets 'fetching' to false during the walk.
+      if (walkType == TranslationLookasideBuffer.AccessType.FETCH) {
+        fetchNextInstruction();
+        return;
+      }
+      // For load/store walks, the translated PA is in translatedPhysicalAddress.
+      // Fall through to the opcode switch which will use it.
+    }
+
     if (fetching) {
       long pcVal = pc.get();
-      if (instructionCacheEnabled && cache.isValid(pcVal)) {
-        ir.set(cache.get(pcVal));
+      if (isTranslationEnabled()) {
+        // When SV32 is active, instruction cache is indexed by physical address
+        long fetchAddr = translatedPhysicalAddress;
+        if (instructionCacheEnabled && cache.isValid(fetchAddr)) {
+          ir.set(cache.get(fetchAddr));
+        } else {
+          cache_hit = false;
+          ir.set(dataIn);
+          if (instructionCacheEnabled) {
+            cache.update(fetchAddr, dataIn);
+          }
+        }
       } else {
-        cache_hit = false;
-        ir.set(dataIn);
-        if (instructionCacheEnabled) {
-          cache.update(pcVal, dataIn);
+        if (instructionCacheEnabled && cache.isValid(pcVal)) {
+          ir.set(cache.get(pcVal));
+        } else {
+          cache_hit = false;
+          ir.set(dataIn);
+          if (instructionCacheEnabled) {
+            cache.update(pcVal, dataIn);
+          }
         }
       }
     }
@@ -319,8 +398,24 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         break;
       case 0x03:  // load instruction (I-type)
         if (!addressing) {
-        LoadInstruction.performAddressing(this);
-        addressing = true;
+          if (isTranslationEnabled()) {
+            long va = LoadInstruction.getAddress(this);
+            TranslationLookasideBuffer.TlbResult tlbResult = tlb.translate(va, getCurrentASID());
+            if (tlbResult.hit) {
+              if ((tlbResult.permissions & TranslationLookasideBuffer.PERM_R) == 0) {
+                handlePageFault(va, TranslationLookasideBuffer.AccessType.LOAD);
+                break;
+              }
+              LoadInstruction.performAddressingWithPA(this, tlbResult.physicalAddress);
+            } else {
+              // TLB miss — start page table walk
+              ptw.startWalk(va, TranslationLookasideBuffer.AccessType.LOAD);
+              break;
+            }
+          } else {
+            LoadInstruction.performAddressing(this);
+          }
+          addressing = true;
         } else {
           if (waitRequest == 1) {
             waitingForMemory = true;
@@ -330,27 +425,26 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
           addressing = false;
           fetchNextInstruction();
         }
-
-
-        //using cache
-//        if (!addressing) {
-//          LoadInstruction.performAddressing(this);
-//        } else {
-//          long addr = getAddress().toLongValue();
-//
-//          if (cache.isValid(addr)) {
-//            LoadInstruction.latch(this, cache.get(addr));
-//          } else {
-//            LoadInstruction.latch(this, dataIn);
-//            cache.update(addr, dataIn);
-//          }
-//
-//          fetchNextInstruction();
-//        }
         break;
       case 0x23:  // storing instruction (S-type)
         if (!addressing) {
-          StoreInstruction.performAddressing(this);
+          if (isTranslationEnabled()) {
+            long va = StoreInstruction.getAddress(this);
+            TranslationLookasideBuffer.TlbResult tlbResult = tlb.translate(va, getCurrentASID());
+            if (tlbResult.hit) {
+              if ((tlbResult.permissions & TranslationLookasideBuffer.PERM_W) == 0) {
+                handlePageFault(va, TranslationLookasideBuffer.AccessType.STORE);
+                break;
+              }
+              StoreInstruction.performAddressingWithPA(this, tlbResult.physicalAddress);
+            } else {
+              // TLB miss — start page table walk
+              ptw.startWalk(va, TranslationLookasideBuffer.AccessType.STORE);
+              break;
+            }
+          } else {
+            StoreInstruction.performAddressing(this);
+          }
           addressing = true;
         } else {
           if (waitRequest == 1) {
@@ -364,13 +458,6 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
           fetchNextInstruction();
         }
         break;
-
-        //if(!addressing) {
-        //  StoreInstruction.performAddressing(this);
-        //} else {
-        //  pc.increment();
-        //  fetchNextInstruction();
-        //}
       case 0x63:  // branch instruction (B-type)
         BranchInstruction.execute(this);
         fetchNextInstruction();
@@ -528,6 +615,41 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
   public boolean isBreakpointHit() {
     return breakpointsEnabled && breakpoints.contains(pc.get());
+  }
+
+  // SV32 virtual memory accessors
+  public TranslationLookasideBuffer getTlb() { return tlb; }
+  public PageTableWalker getPtw() { return ptw; }
+  public MemoryCache getInstructionCache() { return cache; }
+  public long getPendingVirtualAddress() { return pendingVirtualAddress; }
+  public void setPendingVirtualAddress(long va) { this.pendingVirtualAddress = va; }
+  public TranslationLookasideBuffer.AccessType getPendingAccessType() { return pendingAccessType; }
+  public void setPendingAccessType(TranslationLookasideBuffer.AccessType type) { this.pendingAccessType = type; }
+  public long getTranslatedPhysicalAddress() { return translatedPhysicalAddress; }
+  public void setTranslatedPhysicalAddress(long pa) { this.translatedPhysicalAddress = pa; }
+
+  public boolean isTranslationEnabled() {
+    SATP_CSR satp = (SATP_CSR) csr.get(SCSR.SATP.getAddress());
+    return satp.isSV32Enabled();
+  }
+
+  public SATP_CSR getSatp() {
+    return (SATP_CSR) csr.get(SCSR.SATP.getAddress());
+  }
+
+  public int getCurrentASID() {
+    return (int) getSatp().ASID.get();
+  }
+
+  public void handlePageFault(long faultingVA, TranslationLookasideBuffer.AccessType accessType) {
+    pendingVirtualAddress = faultingVA;
+    MCAUSE_CSR.TRAP_CAUSE cause = switch (accessType) {
+      case FETCH -> MCAUSE_CSR.TRAP_CAUSE.INSTRUCTION_PAGE_FAULT;
+      case LOAD -> MCAUSE_CSR.TRAP_CAUSE.LOAD_PAGE_FAULT;
+      case STORE -> MCAUSE_CSR.TRAP_CAUSE.STORE_PAGE_FAULT;
+    };
+    TrapHandler.handle(this, cause);
+    fetchNextInstruction();
   }
 
   /**

@@ -55,6 +55,50 @@ public class StoreInstruction {
     }
 
 
+    /**
+     * Like performAddressing but uses a pre-translated physical address instead of
+     * computing the virtual address from registers. Used when SV32 translation is active.
+     */
+    public static void performAddressingWithPA(rv32imData hartData, long physicalAddress) {
+        InstructionRegister ir = hartData.getIR();
+        if(!(ir.func3() == 0x0 || ir.func3() == 0x1 || ir.func3() == 0x2)) {
+            TrapHandler.throwIllegalInstructionException(hartData);
+            return;
+        }
+
+        int dataWidth = 0;
+        switch (ir.func3()) {
+            case 0x0:
+                dataWidth = 1;
+                break;
+            case 0x1:
+                if ((physicalAddress & 0x1) != 0) {
+                    TrapHandler.throwIllegalInstructionException(hartData);
+                    return;
+                } else {
+                    dataWidth = 2;
+                }
+                break;
+            case 0x2:
+                if ((physicalAddress & 0x3) != 0) {
+                    TrapHandler.throwIllegalInstructionException(hartData);
+                    return;
+                } else {
+                    dataWidth = 4;
+                }
+                break;
+        }
+
+        hartData.setFetching(false);
+        hartData.setAddressing(true);
+        hartData.setOutputData(getNewData(hartData));
+        hartData.setOutputDataWidth(dataWidth);
+
+        hartData.setAddress(Value.createKnown(32, physicalAddress));
+        hartData.setMemRead(Value.FALSE);
+        hartData.setMemWrite(Value.TRUE);
+    }
+
     public static long getAddress(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
         return hartData.getX(ir.rs1()) + ir.imm_S();

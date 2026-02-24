@@ -85,6 +85,51 @@ public class LoadInstruction {
         return (data & mask) >>> (shift * 8);
     }
 
+    /**
+     * Like performAddressing but uses a pre-translated physical address instead of
+     * computing the virtual address from registers. Used when SV32 translation is active.
+     */
+    public static void performAddressingWithPA(rv32imData hartData, long physicalAddress) {
+        InstructionRegister ir = hartData.getIR();
+        if(!(ir.func3() == 0x0 || ir.func3() == 0x1 || ir.func3() == 0x2 || ir.func3() == 0x4 || ir.func3() == 0x5)) {
+            TrapHandler.throwIllegalInstructionException(hartData);
+            return;
+        }
+
+        // Alignment checks use the virtual address (same low bits as physical for aligned pages)
+        int width = 0;
+        switch (ir.func3()) {
+            case 0x0:
+            case 0x4:
+                width = 1;
+                break;
+            case 0x1:
+            case 0x5:
+                width = 2;
+                if ((physicalAddress & 0x1) != 0) {
+                    TrapHandler.throwIllegalInstructionException(hartData);
+                    return;
+                }
+                break;
+            case 0x2:
+                width = 4;
+                if ((physicalAddress & 0x3) != 0) {
+                    TrapHandler.throwIllegalInstructionException(hartData);
+                    return;
+                }
+                break;
+        }
+
+        hartData.setFetching(false);
+        hartData.setAddressing(true);
+
+        hartData.setAddress(Value.createKnown(32, physicalAddress));
+        hartData.setOutputData(0);
+        hartData.setOutputDataWidth(width);
+        hartData.setMemRead(Value.TRUE);
+        hartData.setMemWrite(Value.FALSE);
+    }
+
     public static long getAddress(rv32imData hartData) {
         InstructionRegister ir = hartData.getIR();
         return hartData.getX(ir.rs1()) + ir.imm_I();
