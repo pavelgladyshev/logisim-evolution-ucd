@@ -559,6 +559,7 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   public boolean getAddressing() { return addressing; }
   public long getCSRValue(int csr) {return this.csr.read(this, csr);}
   public CSR getCSR(int csr) { return this.csr.get(csr); }
+  public ControlAndStatusRegisters getCSRFile() { return this.csr; }
   public IntegerRegisters getIntegerRegisters() {return this.x;}
 
   public int getOutputDataWidth() {

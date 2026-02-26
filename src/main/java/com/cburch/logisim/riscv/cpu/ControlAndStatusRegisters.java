@@ -27,17 +27,50 @@ public class ControlAndStatusRegisters {
         }
     }
 
-    public long read(rv32imData hartData, int csr) {
-        // check privilege level ( illegal-instruction / virtual-instruction exception if invalid) (18.6.1 priv arch.)
-        if(checkRequiredAccessPrivilege(hartData, csr)) return get(csr).read();
-        else return 0;
+    /**
+     * Check if a CSR address encodes a read-only register.
+     * RISC-V CSR address bits [11:10] == 0x3 means read-only.
+     */
+    public static boolean isReadOnly(int csr) {
+        return ((csr >> 10) & 0x3) == 0x3;
     }
 
+    /**
+     * Upfront access validation for CSR instructions.
+     * Checks privilege level and write permission BEFORE any read/write side effects.
+     * Returns true if access is permitted, false if an exception was raised.
+     *
+     * @param willWrite true if the instruction will modify the CSR
+     *                  (false for CSRRS/CSRRC with rs1=x0 or CSRRSI/CSRRCI with uimm=0)
+     */
+    public boolean checkAccess(rv32imData hartData, int csr, boolean willWrite) {
+        // Check privilege level
+        MSTATUS_CSR mstatus = ((MSTATUS_CSR) MMCSR.getCSR(hartData, MMCSR.MSTATUS));
+        long priv = mstatus.MPP.get();
+        if (priv < getRequiredAccessPrivilege(csr)) {
+            TrapHandler.throwIllegalInstructionException(hartData);
+            return false;
+        }
+        // Check write permission: read-only CSRs (bits [11:10] == 0x3) cannot be written
+        if (willWrite && isReadOnly(csr)) {
+            TrapHandler.throwIllegalInstructionException(hartData);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Read a CSR value. Access control must be validated by checkAccess() before calling this.
+     */
+    public long read(rv32imData hartData, int csr) {
+        return get(csr).read();
+    }
+
+    /**
+     * Write a CSR value. Access control must be validated by checkAccess() before calling this.
+     */
     public void write(rv32imData hartData, int csr, long value) {
-        //check privilege level ( illegal-instruction / virtual-instruction exception if invalid) (18.6.1 priv arch.)
-        //check read-only ( illegal-instruction exception )
-        if(checkRequiredAccessPrivilege(hartData, csr) && (get(csr) instanceof CSR_RW)) get(csr).write(value);
-        else TrapHandler.throwIllegalInstructionException(hartData);
+        if (get(csr) instanceof CSR_RW) get(csr).write(value);
     }
 
     public CSR get(int csr) {
@@ -46,16 +79,5 @@ public class ControlAndStatusRegisters {
 
     private static int getRequiredAccessPrivilege(int csr) {
         return (csr >> 8) & 0x3;
-    }
-
-    private Boolean checkRequiredAccessPrivilege(rv32imData hartData, int csr) {
-        Boolean hasAccessPermission = Boolean.TRUE;
-        MSTATUS_CSR mstatus = ((MSTATUS_CSR) MMCSR.getCSR(hartData, MMCSR.MSTATUS));
-        long priv = mstatus.MPP.get();
-        if(priv < getRequiredAccessPrivilege(csr)) {
-            TrapHandler.throwIllegalInstructionException(hartData);
-            hasAccessPermission = Boolean.FALSE;
-        }
-        return hasAccessPermission;
     }
 }
