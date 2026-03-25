@@ -143,14 +143,14 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
     // If SV32 translation is enabled, translate PC through TLB
     if (isTranslationEnabled()) {
-      TranslationLookasideBuffer.TlbResult result = tlb.translate(pcVal, getCurrentASID());
-      if (result.hit) {
+      tlb.translate(pcVal, getCurrentASID());
+      if (tlb.resultHit) {
         // Check execute permission
-        if ((result.permissions & TranslationLookasideBuffer.PERM_X) == 0) {
+        if ((tlb.resultPerms & TranslationLookasideBuffer.PERM_X) == 0) {
           handlePageFault(pcVal, TranslationLookasideBuffer.AccessType.FETCH);
           return;
         }
-        long physAddr = result.physicalAddress;
+        long physAddr = tlb.resultPA;
         if (instructionCacheEnabled && cache.isValid(physAddr)) {
           cache_hit = true;
           address = HiZ32;
@@ -416,13 +416,13 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         if (!addressing) {
           if (isTranslationEnabled()) {
             long va = LoadInstruction.getAddress(this);
-            TranslationLookasideBuffer.TlbResult tlbResult = tlb.translate(va, getCurrentASID());
-            if (tlbResult.hit) {
-              if ((tlbResult.permissions & TranslationLookasideBuffer.PERM_R) == 0) {
+            tlb.translate(va, getCurrentASID());
+            if (tlb.resultHit) {
+              if ((tlb.resultPerms & TranslationLookasideBuffer.PERM_R) == 0) {
                 handlePageFault(va, TranslationLookasideBuffer.AccessType.LOAD);
                 break;
               }
-              LoadInstruction.performAddressingWithPA(this, tlbResult.physicalAddress);
+              LoadInstruction.performAddressingWithPA(this, tlb.resultPA);
             } else {
               // TLB miss — start page table walk
               ptw.startWalk(va, TranslationLookasideBuffer.AccessType.LOAD);
@@ -446,13 +446,13 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         if (!addressing) {
           if (isTranslationEnabled()) {
             long va = StoreInstruction.getAddress(this);
-            TranslationLookasideBuffer.TlbResult tlbResult = tlb.translate(va, getCurrentASID());
-            if (tlbResult.hit) {
-              if ((tlbResult.permissions & TranslationLookasideBuffer.PERM_W) == 0) {
+            tlb.translate(va, getCurrentASID());
+            if (tlb.resultHit) {
+              if ((tlb.resultPerms & TranslationLookasideBuffer.PERM_W) == 0) {
                 handlePageFault(va, TranslationLookasideBuffer.AccessType.STORE);
                 break;
               }
-              StoreInstruction.performAddressingWithPA(this, tlbResult.physicalAddress);
+              StoreInstruction.performAddressingWithPA(this, tlb.resultPA);
             } else {
               // TLB miss — start page table walk
               ptw.startWalk(va, TranslationLookasideBuffer.AccessType.STORE);

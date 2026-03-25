@@ -1,10 +1,13 @@
 package com.cburch.logisim.riscv.cpu;
 
-import java.util.HashMap;
-
 /**
  * Fully associative TLB with 128 entries, LRU replacement,
- * and HashMap-accelerated lookup for simulation performance.
+ * and fast-path caching for simulation performance.
+ *
+ * Hot-path optimization: a single-entry "last translation" cache avoids
+ * any HashMap or array lookup for sequential instruction fetches within
+ * the same page (the common case). This eliminates object allocation
+ * and HashMap boxing overhead on the critical path.
  */
 public class TranslationLookasideBuffer {
 
@@ -19,15 +22,33 @@ public class TranslationLookasideBuffer {
     private final long[] lastUsed = new long[TLB_SIZE]; // LRU timestamp
     private long accessCounter = 0;
 
-    // HashMap for O(1) lookup: key = (vpn << 9 | asid), value = TLB index
-    // For megapages: key = (vpn1 << 19 | asid | 0x80000000)
-    private final HashMap<Long, Integer> lookupMap = new HashMap<>();
+    // ========== Fast-path: last translation cache ==========
+    // Avoids HashMap/array lookup entirely for repeated accesses to the same page.
+    // Fields are primitive — zero allocation on the hot path.
+    private boolean lastValid = false;
+    private int lastVpn;        // 20-bit VPN of last hit
+    private int lastAsid;       // ASID of last hit
+    private long lastPaBase;    // PA base (PPN << 12 or PPN[1] << 22 for megapage)
+    private int lastPerms;      // permissions
+    private boolean lastMega;   // was it a megapage?
+    private int lastPageMask;   // 0xFFF for 4KB, 0x3FFFFF for megapage
+    private int lastVpnMask;    // 0xFFFFF for 4KB, 0xFFC00 for megapage (top 10 bits)
+
+    // ========== Direct-mapped page table (replaces HashMap) ==========
+    // Array indexed by (VPN ^ ASID) & mask — much faster than HashMap.
+    private static final int DM_SIZE = 256; // must be power of 2
+    private static final int DM_MASK = DM_SIZE - 1;
+    private final boolean[] dmValid = new boolean[DM_SIZE];
+    private final int[] dmVpn = new int[DM_SIZE];
+    private final int[] dmAsid = new int[DM_SIZE];
+    private final int[] dmTlbIdx = new int[DM_SIZE]; // index into main TLB arrays
 
     // Statistics counters
     private long statHits = 0;
     private long statMisses = 0;
     private long statInserts = 0;
     private long statEvictions = 0;
+    private long statFastHits = 0; // hits on last-translation cache
 
     // Permission bit positions within perms field
     public static final int PERM_R = 0x01;
@@ -42,79 +63,116 @@ public class TranslationLookasideBuffer {
         FETCH, LOAD, STORE
     }
 
-    public static class TlbResult {
-        public final boolean hit;
-        public final long physicalAddress;
-        public final int permissions;
-        public final boolean isMegapage;
-
-        private TlbResult(boolean hit, long physicalAddress, int permissions, boolean isMegapage) {
-            this.hit = hit;
-            this.physicalAddress = physicalAddress;
-            this.permissions = permissions;
-            this.isMegapage = isMegapage;
-        }
-
-        public static TlbResult miss() {
-            return new TlbResult(false, 0, 0, false);
-        }
-
-        public static TlbResult hit(long physicalAddress, int permissions, boolean isMegapage) {
-            return new TlbResult(true, physicalAddress, permissions, isMegapage);
-        }
-    }
-
-    private long makeKey(int vaVpn, int asidVal, boolean isMega) {
-        if (isMega) {
-            return ((long)(vaVpn >> 10) << 19) | asidVal | 0x80000000L;
-        }
-        return ((long)vaVpn << 9) | asidVal;
-    }
+    // ========== Allocation-free result passing ==========
+    // Instead of returning new TlbResult objects, callers read these fields after translate().
+    // This eliminates object allocation on the hot path.
+    public boolean resultHit;
+    public long resultPA;
+    public int resultPerms;
+    public boolean resultMega;
 
     /**
-     * O(1) lookup using HashMap, with fallback linear scan for global pages.
+     * Zero-allocation translate. Result is stored in public fields:
+     * resultHit, resultPA, resultPerms, resultMega.
      */
-    public TlbResult translate(long virtualAddress, int currentAsid) {
+    public void translate(long virtualAddress, int currentAsid) {
         int vaVpn = (int) (virtualAddress >>> 12) & 0xFFFFF;
-        accessCounter++;
 
-        // Try exact match (4KB page)
-        Integer idx = lookupMap.get(makeKey(vaVpn, currentAsid, false));
-        if (idx != null && valid[idx] && vpn[idx] == vaVpn) {
-            lastUsed[idx] = accessCounter;
-            long pa = ((long) ppn[idx] << 12) | (virtualAddress & 0xFFF);
-            statHits++;
-            return TlbResult.hit(pa, perms[idx], false);
-        }
-
-        // Try megapage match
-        idx = lookupMap.get(makeKey(vaVpn, currentAsid, true));
-        if (idx != null && valid[idx] && megapage[idx] && (vpn[idx] >> 10) == (vaVpn >> 10)) {
-            lastUsed[idx] = accessCounter;
-            long pa = ((long) (ppn[idx] >> 10) << 22) | (virtualAddress & 0x3FFFFF);
-            statHits++;
-            return TlbResult.hit(pa, perms[idx], true);
-        }
-
-        // Fallback: linear scan for global entries (ASID-independent)
-        for (int i = 0; i < TLB_SIZE; i++) {
-            if (!valid[i]) continue;
-            if ((perms[i] & PERM_G) == 0) continue; // skip non-global
-            boolean tagMatch = megapage[i]
-                ? (vpn[i] >> 10) == (vaVpn >> 10)
-                : vpn[i] == vaVpn;
-            if (tagMatch) {
-                lastUsed[i] = accessCounter;
-                long pa = megapage[i]
-                    ? ((long) (ppn[i] >> 10) << 22) | (virtualAddress & 0x3FFFFF)
-                    : ((long) ppn[i] << 12) | (virtualAddress & 0xFFF);
+        // === Fast path: last-translation cache ===
+        if (lastValid) {
+            if (lastMega
+                ? ((vaVpn & lastVpnMask) == (lastVpn & lastVpnMask) && lastAsid == currentAsid)
+                : (vaVpn == lastVpn && lastAsid == currentAsid)) {
+                resultHit = true;
+                resultPA = lastPaBase | (virtualAddress & lastPageMask);
+                resultPerms = lastPerms;
+                resultMega = lastMega;
                 statHits++;
-                return TlbResult.hit(pa, perms[i], megapage[i]);
+                statFastHits++;
+                return;
             }
         }
 
+        accessCounter++;
+
+        // === Direct-mapped lookup for non-global entries ===
+        // Try 4KB page
+        int dmIdx = (vaVpn ^ currentAsid) & DM_MASK;
+        if (dmValid[dmIdx] && dmVpn[dmIdx] == vaVpn && dmAsid[dmIdx] == currentAsid) {
+            int ti = dmTlbIdx[dmIdx];
+            if (valid[ti] && vpn[ti] == vaVpn && !megapage[ti]) {
+                lastUsed[ti] = accessCounter;
+                setLastCache(vaVpn, currentAsid, (long) ppn[ti] << 12, perms[ti], false);
+                resultHit = true;
+                resultPA = lastPaBase | (virtualAddress & 0xFFF);
+                resultPerms = perms[ti];
+                resultMega = false;
+                statHits++;
+                return;
+            }
+        }
+
+        // Try megapage: index by VPN[1] (top 10 bits)
+        int vpn1 = vaVpn >> 10;
+        int dmIdxMega = (vpn1 ^ currentAsid ^ 0x100) & DM_MASK;
+        if (dmValid[dmIdxMega] && (dmVpn[dmIdxMega] >> 10) == vpn1 && dmAsid[dmIdxMega] == currentAsid) {
+            int ti = dmTlbIdx[dmIdxMega];
+            if (valid[ti] && megapage[ti] && (vpn[ti] >> 10) == vpn1) {
+                lastUsed[ti] = accessCounter;
+                setLastCache(vaVpn, currentAsid, (long)(ppn[ti] >> 10) << 22, perms[ti], true);
+                resultHit = true;
+                resultPA = lastPaBase | (virtualAddress & 0x3FFFFF);
+                resultPerms = perms[ti];
+                resultMega = true;
+                statHits++;
+                return;
+            }
+        }
+
+        // === Fallback: linear scan (for global entries and DM collisions) ===
+        for (int i = 0; i < TLB_SIZE; i++) {
+            if (!valid[i]) continue;
+
+            boolean tagMatch = megapage[i]
+                ? (vpn[i] >> 10) == vpn1
+                : vpn[i] == vaVpn;
+            if (!tagMatch) continue;
+
+            boolean asidMatch = ((perms[i] & PERM_G) != 0) || (asid[i] == currentAsid);
+            if (!asidMatch) continue;
+
+            lastUsed[i] = accessCounter;
+            if (megapage[i]) {
+                setLastCache(vaVpn, currentAsid, (long)(ppn[i] >> 10) << 22, perms[i], true);
+                resultHit = true;
+                resultPA = lastPaBase | (virtualAddress & 0x3FFFFF);
+            } else {
+                setLastCache(vaVpn, currentAsid, (long) ppn[i] << 12, perms[i], false);
+                resultHit = true;
+                resultPA = lastPaBase | (virtualAddress & 0xFFF);
+            }
+            resultPerms = perms[i];
+            resultMega = megapage[i];
+            statHits++;
+            return;
+        }
+
         statMisses++;
-        return TlbResult.miss();
+        resultHit = false;
+        resultPA = 0;
+        resultPerms = 0;
+        resultMega = false;
+    }
+
+    private void setLastCache(int vaVpn, int asidVal, long paBase, int perm, boolean mega) {
+        lastValid = true;
+        lastVpn = vaVpn;
+        lastAsid = asidVal;
+        lastPaBase = paBase;
+        lastPerms = perm;
+        lastMega = mega;
+        lastPageMask = mega ? 0x3FFFFF : 0xFFF;
+        lastVpnMask = mega ? 0xFFC00 : 0xFFFFF;
     }
 
     /**
@@ -138,9 +196,9 @@ public class TranslationLookasideBuffer {
             }
         }
 
-        // Remove old entry from lookup map if being evicted
+        // Remove old entry from DM cache if being evicted
         if (valid[target]) {
-            lookupMap.remove(makeKey(vpn[target], asid[target], megapage[target]));
+            removeDmEntry(vpn[target], asid[target], megapage[target]);
             statEvictions++;
         }
         statInserts++;
@@ -154,17 +212,44 @@ public class TranslationLookasideBuffer {
         asid[target] = entryAsid;
         lastUsed[target] = accessCounter;
 
-        // Add to lookup map (skip global entries — they're found via linear scan)
+        // Add to DM cache (skip global entries — they're found via linear scan)
         if ((permissions & PERM_G) == 0) {
-            lookupMap.put(makeKey(entryVpn, entryAsid, isMegapage), target);
+            addDmEntry(entryVpn, entryAsid, isMegapage, target);
+        }
+
+        // Invalidate last-translation cache (new entry may shadow it)
+        lastValid = false;
+    }
+
+    private void addDmEntry(int entryVpn, int entryAsid, boolean isMega, int tlbIdx) {
+        int idx;
+        if (isMega) {
+            idx = ((entryVpn >> 10) ^ entryAsid ^ 0x100) & DM_MASK;
+        } else {
+            idx = (entryVpn ^ entryAsid) & DM_MASK;
+        }
+        dmValid[idx] = true;
+        dmVpn[idx] = entryVpn;
+        dmAsid[idx] = entryAsid;
+        dmTlbIdx[idx] = tlbIdx;
+    }
+
+    private void removeDmEntry(int entryVpn, int entryAsid, boolean isMega) {
+        int idx;
+        if (isMega) {
+            idx = ((entryVpn >> 10) ^ entryAsid ^ 0x100) & DM_MASK;
+        } else {
+            idx = (entryVpn ^ entryAsid) & DM_MASK;
+        }
+        if (dmValid[idx] && dmVpn[idx] == entryVpn && dmAsid[idx] == entryAsid) {
+            dmValid[idx] = false;
         }
     }
 
     public void invalidate() {
-        for (int i = 0; i < TLB_SIZE; i++) {
-            valid[i] = false;
-        }
-        lookupMap.clear();
+        for (int i = 0; i < TLB_SIZE; i++) valid[i] = false;
+        for (int i = 0; i < DM_SIZE; i++) dmValid[i] = false;
+        lastValid = false;
     }
 
     public void invalidateAddress(long virtualAddress) {
@@ -175,19 +260,38 @@ public class TranslationLookasideBuffer {
                 ? (vpn[i] >> 10) == (vaVpn >> 10)
                 : vpn[i] == vaVpn;
             if (match) {
-                lookupMap.remove(makeKey(vpn[i], asid[i], megapage[i]));
+                removeDmEntry(vpn[i], asid[i], megapage[i]);
                 valid[i] = false;
             }
         }
+        lastValid = false;
     }
 
     public void invalidateASID(int targetAsid) {
         for (int i = 0; i < TLB_SIZE; i++) {
             if (valid[i] && (perms[i] & PERM_G) == 0 && asid[i] == targetAsid) {
-                lookupMap.remove(makeKey(vpn[i], asid[i], megapage[i]));
+                removeDmEntry(vpn[i], asid[i], megapage[i]);
                 valid[i] = false;
             }
         }
+        lastValid = false;
+    }
+
+    public void invalidateAddressAndASID(long virtualAddress, int targetAsid) {
+        int vaVpn = (int) (virtualAddress >>> 12) & 0xFFFFF;
+        for (int i = 0; i < TLB_SIZE; i++) {
+            if (!valid[i]) continue;
+            if ((perms[i] & PERM_G) != 0) continue;
+            if (asid[i] != targetAsid) continue;
+            boolean match = megapage[i]
+                ? (vpn[i] >> 10) == (vaVpn >> 10)
+                : vpn[i] == vaVpn;
+            if (match) {
+                removeDmEntry(vpn[i], asid[i], megapage[i]);
+                valid[i] = false;
+            }
+        }
+        lastValid = false;
     }
 
     // ========== Statistics and Diagnostics ==========
@@ -196,6 +300,7 @@ public class TranslationLookasideBuffer {
     public long getMisses() { return statMisses; }
     public long getInserts() { return statInserts; }
     public long getEvictions() { return statEvictions; }
+    public long getFastHits() { return statFastHits; }
     public long getTranslations() { return statHits + statMisses; }
 
     public double getHitRate() {
@@ -208,9 +313,9 @@ public class TranslationLookasideBuffer {
         statMisses = 0;
         statInserts = 0;
         statEvictions = 0;
+        statFastHits = 0;
     }
 
-    /** Count currently valid entries */
     public int getValidEntryCount() {
         int count = 0;
         for (int i = 0; i < TLB_SIZE; i++) {
@@ -219,11 +324,10 @@ public class TranslationLookasideBuffer {
         return count;
     }
 
-    /** Dump TLB contents for debugging */
     public String dump() {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("TLB: %d/%d valid, hits=%d misses=%d (%.1f%% hit rate), inserts=%d evictions=%d\n",
-            getValidEntryCount(), TLB_SIZE, statHits, statMisses,
+        sb.append(String.format("TLB: %d/%d valid, hits=%d (fast=%d) misses=%d (%.1f%% hit rate), inserts=%d evictions=%d\n",
+            getValidEntryCount(), TLB_SIZE, statHits, statFastHits, statMisses,
             getHitRate() * 100, statInserts, statEvictions));
         for (int i = 0; i < TLB_SIZE; i++) {
             if (!valid[i]) continue;
@@ -246,21 +350,5 @@ public class TranslationLookasideBuffer {
                 i, type, va, pa, permStr, asid[i], lastUsed[i]));
         }
         return sb.toString();
-    }
-
-    public void invalidateAddressAndASID(long virtualAddress, int targetAsid) {
-        int vaVpn = (int) (virtualAddress >>> 12) & 0xFFFFF;
-        for (int i = 0; i < TLB_SIZE; i++) {
-            if (!valid[i]) continue;
-            if ((perms[i] & PERM_G) != 0) continue;
-            if (asid[i] != targetAsid) continue;
-            boolean match = megapage[i]
-                ? (vpn[i] >> 10) == (vaVpn >> 10)
-                : vpn[i] == vaVpn;
-            if (match) {
-                lookupMap.remove(makeKey(vpn[i], asid[i], megapage[i]));
-                valid[i] = false;
-            }
-        }
     }
 }
