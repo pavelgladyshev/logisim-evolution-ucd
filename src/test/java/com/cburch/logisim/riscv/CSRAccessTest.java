@@ -186,8 +186,8 @@ class CSRAccessTest {
 
     @Test
     void testLowPrivilegeCannotAccessMachineCSR() {
-        // Set MPP to USER mode (0) to simulate lower privilege
-        mstatus.MPP.set(PRIVILEGE_MODE.USER.getValue());
+        // Set current privilege mode to USER to simulate lower privilege
+        cpu.setCurrentPrivilegeMode(PRIVILEGE_MODE.USER);
 
         // csrrs x5, mstatus, x0  — reading MSTATUS requires machine privilege
         long instr = csrInstruction(CSR_MSTATUS, 0, 0x2, 5);

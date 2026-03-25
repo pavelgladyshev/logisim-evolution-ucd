@@ -93,16 +93,20 @@ public class SystemInstructionTest {
 
     @Test
     void instructionTest_mret() {
-        // Set CSR values and register values before executing
+        // Set CSR values before executing
         MMCSR.getCSR(cpu, MEPC).write(0x1000);
-        MMCSR.getCSR(cpu, MSTATUS).write(0x1800); // MPP=0b11, MPIE=1
+        // MPP=0b11(Machine), MPIE=1(bit7=0x80), MIE=0 → 0x1880
+        MMCSR.getCSR(cpu, MSTATUS).write(0x1880);
 
-        // mret instruction
+        // mret instruction (cpu.update decodes and executes it)
         cpu.update(0x30200073,0,0, 0);
-        SystemInstruction.execute(cpu);
 
-        assertEquals(0x1000, cpu.getPC().get()); // PC should be set to MEPC value
-        assertEquals(0x1888, MMCSR.getValue(cpu, MSTATUS)); // MPP should be restored to previous value
-        assertEquals(0x1888, MMCSR.getValue(cpu, MSTATUS)); // MPIE should be set
+        // PC should be set to MEPC value
+        assertEquals(0x1000, cpu.getPC().get());
+        // After mret: MIE ← MPIE(1)=bit3, MPIE ← 1=bit7, MPP ← USER(0)
+        // Expected: 0x08 (MIE) | 0x80 (MPIE) = 0x88
+        assertEquals(0x88, MMCSR.getValue(cpu, MSTATUS));
+        // Privilege mode should be restored to Machine (from MPP=0b11)
+        assertEquals(PRIVILEGE_MODE.MACHINE, cpu.getCurrentPrivilegeMode());
     }
 }

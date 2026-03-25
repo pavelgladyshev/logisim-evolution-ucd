@@ -2,6 +2,7 @@ package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.riscv.cpu.csrs.*;
 import static com.cburch.logisim.riscv.cpu.csrs.MMCSR.*;
+import com.cburch.logisim.riscv.cpu.csrs.SCSR;
 
 public class SystemInstruction {
     public static void execute(rv32imData hartData) {
@@ -38,9 +39,8 @@ public class SystemInstruction {
             case 0x0: { // ecall/ebreak/_ret
                 MSTATUS_CSR mstatus = ((MSTATUS_CSR) MMCSR.getCSR(hartData, MSTATUS));
                 if (imm_I == 0) {
-                    // ecall
-                    MSTATUS_CSR.MPP mpp = (MSTATUS_CSR.MPP)mstatus.MPP;
-                    switch(mpp.getLastPrivilegeMode()){
+                    // ecall — use actual current privilege mode, not MSTATUS.MPP
+                    switch(hartData.getCurrentPrivilegeMode()){
                         case USER:
                             TrapHandler.handle(hartData, MCAUSE_CSR.TRAP_CAUSE.ENVIRONMENT_CALL_FROM_U_MODE);
                             break;
@@ -58,8 +58,16 @@ public class SystemInstruction {
                     // uret
                     // PC = uepc
                 } else if (rs1 == 0 && rd == 0 && csr == 0x102) {
-                    // sret
-                    // PC = sepc
+                    // sret — return from S-mode trap
+                    hartData.getPC().set(SCSR.getValue(hartData, SCSR.SEPC));
+                    // Restore SIE from SPIE
+                    mstatus.SIE.set(mstatus.SPIE.get());
+                    mstatus.SPIE.set(1);
+                    // Restore privilege mode from SPP (0=User, 1=Supervisor)
+                    PRIVILEGE_MODE prevMode = mstatus.SPP.getLastPrivilegeMode();
+                    hartData.setCurrentPrivilegeMode(prevMode);
+                    // Set SPP to User (least privileged)
+                    mstatus.SPP.set(0);
                 } else if (ir.func7() == 0x09) {
                     // sfence.vma rs1, rs2
                     TranslationLookasideBuffer tlb = hartData.getTlb();
@@ -76,15 +84,20 @@ public class SystemInstruction {
                     hartData.getInstructionCache().invalidate();
                     hartData.getPC().increment();
                 } else if (rs1 == 0 && rd == 0 && csr == 0x302) {
-                    // mret
-                    hartData.getPC().set(MMCSR.getValue(hartData, MEPC) );
+                    // mret — return from M-mode trap
+                    hartData.getPC().set(MMCSR.getValue(hartData, MEPC));
+                    // Restore MIE from MPIE
                     mstatus.MIE.set(mstatus.MPIE.get());
                     mstatus.MPIE.set(1);
-                    CSR mip =  MMCSR.getCSR(hartData, MIP);
+                    // Clear pending interrupt bits
+                    CSR mip = MMCSR.getCSR(hartData, MIP);
                     mip.write(mip.read() & (~0x80));
                     mip.write(mip.read() & (~0x800));
-                    // set MPP to user mode if implemented
-                    mstatus.MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
+                    // Restore privilege mode from MPP
+                    MSTATUS_CSR.MPP mpp = (MSTATUS_CSR.MPP) mstatus.MPP;
+                    hartData.setCurrentPrivilegeMode(mpp.getLastPrivilegeMode());
+                    // Set MPP to least privileged mode (User)
+                    mstatus.MPP.set(PRIVILEGE_MODE.USER.getValue());
                 } else {
                     illegalInstructionExceptionTriggered = true;
                 }

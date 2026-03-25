@@ -88,6 +88,9 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   private boolean cache_hit = false;
   private boolean instructionCacheEnabled;
 
+  /** Current privilege mode (separate from MSTATUS.MPP which is "previous" mode) */
+  private PRIVILEGE_MODE currentPrivilegeMode = PRIVILEGE_MODE.MACHINE;
+
   /** SV32 virtual memory */
   private final TranslationLookasideBuffer tlb = new TranslationLookasideBuffer();
   private PageTableWalker ptw;
@@ -250,6 +253,7 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     cache.invalidate();
     tlb.invalidate();
     ptw.reset();
+    currentPrivilegeMode = PRIVILEGE_MODE.MACHINE;  // CPU starts in M-mode
 
     // Reset debugger-related state
     synchronized (this) {
@@ -314,16 +318,26 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     mip.MTIP.set(timerInterruptRequest);
     mip.MEIP.set(externalInterruptRequest);
 
-    // Check for external interrupts first
-    if (isExternalInterruptPending()) {
+    // Check for pending interrupts (priority: MEI > MSI > MTI > SEI > SSI > STI)
+    // Machine-mode interrupts
+    if (isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT, 0x800, 0x800)) {
       TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
       fetchNextInstruction();
       return;
     }
-
-    // Check for timer interrupts as the second priority
-    if (isTimerInterruptPending()) {
+    if (isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT, 0x80, 0x80)) {
       TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
+      fetchNextInstruction();
+      return;
+    }
+    // Supervisor-mode interrupts (only fire when delegated)
+    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_EXTERNAL_INTERRUPT, 0x200, 0x200)) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_EXTERNAL_INTERRUPT);
+      fetchNextInstruction();
+      return;
+    }
+    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT, 0x20, 0x20)) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT);
       fetchNextInstruction();
       return;
     }
@@ -502,26 +516,63 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     cpuState = CPUState.STOPPED;
   }
 
-  public boolean isTimerInterruptPending() {
+  /**
+   * Check if a machine-mode interrupt should fire.
+   * Per RISC-V spec:
+   * - In M-mode: fires only if mstatus.MIE=1, mie bit set, mip bit set
+   * - In S-mode or U-mode: M-mode interrupts ALWAYS fire (if mie/mip bits set),
+   *   regardless of mstatus.MIE (higher privilege interrupts are always enabled)
+   */
+  public boolean isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE cause, long mipMask, long mieMask) {
     MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
     MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
     MIE_CSR mie = (MIE_CSR) MMCSR.getCSR(this, MIE);
 
-    boolean machineInterruptsEnabled = (mstatus.MIE.get() == 1);
-    boolean machineTimerInterruptPending = ( (mip.read() & 0x80) == 0x80);
-    boolean machineTimerInterruptsEnabled = ( (mie.read() & 0x80) == 0x80);
-    return (machineInterruptsEnabled  && machineTimerInterruptsEnabled && machineTimerInterruptPending);
+    boolean pending = (mip.read() & mipMask) != 0;
+    boolean enabled = (mie.read() & mieMask) != 0;
+    if (!pending || !enabled) return false;
+
+    if (currentPrivilegeMode == PRIVILEGE_MODE.MACHINE) {
+      // In M-mode, only fire if mstatus.MIE is set
+      return mstatus.MIE.get() == 1;
+    }
+    // In S-mode or U-mode, M-mode interrupts always fire
+    return true;
+  }
+
+  /**
+   * Check if a supervisor-mode interrupt should fire.
+   * Per RISC-V spec:
+   * - In M-mode: S-mode interrupts never fire (lower priority)
+   * - In S-mode: fires only if mstatus.SIE=1, sie bit set, sip bit set
+   * - In U-mode: S-mode interrupts always fire (if sie/sip bits set)
+   */
+  public boolean isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE cause, long sipMask, long sieMask) {
+    if (currentPrivilegeMode == PRIVILEGE_MODE.MACHINE) return false;
+
+    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
+    MIE_CSR mie = (MIE_CSR) MMCSR.getCSR(this, MIE);
+
+    boolean pending = (mip.read() & sipMask) != 0;
+    boolean enabled = (mie.read() & sieMask) != 0;
+    if (!pending || !enabled) return false;
+
+    if (currentPrivilegeMode == PRIVILEGE_MODE.SUPERVISOR) {
+      // In S-mode, only fire if mstatus.SIE is set
+      return mstatus.SIE.get() == 1;
+    }
+    // In U-mode, S-mode interrupts always fire
+    return true;
+  }
+
+  // Keep legacy methods for backward compatibility
+  public boolean isTimerInterruptPending() {
+    return isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT, 0x80, 0x80);
   }
 
   public boolean isExternalInterruptPending() {
-    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
-    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
-    MIE_CSR mie = (MIE_CSR) MMCSR.getCSR(this, MIE);
-
-    boolean machineInterruptsEnabled = (mstatus.MIE.get() == 1);
-    boolean machineExternalInterruptPending = ((mip.read() & 0x800) == 0x800);
-    boolean machineExternalInterruptsEnabled = ((mie.read() & 0x800) == 0x800);
-    return (machineInterruptsEnabled && machineExternalInterruptsEnabled && machineExternalInterruptPending);
+    return isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT, 0x800, 0x800);
   }
 
   // Handling debugger requests
@@ -630,8 +681,18 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   public void setTranslatedPhysicalAddress(long pa) { this.translatedPhysicalAddress = pa; }
 
   public boolean isTranslationEnabled() {
+    // Per RISC-V spec, SV32 translation is effective only in S-mode and U-mode, NOT in M-mode
+    if (currentPrivilegeMode == PRIVILEGE_MODE.MACHINE) return false;
     SATP_CSR satp = (SATP_CSR) csr.get(SCSR.SATP.getAddress());
     return satp.isSV32Enabled();
+  }
+
+  public PRIVILEGE_MODE getCurrentPrivilegeMode() {
+    return currentPrivilegeMode;
+  }
+
+  public void setCurrentPrivilegeMode(PRIVILEGE_MODE mode) {
+    this.currentPrivilegeMode = mode;
   }
 
   public SATP_CSR getSatp() {

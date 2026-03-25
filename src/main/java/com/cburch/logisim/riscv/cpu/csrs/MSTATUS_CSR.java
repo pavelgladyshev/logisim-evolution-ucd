@@ -2,19 +2,43 @@ package com.cburch.logisim.riscv.cpu.csrs;
 
 public class MSTATUS_CSR extends CSR_RW {
 
-    public BITFIELD MIE;
-    public BITFIELD MPIE;
-    public BITFIELD MPP;
+    // Supervisor-mode fields
+    public BITFIELD SIE;    // bit 1: Supervisor Interrupt Enable
+    public BITFIELD SPIE;   // bit 5: Supervisor Previous Interrupt Enable
+    public SPP_FIELD SPP;   // bit 8: Supervisor Previous Privilege (1 bit: 0=User, 1=Supervisor)
+
+    // Machine-mode fields
+    public BITFIELD MIE;    // bit 3: Machine Interrupt Enable
+    public BITFIELD MPIE;   // bit 7: Machine Previous Interrupt Enable
+    public MPP MPP;          // bits 11-12: Machine Previous Privilege
 
     public MSTATUS_CSR(long initValue) {
         super(initValue);
-        MIE = new BITFIELD(this, 3,3);
-        MPIE = new BITFIELD(this, 7,7);
-        MPP = new MPP(this, 11,12);
+        SIE = new BITFIELD(this, 1, 1);
+        MIE = new BITFIELD(this, 3, 3);
+        SPIE = new BITFIELD(this, 5, 5);
+        MPIE = new BITFIELD(this, 7, 7);
+        SPP = new SPP_FIELD(this, 8, 8);
+        MPP = new MPP(this, 11, 12);
 
         MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
     }
-    
+
+    /**
+     * SPP field: 1-bit (0 = User, 1 = Supervisor)
+     */
+    public static class SPP_FIELD extends BITFIELD {
+        public SPP_FIELD(CSR register, int startBitInclusive, int endBitInclusive) {
+            super(register, startBitInclusive, endBitInclusive);
+        }
+        public PRIVILEGE_MODE getLastPrivilegeMode() {
+            return (get() == 1) ? PRIVILEGE_MODE.SUPERVISOR : PRIVILEGE_MODE.USER;
+        }
+    }
+
+    /**
+     * MPP field: 2-bit (0b00 = User, 0b01 = Supervisor, 0b11 = Machine)
+     */
     public class MPP extends BITFIELD {
         public MPP(CSR register, int startBitInclusive, int endBitInclusive) {
             super(register, startBitInclusive, endBitInclusive);
