@@ -313,36 +313,10 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
       return;
     }
 
-    // update interrupt pending bits in MIP CSR to reflect the state of input pins
-    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
-    mip.MTIP.set(timerInterruptRequest);
-    mip.MEIP.set(externalInterruptRequest);
-
-    // Check for pending interrupts (priority: MEI > MSI > MTI > SEI > SSI > STI)
-    // Machine-mode interrupts
-    if (isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT, 0x800, 0x800)) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
-      fetchNextInstruction();
-      return;
-    }
-    if (isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT, 0x80, 0x80)) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
-      fetchNextInstruction();
-      return;
-    }
-    // Supervisor-mode interrupts (only fire when delegated)
-    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_EXTERNAL_INTERRUPT, 0x200, 0x200)) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_EXTERNAL_INTERRUPT);
-      fetchNextInstruction();
-      return;
-    }
-    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT, 0x20, 0x20)) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT);
-      fetchNextInstruction();
-      return;
-    }
-
-    // If PTW is active (e.g. during instruction fetch TLB miss), step it
+    // If PTW is active, step it BEFORE checking interrupts.
+    // Interrupts must not fire during a page table walk — they would
+    // stomp the bus with an instruction fetch for the trap handler,
+    // corrupting the PTW's pending memory read.
     if (!ptw.isIdle()) {
       // Save the access type before step(), because step() may trigger a page fault
       // which internally starts a new walk and overwrites the access type
@@ -363,6 +337,34 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
       }
       // For load/store walks, the translated PA is in translatedPhysicalAddress.
       // Fall through to the opcode switch which will use it.
+    }
+
+    // Update interrupt pending bits in MIP CSR to reflect the state of input pins.
+    // This is done after the PTW check to prevent bus contention.
+    MIP_CSR mip = (MIP_CSR) MMCSR.getCSR(this, MIP);
+    mip.MTIP.set(timerInterruptRequest);
+    mip.MEIP.set(externalInterruptRequest);
+
+    // Check for pending interrupts (priority: MEI > MSI > MTI > SEI > SSI > STI)
+    if (isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT, 0x800, 0x800)) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
+      fetchNextInstruction();
+      return;
+    }
+    if (isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT, 0x80, 0x80)) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
+      fetchNextInstruction();
+      return;
+    }
+    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_EXTERNAL_INTERRUPT, 0x200, 0x200)) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_EXTERNAL_INTERRUPT);
+      fetchNextInstruction();
+      return;
+    }
+    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT, 0x20, 0x20)) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT);
+      fetchNextInstruction();
+      return;
     }
 
     if (fetching) {
