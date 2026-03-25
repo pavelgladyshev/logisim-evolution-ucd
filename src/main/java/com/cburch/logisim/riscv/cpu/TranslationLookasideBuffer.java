@@ -23,6 +23,12 @@ public class TranslationLookasideBuffer {
     // For megapages: key = (vpn1 << 19 | asid | 0x80000000)
     private final HashMap<Long, Integer> lookupMap = new HashMap<>();
 
+    // Statistics counters
+    private long statHits = 0;
+    private long statMisses = 0;
+    private long statInserts = 0;
+    private long statEvictions = 0;
+
     // Permission bit positions within perms field
     public static final int PERM_R = 0x01;
     public static final int PERM_W = 0x02;
@@ -77,6 +83,7 @@ public class TranslationLookasideBuffer {
         if (idx != null && valid[idx] && vpn[idx] == vaVpn) {
             lastUsed[idx] = accessCounter;
             long pa = ((long) ppn[idx] << 12) | (virtualAddress & 0xFFF);
+            statHits++;
             return TlbResult.hit(pa, perms[idx], false);
         }
 
@@ -85,6 +92,7 @@ public class TranslationLookasideBuffer {
         if (idx != null && valid[idx] && megapage[idx] && (vpn[idx] >> 10) == (vaVpn >> 10)) {
             lastUsed[idx] = accessCounter;
             long pa = ((long) (ppn[idx] >> 10) << 22) | (virtualAddress & 0x3FFFFF);
+            statHits++;
             return TlbResult.hit(pa, perms[idx], true);
         }
 
@@ -100,10 +108,12 @@ public class TranslationLookasideBuffer {
                 long pa = megapage[i]
                     ? ((long) (ppn[i] >> 10) << 22) | (virtualAddress & 0x3FFFFF)
                     : ((long) ppn[i] << 12) | (virtualAddress & 0xFFF);
+                statHits++;
                 return TlbResult.hit(pa, perms[i], megapage[i]);
             }
         }
 
+        statMisses++;
         return TlbResult.miss();
     }
 
@@ -131,7 +141,9 @@ public class TranslationLookasideBuffer {
         // Remove old entry from lookup map if being evicted
         if (valid[target]) {
             lookupMap.remove(makeKey(vpn[target], asid[target], megapage[target]));
+            statEvictions++;
         }
+        statInserts++;
 
         int entryVpn = (int) (virtualAddress >>> 12) & 0xFFFFF;
         valid[target] = true;
@@ -176,6 +188,64 @@ public class TranslationLookasideBuffer {
                 valid[i] = false;
             }
         }
+    }
+
+    // ========== Statistics and Diagnostics ==========
+
+    public long getHits() { return statHits; }
+    public long getMisses() { return statMisses; }
+    public long getInserts() { return statInserts; }
+    public long getEvictions() { return statEvictions; }
+    public long getTranslations() { return statHits + statMisses; }
+
+    public double getHitRate() {
+        long total = statHits + statMisses;
+        return total == 0 ? 0.0 : (double) statHits / total;
+    }
+
+    public void resetStats() {
+        statHits = 0;
+        statMisses = 0;
+        statInserts = 0;
+        statEvictions = 0;
+    }
+
+    /** Count currently valid entries */
+    public int getValidEntryCount() {
+        int count = 0;
+        for (int i = 0; i < TLB_SIZE; i++) {
+            if (valid[i]) count++;
+        }
+        return count;
+    }
+
+    /** Dump TLB contents for debugging */
+    public String dump() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("TLB: %d/%d valid, hits=%d misses=%d (%.1f%% hit rate), inserts=%d evictions=%d\n",
+            getValidEntryCount(), TLB_SIZE, statHits, statMisses,
+            getHitRate() * 100, statInserts, statEvictions));
+        for (int i = 0; i < TLB_SIZE; i++) {
+            if (!valid[i]) continue;
+            String type = megapage[i] ? "MEGA" : "4KB ";
+            String permStr = ""
+                + ((perms[i] & PERM_R) != 0 ? "R" : "-")
+                + ((perms[i] & PERM_W) != 0 ? "W" : "-")
+                + ((perms[i] & PERM_X) != 0 ? "X" : "-")
+                + ((perms[i] & PERM_U) != 0 ? "U" : "-")
+                + ((perms[i] & PERM_G) != 0 ? "G" : "-");
+            long va, pa;
+            if (megapage[i]) {
+                va = ((long)(vpn[i] >> 10)) << 22;
+                pa = ((long)(ppn[i] >> 10)) << 22;
+            } else {
+                va = ((long)vpn[i]) << 12;
+                pa = ((long)ppn[i]) << 12;
+            }
+            sb.append(String.format("  [%3d] %s VA=0x%08x PA=0x%08x %s ASID=%d LRU=%d\n",
+                i, type, va, pa, permStr, asid[i], lastUsed[i]));
+        }
+        return sb.toString();
     }
 
     public void invalidateAddressAndASID(long virtualAddress, int targetAsid) {

@@ -1,0 +1,2 @@
+Mar 25, 2026 1:47:04 PM org.jline.utils.Log logr
+WARNING: Unable to create a system terminal, creating a dumb terminal (enable debug logging for more information)
