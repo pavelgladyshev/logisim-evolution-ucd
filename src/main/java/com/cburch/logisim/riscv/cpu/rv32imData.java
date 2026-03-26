@@ -145,8 +145,8 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     if (isTranslationEnabled()) {
       tlb.translate(pcVal, getCurrentASID());
       if (tlb.resultHit) {
-        // Check execute permission
-        if ((tlb.resultPerms & TranslationLookasideBuffer.PERM_X) == 0) {
+        // Check permissions (A/D bits, U-bit privilege, execute)
+        if (!checkTlbPermissions(tlb.resultPerms, TranslationLookasideBuffer.AccessType.FETCH)) {
           handlePageFault(pcVal, TranslationLookasideBuffer.AccessType.FETCH);
           return;
         }
@@ -419,11 +419,11 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         break;
       case 0x03:  // load instruction (I-type)
         if (!addressing) {
-          if (isTranslationEnabled()) {
+          if (isTranslationEnabledForLoadStore()) {
             long va = LoadInstruction.getAddress(this);
             tlb.translate(va, getCurrentASID());
             if (tlb.resultHit) {
-              if ((tlb.resultPerms & TranslationLookasideBuffer.PERM_R) == 0) {
+              if (!checkTlbPermissionsForLoadStore(tlb.resultPerms, TranslationLookasideBuffer.AccessType.LOAD)) {
                 handlePageFault(va, TranslationLookasideBuffer.AccessType.LOAD);
                 break;
               }
@@ -449,11 +449,11 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         break;
       case 0x23:  // storing instruction (S-type)
         if (!addressing) {
-          if (isTranslationEnabled()) {
+          if (isTranslationEnabledForLoadStore()) {
             long va = StoreInstruction.getAddress(this);
             tlb.translate(va, getCurrentASID());
             if (tlb.resultHit) {
-              if ((tlb.resultPerms & TranslationLookasideBuffer.PERM_W) == 0) {
+              if (!checkTlbPermissionsForLoadStore(tlb.resultPerms, TranslationLookasideBuffer.AccessType.STORE)) {
                 handlePageFault(va, TranslationLookasideBuffer.AccessType.STORE);
                 break;
               }
@@ -687,11 +687,41 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   public long getTranslatedPhysicalAddress() { return translatedPhysicalAddress; }
   public void setTranslatedPhysicalAddress(long pa) { this.translatedPhysicalAddress = pa; }
 
+  /**
+   * Check if address translation is enabled for instruction fetch.
+   * MPRV does NOT affect instruction fetches — always uses actual privilege mode.
+   */
   public boolean isTranslationEnabled() {
-    // Per RISC-V spec, SV32 translation is effective only in S-mode and U-mode, NOT in M-mode
     if (currentPrivilegeMode == PRIVILEGE_MODE.MACHINE) return false;
     SATP_CSR satp = (SATP_CSR) csr.get(SCSR.SATP.getAddress());
     return satp.isSV32Enabled();
+  }
+
+  /**
+   * Check if address translation is enabled for load/store operations.
+   * Per RISC-V spec §3.1.6.3: when mstatus.MPRV=1 in M-mode, loads and stores
+   * use the privilege level in mstatus.MPP for translation and protection.
+   */
+  public boolean isTranslationEnabledForLoadStore() {
+    PRIVILEGE_MODE effectiveMode = getEffectivePrivilegeForLoadStore();
+    if (effectiveMode == PRIVILEGE_MODE.MACHINE) return false;
+    SATP_CSR satp = (SATP_CSR) csr.get(SCSR.SATP.getAddress());
+    return satp.isSV32Enabled();
+  }
+
+  /**
+   * Get the effective privilege mode for load/store operations.
+   * When mstatus.MPRV=1 and currently in M-mode, returns mstatus.MPP.
+   * Otherwise returns the actual current privilege mode.
+   */
+  public PRIVILEGE_MODE getEffectivePrivilegeForLoadStore() {
+    if (currentPrivilegeMode == PRIVILEGE_MODE.MACHINE) {
+      MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+      if (mstatus.MPRV.get() == 1) {
+        return mstatus.MPP.getLastPrivilegeMode();
+      }
+    }
+    return currentPrivilegeMode;
   }
 
   public PRIVILEGE_MODE getCurrentPrivilegeMode() {
@@ -708,6 +738,24 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
   public int getCurrentASID() {
     return (int) getSatp().ASID.get();
+  }
+
+  /**
+   * Check TLB permission bits for instruction fetch (uses actual privilege mode).
+   */
+  public boolean checkTlbPermissions(int perms, TranslationLookasideBuffer.AccessType accessType) {
+    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+    return PermissionCheck.check(perms, accessType, currentPrivilegeMode,
+        mstatus.SUM.get(), mstatus.MXR.get());
+  }
+
+  /**
+   * Check TLB permission bits for load/store (uses effective privilege from MPRV/MPP).
+   */
+  public boolean checkTlbPermissionsForLoadStore(int perms, TranslationLookasideBuffer.AccessType accessType) {
+    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+    return PermissionCheck.check(perms, accessType, getEffectivePrivilegeForLoadStore(),
+        mstatus.SUM.get(), mstatus.MXR.get());
   }
 
   public void handlePageFault(long faultingVA, TranslationLookasideBuffer.AccessType accessType) {

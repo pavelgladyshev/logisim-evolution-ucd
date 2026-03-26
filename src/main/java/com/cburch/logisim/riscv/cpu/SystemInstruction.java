@@ -89,15 +89,16 @@ public class SystemInstruction {
                     // Restore MIE from MPIE
                     mstatus.MIE.set(mstatus.MPIE.get());
                     mstatus.MPIE.set(1);
-                    // Clear pending interrupt bits
-                    CSR mip = MMCSR.getCSR(hartData, MIP);
-                    mip.write(mip.read() & (~0x80));
-                    mip.write(mip.read() & (~0x800));
                     // Restore privilege mode from MPP
                     MSTATUS_CSR.MPP mpp = (MSTATUS_CSR.MPP) mstatus.MPP;
-                    hartData.setCurrentPrivilegeMode(mpp.getLastPrivilegeMode());
+                    PRIVILEGE_MODE restoredMode = mpp.getLastPrivilegeMode();
+                    hartData.setCurrentPrivilegeMode(restoredMode);
                     // Set MPP to least privileged mode (User)
                     mstatus.MPP.set(PRIVILEGE_MODE.USER.getValue());
+                    // Per spec §3.1.6.3: clear MPRV if new privilege != Machine
+                    if (restoredMode != PRIVILEGE_MODE.MACHINE) {
+                        mstatus.MPRV.set(0);
+                    }
                 } else {
                     illegalInstructionExceptionTriggered = true;
                 }

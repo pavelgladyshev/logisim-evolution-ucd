@@ -13,8 +13,9 @@ package com.cburch.logisim.riscv.cpu.csrs;
 public class SSTATUS_CSR extends CSR {
     private final MSTATUS_CSR mstatus;
 
-    /** Mask of bits visible through sstatus: SIE(1), SPIE(5), SPP(8) */
-    private static final long SSTATUS_MASK = (1L << 1) | (1L << 5) | (1L << 8);
+    /** Mask of bits visible through sstatus: SIE(1), SPIE(5), SPP(8), SUM(18), MXR(19) */
+    private static final long SSTATUS_MASK =
+        (1L << 1) | (1L << 5) | (1L << 8) | (1L << 18) | (1L << 19);
 
     public SSTATUS_CSR(MSTATUS_CSR mstatus) {
         this.mstatus = mstatus;

@@ -12,6 +12,11 @@ public class MSTATUS_CSR extends CSR_RW {
     public BITFIELD MPIE;   // bit 7: Machine Previous Interrupt Enable
     public MPP MPP;          // bits 11-12: Machine Previous Privilege
 
+    // Virtual memory control fields
+    public BITFIELD MPRV;   // bit 17: Modify PRiVilege (use MPP for load/store translation)
+    public BITFIELD SUM;    // bit 18: permit Supervisor User Memory access
+    public BITFIELD MXR;    // bit 19: Make eXecutable Readable
+
     public MSTATUS_CSR(long initValue) {
         super(initValue);
         SIE = new BITFIELD(this, 1, 1);
@@ -20,6 +25,9 @@ public class MSTATUS_CSR extends CSR_RW {
         MPIE = new BITFIELD(this, 7, 7);
         SPP = new SPP_FIELD(this, 8, 8);
         MPP = new MPP(this, 11, 12);
+        MPRV = new BITFIELD(this, 17, 17);
+        SUM = new BITFIELD(this, 18, 18);
+        MXR = new BITFIELD(this, 19, 19);
 
         MPP.set(PRIVILEGE_MODE.MACHINE.getValue());
     }

@@ -76,6 +76,8 @@ public class TranslationLookasideBuffer {
      * resultHit, resultPA, resultPerms, resultMega.
      */
     public void translate(long virtualAddress, int currentAsid) {
+        // Mask to 32 bits — RV32 addresses must not be sign-extended to 64-bit
+        virtualAddress &= 0xFFFFFFFFL;
         int vaVpn = (int) (virtualAddress >>> 12) & 0xFFFFF;
 
         // === Fast path: last-translation cache ===
@@ -180,6 +182,7 @@ public class TranslationLookasideBuffer {
      */
     public void insert(long virtualAddress, int physicalPageNumber, int permissions,
                        boolean isMegapage, int entryAsid) {
+        virtualAddress &= 0xFFFFFFFFL;
         accessCounter++;
 
         // Find a free slot or the LRU entry
@@ -253,6 +256,7 @@ public class TranslationLookasideBuffer {
     }
 
     public void invalidateAddress(long virtualAddress) {
+        virtualAddress &= 0xFFFFFFFFL;
         int vaVpn = (int) (virtualAddress >>> 12) & 0xFFFFF;
         for (int i = 0; i < TLB_SIZE; i++) {
             if (!valid[i]) continue;
@@ -278,6 +282,7 @@ public class TranslationLookasideBuffer {
     }
 
     public void invalidateAddressAndASID(long virtualAddress, int targetAsid) {
+        virtualAddress &= 0xFFFFFFFFL;
         int vaVpn = (int) (virtualAddress >>> 12) & 0xFFFFF;
         for (int i = 0; i < TLB_SIZE; i++) {
             if (!valid[i]) continue;

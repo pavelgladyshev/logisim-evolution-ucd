@@ -1,6 +1,9 @@
 package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.data.Value;
+import com.cburch.logisim.riscv.cpu.csrs.MSTATUS_CSR;
+import com.cburch.logisim.riscv.cpu.csrs.MMCSR;
+import com.cburch.logisim.riscv.cpu.csrs.PRIVILEGE_MODE;
 import com.cburch.logisim.riscv.cpu.csrs.SATP_CSR;
 
 public class PageTableWalker {
@@ -52,7 +55,7 @@ public class PageTableWalker {
      * Sets up the bus to read the level-1 PTE.
      */
     public void startWalk(long va, TranslationLookasideBuffer.AccessType type) {
-        this.virtualAddress = va;
+        this.virtualAddress = va & 0xFFFFFFFFL;  // Mask to 32 bits for RV32
         this.accessType = type;
 
         SATP_CSR satp = hartData.getSatp();
@@ -204,11 +207,15 @@ public class PageTableWalker {
     }
 
     private boolean checkPermissions(long pte) {
-        return switch (accessType) {
-            case FETCH -> (pte & PTE_X) != 0;
-            case LOAD -> (pte & PTE_R) != 0;
-            case STORE -> (pte & PTE_W) != 0;
-        };
+        int perms = extractPermissions(pte);
+        MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(hartData, MMCSR.MSTATUS);
+        // For load/store walks, use effective privilege (MPRV-aware).
+        // For fetch walks, use actual privilege (MPRV does not affect fetch).
+        PRIVILEGE_MODE mode = (accessType == TranslationLookasideBuffer.AccessType.FETCH)
+            ? hartData.getCurrentPrivilegeMode()
+            : hartData.getEffectivePrivilegeForLoadStore();
+        return PermissionCheck.check(perms, accessType, mode,
+            mstatus.SUM.get(), mstatus.MXR.get());
     }
 
     private int extractPermissions(long pte) {
