@@ -361,6 +361,11 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
       fetchNextInstruction();
       return;
     }
+    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_SOFTWARE_INTERRUPT, 0x2, 0x2)) {
+      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_SOFTWARE_INTERRUPT);
+      fetchNextInstruction();
+      return;
+    }
     if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT, 0x20, 0x20)) {
       TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT);
       fetchNextInstruction();
