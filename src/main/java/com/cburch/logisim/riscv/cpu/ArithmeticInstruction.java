@@ -12,7 +12,7 @@ public class ArithmeticInstruction {
                 hartData.setX(ir.rd(), rs1 + ir.imm_I());
                 break;
             case 0x1:   // slli rd,rs1,shamt_I
-                hartData.setX(ir.rd(), rs1 << ir.rs2());
+                hartData.setX(ir.rd(), ((int) rs1 << ir.rs2()) & 0xFFFFFFFFL);
                 break;
             case 0x2:   // slti rd,rs1,imm_I
                 hartData.setX(ir.rd(), (rs1 < ir.imm_I()) ? 1 : 0);
@@ -26,10 +26,10 @@ public class ArithmeticInstruction {
             case 0x5:
                 switch(ir.func7()) {
                     case 0x00: // srli rd,rs1,shamt_I
-                        hartData.setX(ir.rd(), rs1 >>> ir.rs2());
+                        hartData.setX(ir.rd(), ((int) rs1 >>> ir.rs2()) & 0xFFFFFFFFL);
                         break;
                     case 0x20: // srai rd,rs1,shamt_I
-                        hartData.setX(ir.rd(), rs1 >> ir.rs2());
+                        hartData.setX(ir.rd(), (int) rs1 >> ir.rs2());
                         break;
                     default:
                         illegalInstructionExceptionTriggered = true;
@@ -69,7 +69,7 @@ public class ArithmeticInstruction {
                 }
                 break;
             case 0x1:   // sll rd,rs1,rs2
-                hartData.setX(ir.rd(), rs1 << (rs2 & 0x1f));
+                hartData.setX(ir.rd(), ((int) rs1 << (rs2 & 0x1f)) & 0xFFFFFFFFL);
                 break;
             case 0x2:   // slt rd,rs1,rs2
                 hartData.setX(ir.rd(), (rs1 < rs2) ? 1 : 0);
@@ -83,7 +83,7 @@ public class ArithmeticInstruction {
             case 0x5:
                 switch (ir.func7()) {
                     case 0x00:  // srl rd,rs1,rs2
-                        hartData.setX(ir.rd(), rs1 >>> (rs2 & 0x1f));
+                        hartData.setX(ir.rd(), ((int) rs1 >>> (rs2 & 0x1f)) & 0xFFFFFFFFL);
                         break;
                     case 0x20:  // sra rd,rs1,rs2
                         hartData.setX(ir.rd(), (int) rs1 >> (rs2 & 0x1f));
