@@ -68,7 +68,14 @@ public class PowerOnReset extends InstanceFactory {
       Attributes.forOption(
           "porTransition", S.getter("porTransition"), new AttributeOption[] {HTOL, LTOH});
 
+  static final String DURATION_NAME = "PorHighDuration";
+
   public static final PowerOnReset FACTORY = new PowerOnReset();
+
+  /** True when the output starts at 1 (and goes to 0 after the reset time). */
+  static boolean startsHigh(AttributeSet attrs) {
+    return attrs.getValue(PORTRANS) != LTOH;
+  }
 
   public static class Poker extends InstancePoker {
     @Override
@@ -79,13 +86,13 @@ public class PowerOnReset extends InstanceFactory {
   }
 
   public PowerOnReset() {
-    super(_ID, S.getter("PowerOnResetComponent"));
+    super(_ID, S.getter("PowerOnResetComponent"), new PorHdlGeneratorFactory());
     setAttributes(
         new Attribute[] {
           StdAttr.FACING,
           PORSIZE,
           PORTRANS,
-          new DurationAttribute("PorHighDuration", S.getter("porHighAttr"), 1, 10, false),
+          new DurationAttribute(DURATION_NAME, S.getter("porHighAttr"), 1, 10, false),
         },
         new Object[] {
           Direction.EAST,

@@ -17,6 +17,7 @@ import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Bounds;
 import com.cburch.logisim.data.Direction;
 import com.cburch.logisim.data.Value;
+import com.cburch.logisim.fpga.data.ComponentMapInformationContainer;
 import com.cburch.logisim.gui.icons.KeyboardIcon;
 import com.cburch.logisim.instance.InstanceFactory;
 import com.cburch.logisim.instance.InstancePainter;
@@ -31,6 +32,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
+import java.util.List;
 
 public class Keyboard extends InstanceFactory {
   /**
@@ -134,13 +136,13 @@ public class Keyboard extends InstanceFactory {
     return ret;
   }
 
-  private static final int CLR = 0;
+  static final int CLR = 0;
 
-  private static final int CK = 1;
-  private static final int RE = 2;
+  static final int CK = 1;
+  static final int RE = 2;
 
-  private static final int AVL = 3;
-  private static final int OUT = 4;
+  static final int AVL = 3;
+  static final int OUT = 4;
 
   private static final int DELAY0 = 9;
   private static final int DELAY1 = 11;
@@ -153,14 +155,18 @@ public class Keyboard extends InstanceFactory {
 
   private static final char FORM_FEED = 12; // control-L (LINE FEED)
 
-  private static final Attribute<Integer> ATTR_BUFFER =
+  static final Attribute<Integer> ATTR_BUFFER =
       Attributes.forIntegerRange("buflen", S.getter("keybBufferLengthAttr"), 1, 256);
 
   public Keyboard() {
-    super(_ID, S.getter("keyboardComponent"));
+    // On an FPGA the Keyboard is a serial receiver whose input "RX" is mapped to the board's UART.
+    super(_ID, S.getter("keyboardComponent"), new KeyboardHdlGeneratorFactory(), true, false);
     setAttributes(
-        new Attribute[] {ATTR_BUFFER, StdAttr.EDGE_TRIGGER},
-        new Object[] {32, StdAttr.TRIG_RISING});
+        new Attribute[] {ATTR_BUFFER, StdAttr.EDGE_TRIGGER, StdAttr.LABEL, StdAttr.MAPINFO},
+        new Object[] {
+          32, StdAttr.TRIG_RISING, "",
+          new ComponentMapInformationContainer(1, 0, 0, new ArrayList<>(List.of("RX")), null, null)
+        });
     setOffsetBounds(Bounds.create(0, -15, WIDTH, HEIGHT));
     setIcon(new KeyboardIcon());
     setInstancePoker(Poker.class);

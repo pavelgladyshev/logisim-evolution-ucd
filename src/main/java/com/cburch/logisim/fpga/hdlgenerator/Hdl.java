@@ -27,6 +27,22 @@ import java.util.TreeSet;
 
 public class Hdl {
 
+  /**
+   * Frequency of the clock that the FPGA design runs on (the board clock, or the synthesized clock). Set
+   * by the download flow before the HDL is written; components that must time things in real time (the
+   * TTY and Keyboard UARTs) use it. The default is only a placeholder for HDL written without a board.
+   */
+  private static long fpgaClockFrequency = 100_000_000L;
+
+  public static void setFpgaClockFrequency(long frequency) {
+    if (frequency > 0) fpgaClockFrequency = frequency;
+  }
+
+  public static long getFpgaClockFrequency() {
+    return fpgaClockFrequency;
+  }
+
+
   public static final String NET_NAME = "s_logisimNet";
   public static final String BUS_NAME = "s_logisimBus";
 
