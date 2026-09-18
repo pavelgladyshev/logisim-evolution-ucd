@@ -1,0 +1,2 @@
+kbd Keyboard buflen=4
+tty TTY

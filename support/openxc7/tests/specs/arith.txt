@@ -1,0 +1,23 @@
+# name tool attributes (skip = port indices left unconnected)
+mul1u Multiplier width=1 mode=unsigned
+mul4u Multiplier width=4 mode=unsigned
+mul4su Multiplier width=4 mode=signedUnsigned
+mul4s Multiplier width=4 mode=twosComplement
+mul16u Multiplier width=16 mode=unsigned
+mul16su Multiplier width=16 mode=signedUnsigned
+mul16s Multiplier width=16 mode=twosComplement
+mul16snc Multiplier width=16 mode=twosComplement skip=3
+mul32s Multiplier width=32 mode=twosComplement
+mul32u Multiplier width=32 mode=unsigned
+div4u Divider width=4 mode=unsigned skip=3
+div4s Divider width=4 mode=twosComplement skip=3
+div4uu Divider width=4 mode=unsigned
+div4su Divider width=4 mode=twosComplement
+div16u Divider width=16 mode=unsigned skip=3
+div16s Divider width=16 mode=twosComplement skip=3
+div16uu Divider width=16 mode=unsigned
+div16su Divider width=16 mode=twosComplement
+div32s Divider width=32 mode=twosComplement skip=3
+div32u Divider width=32 mode=unsigned skip=3
+div1u Divider width=1 mode=unsigned
+div1s Divider width=1 mode=twosComplement skip=3
