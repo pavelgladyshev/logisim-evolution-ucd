@@ -172,8 +172,8 @@ public class FpgaCommander
     BoardSelectionPanel.add(boardPic, gbc);
     if (MyBoardInformation != null
         && !VendorSoftware.toolsPresent(
-            MyBoardInformation.fpga.getVendor(),
-            VendorSoftware.getToolPath(MyBoardInformation.fpga.getVendor()))) {
+            VendorSoftware.getToolchain(MyBoardInformation.fpga),
+            VendorSoftware.getToolPath(VendorSoftware.getToolchain(MyBoardInformation.fpga)))) {
       /* add the select toolpath button */
       gbc.gridy++;
       BoardSelectionPanel.add(ToolPath, gbc);
@@ -365,11 +365,11 @@ public class FpgaCommander
     ToolPath.setText(
         S.get(
             "FpgaGuiToolpath",
-            VendorSoftware.getVendorString(MyBoardInformation.fpga.getVendor())));
+            VendorSoftware.getVendorString(VendorSoftware.getToolchain(MyBoardInformation.fpga))));
     if (MyBoardInformation != null
         && VendorSoftware.toolsPresent(
-            MyBoardInformation.fpga.getVendor(),
-            VendorSoftware.getToolPath(MyBoardInformation.fpga.getVendor()))) {
+            VendorSoftware.getToolchain(MyBoardInformation.fpga),
+            VendorSoftware.getToolPath(VendorSoftware.getToolchain(MyBoardInformation.fpga)))) {
       actionCommands.addItem(S.getter("FpgaGuiSyntAndD"));
       nrItems++;
       actionCommands.addItem(S.getter("FpgaGuiDownload"));
@@ -391,7 +391,7 @@ public class FpgaCommander
     } else if (e.getActionCommand().equals("Settings")) {
       PreferencesFrame.showFPGAPreferences();
     } else if (e.getActionCommand().equals("ToolPath")) {
-      selectToolPath(MyBoardInformation.fpga.getVendor());
+      selectToolPath(VendorSoftware.getToolchain(MyBoardInformation.fpga));
       handleHdlOnly();
     } else if (e.getActionCommand().equals(STOP_REQUESTED)) {
       if (downloader != null) downloader.stop();

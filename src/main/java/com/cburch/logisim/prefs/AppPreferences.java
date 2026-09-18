@@ -1032,6 +1032,19 @@ public class AppPreferences {
   public static final PrefMonitor<String> OpenFpgaToolPath =
       create(new PrefMonitorString("OpenFpgaToolPath", ""));
 
+  /** openXC7 tools: defaults to ~/openxc7/bin/, where openxc7/setup_toolchain.sh puts them. */
+  public static final PrefMonitor<String> OpenXc7ToolPath =
+      create(new PrefMonitorString("OpenXc7ToolPath", defaultOpenXc7ToolPath()));
+
+  /** Build designs for Xilinx 7-series boards with openXC7 instead of Vivado (on when openXC7 is installed). */
+  public static final PrefMonitor<Boolean> OpenXc7ForXilinx =
+      create(new PrefMonitorBoolean("OpenXc7ForXilinx", !defaultOpenXc7ToolPath().isEmpty()));
+
+  private static String defaultOpenXc7ToolPath() {
+    final var bin = new File(System.getProperty("user.home"), "openxc7" + File.separator + "bin");
+    return bin.isDirectory() ? bin.getPath() + File.separator : "";
+  }
+
   // hidden window preferences - not part of the preferences dialog, changes
   // to preference does not affect current windows, and the values are not
   // saved until the application is closed

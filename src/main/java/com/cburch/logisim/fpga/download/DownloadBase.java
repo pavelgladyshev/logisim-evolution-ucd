@@ -78,9 +78,8 @@ public abstract class DownloadBase {
   }
 
   protected boolean isVendorSoftwarePresent() {
-    return VendorSoftware.toolsPresent(
-        myBoardInformation.fpga.getVendor(),
-        VendorSoftware.getToolPath(myBoardInformation.fpga.getVendor()));
+    final var toolchain = VendorSoftware.getToolchain(myBoardInformation.fpga);
+    return VendorSoftware.toolsPresent(toolchain, VendorSoftware.getToolPath(toolchain));
   }
 
   protected boolean mapDesign(String circuitName) {
@@ -154,6 +153,7 @@ public abstract class DownloadBase {
   }
 
   protected boolean writeHDL(String selectedCircuit, Double frequency) {
+    if (myBoardInformation != null) Hdl.setFpgaClockFrequency(getSynthesizedFrequency());
     if (!genDirectory(
         AppPreferences.FPGA_Workspace.get()
             + File.separator

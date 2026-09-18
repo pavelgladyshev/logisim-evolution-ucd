@@ -17,6 +17,7 @@ import com.cburch.logisim.fpga.data.BoardInformation;
 import com.cburch.logisim.fpga.data.ComponentMapParser;
 import com.cburch.logisim.fpga.gui.ComponentMapDialog;
 import com.cburch.logisim.fpga.gui.Reporter;
+import com.cburch.logisim.fpga.hdlgenerator.HdlGeneratorFactory;
 import com.cburch.logisim.fpga.settings.VendorSoftware;
 import com.cburch.logisim.gui.generic.OptionPane;
 import com.cburch.logisim.prefs.AppPreferences;
@@ -159,7 +160,7 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
       this.generateHdlOnly = true;
       this.vendor = ' ';
     } else {
-      this.vendor = myBoardInformation.fpga.getVendor();
+      this.vendor = VendorSoftware.getToolchain(myBoardInformation.fpga);
     }
     if (!isFpgaCableSupported(vendor, fpgaCableName)) {
       Reporter.report.addFatalError(
@@ -202,6 +203,20 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
               myBoardInformation,
               entities,
               architectures);
+      case VendorSoftware.VENDOR_OPENXC7 -> {
+        // the open-source Xilinx 7-series flow reads Verilog: switch before the DRC and HDL generation
+        if (!HdlGeneratorFactory.VERILOG.equals(AppPreferences.HdlType.get())) {
+          AppPreferences.HdlType.set(HdlGeneratorFactory.VERILOG);
+          Reporter.report.addInfo(S.get("OpenXc7UsesVerilog"));
+        }
+        downloader =
+            new OpenXc7Download(
+                getProjDir(topLevelSheet),
+                rootSheet.getNetList(),
+                myBoardInformation,
+                entities,
+                writeToFlash);
+      }
       case VendorSoftware.VENDOR_OPENFPGA -> downloader =
           new OpenFpgaDownload(
               getProjDir(topLevelSheet),

@@ -9,6 +9,7 @@
 
 package com.cburch.logisim.fpga.settings;
 
+import com.cburch.logisim.fpga.data.FpgaClass;
 import com.cburch.logisim.prefs.AppPreferences;
 import java.io.File;
 import java.util.ArrayList;
@@ -20,13 +21,15 @@ public class VendorSoftware {
   public static final char VENDOR_XILINX = 1;
   public static final char VENDOR_VIVADO = 2;
   public static final char VENDOR_OPENFPGA = 3;
+  public static final char VENDOR_OPENXC7 = 4;
   public static final char VENDOR_UNKNOWN = 255;
-  public static final String[] VENDORS = {"Altera", "Xilinx", "Vivado", "openFPGA"};
+  public static final String[] VENDORS = {"Altera", "Xilinx", "Vivado", "openFPGA", "openXC7"};
 
   private static final String XilinxName = "XilinxToolsPath";
   private static final String AlteraName = "AlteraToolsPath";
   private static final String VivadoName = "VivadoToolsPath";
   private static final String OpenFpgaName = "OpenFpgaToolsPath";
+  private static final String OpenXc7Name = "OpenXc7ToolsPath";
   public static final String UNKNOWN = "Unknown";
 
   private final char vendor;
@@ -45,6 +48,7 @@ public class VendorSoftware {
       case VENDOR_XILINX -> AppPreferences.ISEToolPath.get();
       case VENDOR_VIVADO -> AppPreferences.VivadoToolPath.get();
       case VENDOR_OPENFPGA -> AppPreferences.OpenFpgaToolPath.get();
+      case VENDOR_OPENXC7 -> AppPreferences.OpenXc7ToolPath.get();
       default -> "Unknown";
     };
   }
@@ -72,6 +76,7 @@ public class VendorSoftware {
     result.add(VendorSoftware.VENDORS[1]);
     result.add(VendorSoftware.VENDORS[2]);
     result.add(VendorSoftware.VENDORS[3]);
+    result.add(VendorSoftware.VENDORS[4]);
 
     return result;
   }
@@ -82,6 +87,7 @@ public class VendorSoftware {
       case VENDOR_XILINX -> VENDORS[1];
       case VENDOR_VIVADO -> VENDORS[2];
       case VENDOR_OPENFPGA -> VENDORS[3];
+      case VENDOR_OPENXC7 -> VENDORS[4];
       default -> "Unknown";
     };
   }
@@ -92,6 +98,7 @@ public class VendorSoftware {
       case VENDOR_XILINX -> new VendorSoftware(VENDOR_XILINX, XilinxName, load(VENDOR_XILINX));
       case VENDOR_VIVADO -> new VendorSoftware(VENDOR_VIVADO, VivadoName, load(VENDOR_VIVADO));
       case VENDOR_OPENFPGA -> new VendorSoftware(VENDOR_OPENFPGA, OpenFpgaName, load(VENDOR_OPENFPGA));
+      case VENDOR_OPENXC7 -> new VendorSoftware(VENDOR_OPENXC7, OpenXc7Name, load(VENDOR_OPENXC7));
       default -> null;
     };
   }
@@ -102,6 +109,7 @@ public class VendorSoftware {
       case VENDOR_XILINX -> AppPreferences.ISEToolPath.get();
       case VENDOR_VIVADO -> AppPreferences.VivadoToolPath.get();
       case VENDOR_OPENFPGA -> AppPreferences.OpenFpgaToolPath.get();
+      case VENDOR_OPENXC7 -> AppPreferences.OpenXc7ToolPath.get();
       default -> null;
     };
   }
@@ -120,6 +128,9 @@ public class VendorSoftware {
         return true;
       case VENDOR_OPENFPGA:
         AppPreferences.OpenFpgaToolPath.set(path);
+        return true;
+      case VENDOR_OPENXC7:
+        AppPreferences.OpenXc7ToolPath.set(path);
         return true;
       default:
         return false;
@@ -157,6 +168,14 @@ public class VendorSoftware {
       progs.add("nextpnr-ecp5");
       progs.add("ecppack");
       progs.add("openFPGALoader");
+    } else if (vendor == VENDOR_OPENXC7) {
+      // One folder (normally ~/openxc7/bin, made by setup_toolchain.sh) with these programs; the chip
+      // databases are in ../chipdb and the Project X-Ray database in ../prjxray-db next to it.
+      progs.add("yosys");
+      progs.add("nextpnr-xilinx");
+      progs.add("fasm2frames");
+      progs.add("xc7frames2bit");
+      progs.add("openFPGALoader");
     }
 
     String[] progsArray = progs.toArray(new String[0]);
@@ -170,6 +189,21 @@ public class VendorSoftware {
       }
     }
     return progsArray;
+  }
+
+  /**
+   * The toolchain that builds the designs for an FPGA: its vendor's, except that Xilinx 7-series FPGAs are
+   * built with the open-source openXC7 tools when the preferences say so.
+   */
+  public static char getToolchain(FpgaClass fpga) {
+    final var part = fpga.getPart();
+    if (fpga.getVendor() == VENDOR_VIVADO
+        && AppPreferences.OpenXc7ForXilinx.getBoolean()
+        && part != null
+        && part.toLowerCase().startsWith("xc7")) {
+      return VENDOR_OPENXC7;
+    }
+    return fpga.getVendor();
   }
 
   public static boolean toolsPresent(char vendor, String path) {
