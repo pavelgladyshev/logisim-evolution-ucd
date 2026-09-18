@@ -19,9 +19,20 @@ import com.cburch.logisim.util.LineBuffer;
 public class HdlTypes {
 
   private interface HdlType {
+    /** Type definition for the current HDL, or null if the type needs none. */
     String getTypeDefinition();
 
     String getTypeName();
+
+    /** Plain Verilog declaration of a signal of this type, or null to declare it as "typeName name;". */
+    default String getVerilogDeclaration(String wireName) {
+      return null;
+    }
+
+    /** Verilog statements that give a signal of this type its power-up value, or none. */
+    default List<String> getVerilogInitialization(String wireName) {
+      return List.of();
+    }
   }
 
   private static class HdlEnum implements HdlType {
@@ -85,38 +96,45 @@ public class HdlTypes {
       myNrOfEntries = nrOfEntries;
     }
 
+    private String msbExpression() {
+      return myGenericBitWidth == null
+          ? Integer.toString(myBitWidth - 1)
+          : String.format("%s - 1", myGenericBitWidth);
+    }
+
     @Override
     public String getTypeDefinition() {
+      // Verilog arrays are declared directly (see getVerilogDeclaration): a typedef would need SystemVerilog.
+      if (!Hdl.isVhdl()) return null;
       final var contents = new StringBuilder();
-      if (Hdl.isVhdl()) {
-        contents
-            .append(
-                LineBuffer.formatVhdl(
-                    "{{type}} {{1}} {{is}} {{array}} ( {{2}} {{downto}} 0 ) {{of}} ",
-                    myTypeName, myNrOfEntries));
-        if (myGenericBitWidth == null && myBitWidth == 1) {
-          contents.append("std_logic;");
-        } else {
-          contents
-              .append("std_logic_vector( ")
-              .append(
-                  myGenericBitWidth == null
-                      ? Integer.toString(myBitWidth - 1)
-                      : String.format("%s - 1", myGenericBitWidth))
-              .append(
-                  LineBuffer.formatVhdl(
-                      " " + "{{downto}} 0);")); // Important: The leading space is required
-        }
+      contents.append(
+          LineBuffer.formatVhdl(
+              "{{type}} {{1}} {{is}} {{array}} ( {{2}} {{downto}} 0 ) {{of}} ",
+              myTypeName, myNrOfEntries - 1));
+      if (myGenericBitWidth == null && myBitWidth == 1) {
+        contents.append("std_logic;");
       } else {
         contents
-            .append("typedef logic [")
-            .append(
-                myGenericBitWidth == null
-                    ? Integer.toString(myBitWidth - 1)
-                    : String.format("%s - 1", myGenericBitWidth))
-            .append(String.format(":0] %s [%d:0];", myTypeName, myNrOfEntries));
+            .append("std_logic_vector( ")
+            .append(msbExpression())
+            .append(LineBuffer.formatVhdl(" " + "{{downto}} 0);")); // Important: The leading space is required
       }
       return contents.toString();
+    }
+
+    @Override
+    public String getVerilogDeclaration(String wireName) {
+      return String.format("reg [%s:0] %s [0:%d];", msbExpression(), wireName, myNrOfEntries - 1);
+    }
+
+    /** Zeros, as in a new simulation and in the FPGA (for a block RAM, Yosys makes these its initial contents). */
+    @Override
+    public List<String> getVerilogInitialization(String wireName) {
+      final var index = "i_" + wireName;
+      return List.of(
+          String.format("integer %s;", index),
+          String.format("initial for (%1$s = 0; %1$s < %2$d; %1$s = %1$s + 1) %3$s[%1$s] = 0;",
+              index, myNrOfEntries, wireName));
     }
 
     @Override
@@ -156,14 +174,33 @@ public class HdlTypes {
     return this;
   }
 
+  /** Number of types that need a type definition in the current HDL. */
   public int getNrOfTypes() {
-    return myTypes.keySet().size();
+    var count = 0;
+    for (final var type : myTypes.values()) if (type.getTypeDefinition() != null) count++;
+    return count;
   }
 
   public List<String> getTypeDefinitions() {
     final var defs = LineBuffer.getHdlBuffer();
-    for (final var entry : myTypes.keySet()) defs.add(myTypes.get(entry).getTypeDefinition());
+    for (final var entry : myTypes.keySet()) {
+      final var definition = myTypes.get(entry).getTypeDefinition();
+      if (definition != null) defs.add(definition);
+    }
     return defs.getWithIndent();
+  }
+
+  /** Verilog declarations of the typed signals, sorted by name. */
+  public List<String> getVerilogDeclarations() {
+    final var lines = new ArrayList<String>();
+    for (final var wire : new java.util.TreeSet<>(myWires.keySet())) {
+      final var type = myTypes.get(myWires.get(wire));
+      if (type == null) throw new IllegalArgumentException("Enum or array type not contained in array");
+      final var declaration = type.getVerilogDeclaration(wire);
+      lines.add(declaration != null ? declaration : String.format("%s %s;", type.getTypeName(), wire));
+      lines.addAll(type.getVerilogInitialization(wire));
+    }
+    return lines;
   }
 
   public Map<String, String> getTypedWires() {

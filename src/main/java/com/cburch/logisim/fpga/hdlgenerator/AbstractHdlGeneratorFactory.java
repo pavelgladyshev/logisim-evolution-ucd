@@ -134,9 +134,12 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
         body.empty().addRemarkBlock("Here all module parameters are defined with a dummy value");
         final var parameters = new TreeSet<String>();
         for (final var paramId : myParametersList.keySet(attrs)) {
-          // Verilog vector parameters need their width in the module declaration.
+          // Verilog vector parameters get their width in the module declaration, except those whose width
+          // depends on the instance (a module is shared by all widths): they take the width of each
+          // instance's value.
           final var paramName =
               myParametersList.isPresentedByInteger(paramId, attrs)
+                      || myParametersList.hasInstanceVectorWidth(paramId, attrs)
                   ? myParametersList.get(paramId, attrs)
                   : String.format(
                       "[%d:0] %s",
@@ -181,17 +184,10 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
         body.empty().addRemarkBlock("The registers are defined here");
         if (!getVerilogSignalSet("reg", regs, attrs, false, body)) return null;
       }
-      final var typedWires = myTypedWires.getTypedWires();
+      final var typedWires = myTypedWires.getVerilogDeclarations();
       if (!typedWires.isEmpty()) {
         body.empty().addRemarkBlock("The type defined signals are defined here");
-        final var sortedWires = new TreeSet<>(typedWires.keySet());
-        var maxNameLength = 0;
-        for (final var wire : sortedWires)
-          maxNameLength = Math.max(maxNameLength, typedWires.get(wire).length());
-        for (final var wire : sortedWires) {
-          final var typeName = typedWires.get(wire);
-          body.add(LineBuffer.format("{{1}}{{2}} {{3}};", typeName, " ".repeat(maxNameLength - typeName.length()), wire));
-        }
+        for (final var declaration : typedWires) body.add(declaration);
       }
       body.empty()
           .addRemarkBlock("The module functionality is described here")
@@ -231,8 +227,7 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
     final var oneLine = new StringBuilder();
     if (componentInfo == null) parameterMap.putAll(getParameterMap(null));
     else if (componentInfo instanceof netlistComponent comp) {
-      final var attrs = comp.getComponent().getAttributeSet();
-      parameterMap.putAll(getParameterMap(attrs));
+      parameterMap.putAll(getParameterMap(nets, comp));
     }
     var tabLength = 0;
     var first = true;
@@ -337,6 +332,14 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
    */
   protected Map<String, String> getParameterMap(AttributeSet attrs) {
     return myParametersList.getMaps(attrs);
+  }
+
+  /**
+   * Returns the parameter values used for one component instance. Subclasses may override this hook
+   * when a parameter depends on how the instance is connected, not only on its attributes.
+   */
+  protected Map<String, String> getParameterMap(Netlist nets, netlistComponent componentInfo) {
+    return getParameterMap(componentInfo.getComponent().getAttributeSet());
   }
 
   /**

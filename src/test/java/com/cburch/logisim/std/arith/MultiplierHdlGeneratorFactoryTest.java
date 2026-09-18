@@ -18,25 +18,31 @@ import org.junit.jupiter.api.Test;
 
 class MultiplierHdlGeneratorFactoryTest {
 
+  // a is signed in the "two's complement" and "signed * unsigned" modes, b only in "two's complement" mode,
+  // as in the simulation (Multiplier.propagate)
+
   @Test
-  void unsignedNumericTypeSetsUnsignedMultiplierGeneric() {
+  void unsignedNumericTypeMakesBothOperandsUnsigned() {
     final var parameters = parametersFor(Multiplier.UNSIGNED_OPTION);
 
-    assertEquals("0", parameters.get("unsignedMultiplier"));
+    assertEquals("0", parameters.get("signedA"));
+    assertEquals("0", parameters.get("signedB"));
   }
 
   @Test
-  void signedUnsignedNumericTypeSetsSignedUnsignedMultiplierGeneric() {
+  void signedUnsignedNumericTypeMakesOnlyTheFirstOperandSigned() {
     final var parameters = parametersFor(Multiplier.SIGNED_UNSIGNED_OPTION);
 
-    assertEquals("1", parameters.get("unsignedMultiplier"));
+    assertEquals("1", parameters.get("signedA"));
+    assertEquals("0", parameters.get("signedB"));
   }
 
   @Test
-  void twosComplementNumericTypeClearsUnsignedMultiplierGeneric() {
+  void twosComplementNumericTypeMakesBothOperandsSigned() {
     final var parameters = parametersFor(Multiplier.SIGNED_OPTION);
 
-    assertEquals("2", parameters.get("unsignedMultiplier"));
+    assertEquals("1", parameters.get("signedA"));
+    assertEquals("1", parameters.get("signedB"));
   }
 
   private static Map<String, String> parametersFor(AttributeOption numericType) {

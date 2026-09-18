@@ -63,11 +63,18 @@ public class SubtractorHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
               : "result    <= s_sumresult( (" + NR_OF_BITS_STRING + "-1) {{downto}} 0 );");
       contents.add("borrowOut <= {{not}}(s_sumresult(" + EXTENDED_BITS_STRING + "-1));");
     } else {
-      contents.add("""
-          assign n_bIn = ~borrowIn;
-          assign {s_carry,result} = dataA + ~(dataB) + n_bIn;
-          assign borrowOut        = ~s_carry;
-          """);
+      // Widen both operands before inverting B: "{c,r} = dataA + ~(dataB) + n" would widen dataB to the
+      // (nrOfBits+1)-bit expression width first, so ~ would also set its top bit and invert borrowOut.
+      contents
+          .add("assign n_bIn           = ~borrowIn;")
+          .add("assign s_extendeddataA = {1'b0, dataA};")
+          .add("assign s_extendeddataB = {1'b0, ~(dataB)};")
+          .add("assign s_sumresult     = s_extendeddataA + s_extendeddataB + n_bIn;")
+          .add((nrOfBits == 1)
+              ? "assign result          = s_sumresult[0];"
+              : "assign result          = s_sumresult[" + NR_OF_BITS_STRING + "-1:0];")
+          .add("assign s_carry         = s_sumresult[" + EXTENDED_BITS_STRING + "-1];")
+          .add("assign borrowOut       = ~s_carry;");
     }
     return contents.empty();
   }

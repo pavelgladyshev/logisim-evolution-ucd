@@ -187,6 +187,12 @@ public class ShiftRegisterHdlGeneratorFactory extends AbstractHdlGeneratorFactor
           .addRemarkBlock("Here the state registers are defined")
           .add("""
               assign s_clock = ({{invertClock}} == 0) ? {{clock}} : ~{{clock}};
+              """);
+      for (var idx = 0; idx < nrOfStages; idx++) {
+        contents.add(String.format("initial s_stageReg%d = 0; // as in a new simulation and in the FPGA", idx));
+      }
+      contents
+          .add("""
 
               always @(posedge s_clock or posedge reset)
                 begin

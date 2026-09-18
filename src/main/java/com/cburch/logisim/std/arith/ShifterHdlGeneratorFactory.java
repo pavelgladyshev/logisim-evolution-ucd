@@ -89,7 +89,7 @@ public class ShifterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
             """);
       } else {
         for (var stage = 0; stage < nrOfShiftBits; stage++) {
-          contents.add(getStageFunctionalityVerilog(stage, nrOfBits));
+          contents.add(getStageFunctionalityVerilog(stage, nrOfBits, nrOfShiftBits));
         }
         contents
             .empty()
@@ -100,20 +100,22 @@ public class ShifterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     return contents.empty();
   }
 
-  private LineBuffer getStageFunctionalityVerilog(int stageNumber, int nrOfBits) {
+  private LineBuffer getStageFunctionalityVerilog(int stageNumber, int nrOfBits, int nrOfShiftBits) {
     final var contents = LineBuffer.getBuffer()
             .pair("shiftMode", SHIFT_MODE_STRING)
             .pair("stageNumber", stageNumber)
             .pair("nrOfBits1", nrOfBits - 1)
-            .pair("nrOfBits2", nrOfBits - 2);
+            .pair("nrOfBits2", nrOfBits - 2)
+            // a 1-bit shift amount is a scalar port
+            .pair("shiftBit0", nrOfShiftBits == 1 ? "shiftAmount" : "shiftAmount[0]");
     final var nrOfBitsToShift = (1 << stageNumber);
     contents.empty().addRemarkBlock(String.format("Stage %d of the binary shift tree is defined here", stageNumber));
     if (stageNumber == 0) {
       contents.add("""
           assign s_stage0ShiftIn = (({{shiftMode}} == 1) || ({{shiftMode}} == 3))
-               ? dataA[{{shiftMode}}] : ({{nrOfBits1}} == 4) ? dataA[0] : 0;
+               ? dataA[{{nrOfBits1}}] : ({{shiftMode}} == 4) ? dataA[0] : 0;
 
-          assign s_stage0Result  = (shiftAmount == 0)
+          assign s_stage0Result  = ({{shiftBit0}} == 0)
                ? dataA
                : (({{shiftMode}} == 0) || ({{shiftMode}} == 1))
                   ? {dataA[{{nrOfBits2}}:0],s_stage0ShiftIn}
@@ -183,7 +185,7 @@ public class ShifterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       contents
           .add("""
             s_stage{{stageNumber}}ShiftIn <= s_stage{{stageNumber1}}Result( {{nrOfBits1}} {{downto}} {{bitsShiftDiff}} ) {{when}} {{shiftMode}} = 1 {{else}}
-                               ({{others}} => s_stage{{stageNumber1}}Result({{stageNumber1}})) {{when}} {{shiftMode}} = 3 {{else}}
+                               ({{others}} => s_stage{{stageNumber1}}Result({{nrOfBits1}})) {{when}} {{shiftMode}} = 3 {{else}}
                                s_stage{{stageNumber1}}Result( {{nrOfBitsToShift1}} {{downto}} 0 ) {{when}} {{shiftMode}} = 4 {{else}}
                                ({{others}} => '0');
 

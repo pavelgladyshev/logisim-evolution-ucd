@@ -100,6 +100,8 @@ public class RegisterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       contents.empty().add("""
             assign q = s_currentState;
             assign s_clock = {{invertClock}} == 0 ? {{clock}} : ~{{clock}};
+
+            initial s_currentState = 0; // as in a new simulation and in the FPGA
             """)
           .empty();
       if (Netlist.isFlipFlop(attrs)) {

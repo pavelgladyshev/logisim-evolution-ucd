@@ -87,7 +87,7 @@ public class Divider extends InstanceFactory {
   public static final int REM = 4;
 
   public Divider() {
-    super(_ID, S.getter("dividerComponent"));
+    super(_ID, S.getter("dividerComponent"), new DividerHdlGeneratorFactory());
     setAttributes(
         new Attribute[] {StdAttr.WIDTH, Comparator.MODE_ATTR},
         new Object[] {BitWidth.create(8), Comparator.UNSIGNED_OPTION});

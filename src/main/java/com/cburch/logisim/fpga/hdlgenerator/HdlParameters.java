@@ -247,6 +247,11 @@ public class HdlParameters {
       return isIntParameter;
     }
 
+    /** A vector whose width comes from a component attribute (a gate's input mask is per module anyway). */
+    public boolean hasInstanceVectorWidth() {
+      return !isIntParameter && fixedVectorWidth <= 0 && myMapType != MAP_GATE_INPUT_BUBLE;
+    }
+
     public void setVectorRepresentation() {
       isIntParameter = false;
     }
@@ -413,6 +418,13 @@ public class HdlParameters {
       if (id == parameter.getParameterId(attrs)) return parameter.getNumberOfVectorBits(attrs);
     }
     throw new UnsupportedOperationException("Parameter not found");
+  }
+
+  public boolean hasInstanceVectorWidth(int id, AttributeSet attrs) {
+    for (final var parameter : myParameters) {
+      if (id == parameter.getParameterId(attrs)) return parameter.hasInstanceVectorWidth();
+    }
+    return false;
   }
 
   public boolean isPresentedByInteger(int id, AttributeSet attrs) {
