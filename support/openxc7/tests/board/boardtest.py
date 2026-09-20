@@ -55,7 +55,15 @@ def jdk_commands():
         return "java", "javac"
     binaries = pathlib.Path(home.group(1).strip()) / "bin"
     suffix = ".exe" if os.name == "nt" else ""
-    return str(binaries / f"java{suffix}"), str(binaries / f"javac{suffix}")
+
+    def resolved(tool):
+        # a JRE reports a home whose bin has java and no javac. Keep the bare name when the tool is not
+        # there, so that install fails at the compile with the message it gave before this function
+        # existed, rather than with a path into a JRE that was never going to compile anything.
+        candidate = binaries / f"{tool}{suffix}"
+        return str(candidate) if candidate.exists() else tool
+
+    return resolved("java"), resolved("javac")
 
 
 JAVA, JAVAC = jdk_commands()
