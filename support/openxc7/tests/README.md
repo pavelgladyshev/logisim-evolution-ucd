@@ -22,7 +22,9 @@ The `io` test is a testbench (`tb_io.v`) for the UART TTY and Keyboard.
 
 With `--vhdl` the same tests run on the VHDL that Logisim generates, in GHDL: `harness/lstest/HdlDiff.java`
 writes a VHDL testbench (`tb.vhd`) for the same inputs, and `tb_io.vhd` is the VHDL version of the UART test.
-Both languages must give Logisim's results.
+Both languages must give Logisim's results. GHDL comes from `sudo apt install ghdl` on Ubuntu; on macOS the
+Homebrew package is disabled, so unpack the release from https://github.com/ghdl/ghdl/releases into
+`~/openxc7/ghdl`, where the script also looks (or set `GHDL`).
 
 ## Course circuits: `run_course_test.py`
 
