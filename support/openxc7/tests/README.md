@@ -61,3 +61,9 @@ This builds and loads the circuit, types each input on the board's serial port, 
 Logisim's own simulation of the same input (`--tty tty`). Logisim's `--tty` mode never ends a power-on reset, so for
 a circuit with a POR give a copy without it with `--reference`. `board/rot13rom.py` fills the ROM of the A2 ROT13
 exercise, so that the exercise can be tested.
+
+This runs on Windows too. The port is found there on the same principle as on Unix — the second interface of the
+board's FT2232H is the UART, the first being the JTAG — by looking in the registry for an FTDI channel B. Name it
+with `--port COM5` instead; when the script cannot choose it says which ports it found, so the answer is in the
+message. `board/winport_test.py` runs that Windows branch against a simulated registry and needs no Windows, which
+is how a Mac or a Linux machine can check it.
