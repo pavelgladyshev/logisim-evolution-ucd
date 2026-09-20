@@ -16,10 +16,14 @@ The toolchain is:
 
 The scripts are in `support/openxc7/` of this repository, and at the top of the zip for other computers.
 `setup_toolchain.sh` builds the toolchain into `~/openxc7`, which Logisim finds by itself. It uses about 0.5 GB on
-macOS and about 1.3 GB on Linux, where Yosys is built from source as well; most of that is build trees, which
-are kept so that running it again only redoes what is missing. `install_logisim.sh` copies Logisim to `~/openxc7/logisim` and
-adds a launcher. The zip carries a ready-made jar; from a clone, build one first with `./gradlew shadowJar`,
-which needs a JDK (`openjdk-21-jdk` on Ubuntu), not just the JRE below.
+macOS and about 1.3 GB on Linux, where Yosys is built from source as well. Most of it is in directories that look
+like build trees, and only `yosys-src/` really is one: `nextpnr-xilinx/` and `prjxray/` hold the place-and-route
+binary, the Project X-Ray database and the script that `fasm2frames` runs, which is why `bin/` is 20 KB of symlinks
+and wrappers pointing into them. If disk is short, delete `yosys-src/` — half a gigabyte nothing refers to, and
+re-running the script will not rebuild it, because the check is for the installed `yosys/`.
+`install_logisim.sh` copies Logisim to `~/openxc7/logisim` and adds a launcher. The zip carries a ready-made jar;
+from a clone, build one first with `./gradlew shadowJar`, which needs a JDK (`openjdk-21-jdk` on Ubuntu), not just
+the JRE below.
 
 ### macOS
 
@@ -90,8 +94,9 @@ separate interfaces of the board's USB chip.
 ### Settings
 
 **Preferences → Software** has the openXC7 tool path (default `~/openxc7/bin/`) and the switch *Use openXC7 instead
-of Vivado for Xilinx 7-series boards*. The switch is on whenever `~/openxc7` exists. openXC7 reads Verilog, so
-Logisim changes the HDL type to Verilog when it uses openXC7.
+of Vivado for Xilinx 7-series boards*. The switch is on by default whenever `~/openxc7/bin` exists, and keeps
+whatever you last set it to once you have touched the tick box. openXC7 reads Verilog, so Logisim changes the HDL
+type to Verilog when it uses openXC7.
 
 ## 3. How the FPGA version behaves
 
@@ -140,7 +145,7 @@ deep for 12 MHz.
 | Message or problem | What to do |
 |---|---|
 | `No nextpnr-xilinx chip database for <part>` | Make it once: `~/openxc7/bin/openxc7-chipdb <part>`, e.g. `xc7a15tcpg236-1` for the Cmod A7-15T. A ready-made one from a *stable* release of [FPGAwars/tools-openxc7](https://github.com/FPGAwars/tools-openxc7/releases) does as well, if it was built against the nextpnr revision in `setup_toolchain.sh`: the database depends only on its input data, so theirs and ours are then the same file. |
-| The board is not found when loading | Check the USB cable. On Linux, unplug and plug in the board after installing `openfpgaloader`. `openFPGALoader -b cmoda7_35t --detect` shows the FPGA it finds on the board (without `-b` it reads the JTAG chain with a generic pinout, and finds nothing on a Cmod A7). |
+| The board is not found when loading | Check the USB cable. On Linux, unplug and plug in the board after installing `openfpgaloader`. `openFPGALoader -b cmoda7_35t --detect` shows the FPGA it finds on the board. Without `-b` it reads the JTAG chain with a generic pinout and finds nothing on a Cmod A7, so look for an `idcode` in the output rather than at the exit code, which is not a reliable check. |
 | Logisim seems to stall at `Loading file…` | Not openXC7: a prompt about an autosave, left behind by a Logisim that was killed, can sit behind the splash screen. Alt-tab to it and answer it. |
 | No FPGA actions in the FPGA Commander | Set the tool path under *Preferences → Software → openXC7*. |
 | Characters missing in the terminal | The circuit prints faster than 115200 baud for longer than the queue lasts. Lower the frequency. |
