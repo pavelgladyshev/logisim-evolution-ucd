@@ -19,6 +19,8 @@
 set -euo pipefail
 
 NEXTPNR_TAG=0.9.5                                          # openXC7/nextpnr-xilinx
+# A chip database is tied to the nextpnr that reads it. One downloaded rather than made here must come
+# from a release built against this revision, or the bitstream is wrong rather than the run failing.
 PRJXRAY_SHA=c9f02d8576042325425824647ab5555b1bc77833      # f4pga/prjxray
 YOSYS_TAG=v0.68                                            # built when the system has none or an old one
 YOSYS_MIN=40                                               # oldest system Yosys used: 0.40
