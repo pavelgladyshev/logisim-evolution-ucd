@@ -128,7 +128,7 @@ deep for 12 MHz.
 | Message or problem | What to do |
 |---|---|
 | `No nextpnr-xilinx chip database for <part>` | Make it once: `~/openxc7/bin/openxc7-chipdb <part>`, e.g. `xc7a15tcpg236-1` for the Cmod A7-15T. |
-| The board is not found when loading | Check the USB cable. On Linux, unplug and plug in the board after installing `openfpgaloader`. `openFPGALoader --detect` shows what is connected. |
+| The board is not found when loading | Check the USB cable. On Linux, unplug and plug in the board after installing `openfpgaloader`. `openFPGALoader -b cmoda7_35t --detect` shows the FPGA it finds on the board (without `-b` it reads the JTAG chain with a generic pinout, and finds nothing on a Cmod A7). |
 | No FPGA actions in the FPGA Commander | Set the tool path under *Preferences → Software → openXC7*. |
 | Characters missing in the terminal | The circuit prints faster than 115200 baud for longer than the queue lasts. Lower the frequency. |
 | Want Vivado instead | Untick *Use openXC7 instead of Vivado…* in *Preferences → Software*. |
