@@ -490,6 +490,7 @@ public class FpgaCommander
       if (retval == JFileChooser.APPROVE_OPTION) {
         File file = fc.getSelectedFile();
         ToolPath = file.getPath();
+        // not redundant: toolsPresent needs the separator to be on the path already
         if (!ToolPath.endsWith(File.separator)) {
           ToolPath += File.separator;
         }

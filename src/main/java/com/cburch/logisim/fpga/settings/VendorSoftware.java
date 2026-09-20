@@ -211,6 +211,12 @@ public class VendorSoftware {
     return fpga.getVendor();
   }
 
+  /**
+   * Whether all of the vendor's programs are in that folder. The path has to end in a separator
+   * already: correctPath below is applied to the path and the program name together, so without one
+   * the separator lands after the program and nothing is ever found. Every caller passes either the
+   * stored preference or AppPreferences' default, and both carry one.
+   */
   public static boolean toolsPresent(char vendor, String path) {
     String[] tools = load(vendor);
     for (String tool : tools) {
