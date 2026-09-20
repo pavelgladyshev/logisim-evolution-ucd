@@ -52,7 +52,7 @@ ghdl_run() {   # <dir> <top unit> <files ...>: analyse in dependency order, elab
     && "$GHDL" -i --std=08 -frelaxed --workdir=ghdlwork "$@" \
     && "$GHDL" -m --std=08 -frelaxed --workdir=ghdlwork "$top" > ghdl_make.log 2>&1 \
     && "$GHDL" -r --std=08 -frelaxed --workdir=ghdlwork "$top" --ieee-asserts=disable) \
-    || { echo "GHDL failed, see $dir/ghdl_make.log"; return 1; }
+    || { echo "GHDL failed, see the logs in $dir" >&2; return 1; }
 }
 
 failures=0
@@ -92,7 +92,7 @@ for spec in "${specs[@]}"; do
     hdl="$WS/$spec/main/vhdl"
     logisim lstest.HdlDiff vectors "$circ" 4000 1 "$run" "$hdl/circuit/dut_entity.vhd"
     logisim lstest.HdlDiff tbvhdl "$circ" "$run" "$hdl/circuit/dut_entity.vhd"
-    ghdl_run "$run" tb tb.vhd $(ls "$hdl"/*/*.vhd | grep -v /toplevel/) > /dev/null \
+    ghdl_run "$run" tb tb.vhd $(ls "$hdl"/*/*.vhd | grep -v /toplevel/) > "$run/ghdl_run.log" \
       || { failures=$((failures + 1)); continue; }
     python3 "$HERE/compare.py" "$run" actual_vhdl.txt || failures=$((failures + 1))
   else
