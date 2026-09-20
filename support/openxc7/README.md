@@ -15,8 +15,9 @@ The toolchain is:
 ## 1. Installation
 
 The scripts are in `support/openxc7/` of this repository, and at the top of the zip for other computers.
-`setup_toolchain.sh` builds the toolchain into `~/openxc7`, which Logisim finds by itself. It uses about 0.5 GB,
-and running it again only redoes what is missing. `install_logisim.sh` copies Logisim to `~/openxc7/logisim` and
+`setup_toolchain.sh` builds the toolchain into `~/openxc7`, which Logisim finds by itself. It uses about 0.5 GB on
+macOS and about 1.3 GB on Linux, where Yosys is built from source as well; most of that is build trees, which
+are kept so that running it again only redoes what is missing. `install_logisim.sh` copies Logisim to `~/openxc7/logisim` and
 adds a launcher. The zip carries a ready-made jar; from a clone, build one first with `./gradlew shadowJar`,
 which needs a JDK (`openjdk-21-jdk` on Ubuntu), not just the JRE below.
 
