@@ -95,10 +95,13 @@ and Windows-Update-backed. WiX publish a binaries-only zip of the identical buil
 it on PATH for the build. `createMsi` then takes 3 minutes 13 seconds and produces a 75.1 MB
 `logisim-evolution-5.0.0-amd64.msi`.
 
-It installs: `msiexec` exits 0, the tree lands in `C:\Program Files\logisim-evolution` at 125.6 MB with a Start
-Menu entry, and it runs. **It is a per-machine install** — the MSI's property table carries `ALLUSERS=1` — so it
-raises a UAC elevation prompt and a student needs administrator rights on their own laptop. jpackage can produce
-a per-user install instead, which would remove that; it is a build change and nobody has asked for it yet.
+It installs and runs. The first MSI was per-machine — jpackage sets `ALLUSERS=1` by default — which landed it in
+`C:\Program Files` at 125.6 MB and raised a UAC elevation prompt, so a student would have needed administrator
+rights on their own laptop. `createMsi` now passes `--win-per-user-install`, and `ALLUSERS` is absent from the
+property table entirely. Installed from a process confirmed *not* to be elevated, `msiexec` exits 0 with no
+prompt and nothing refused; the tree lands under `AppData\Local\logisim-evolution`, the Start Menu entry goes to
+the user's own Programs folder, and Windows Installer registers it with `AssignmentType 0`, so it uninstalls
+without administrator too. **SmartScreen is now the only barrier a student meets.**
 
 Two things make a working install look broken, and both caught the person who did it:
 
@@ -117,7 +120,13 @@ Then choose the entry naming **Interface 0**. Its UART interface (`MI_01`) is a 
 the two entries differ by one digit, and taking WinUSB to the UART deletes the COM port with nothing left to open.
 
 Afterwards the board answers `openFPGALoader -b cmoda7_35t --detect` with idcode `0x362d093`, `artix a7 35t`.
-Without `-b` it reports nothing at all, which reads as a dead board rather than a missing argument.
+
+**Without `-b` it names no device and still exits 0.** It is not silent — it prints `No cable or board specified:
+using direct ft2232 interface` and a JTAG frequency line — so a person reads a dead board while a script reading
+the exit code reads a working one. With no cable plugged in at all, both forms exit 1. So the exit code reports
+the case nobody meets and not the case a student meets, and an installer check built on it would pass while
+finding no board: only an idcode in the output is evidence. Unplugging the board to satisfy yourself that such a
+check works is exactly what makes it look correct.
 
 ## What is proven, and what is not
 
