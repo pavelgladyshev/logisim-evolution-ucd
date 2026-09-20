@@ -1,6 +1,7 @@
 -- Unit test of the generated TTY (serial transmitter with a 1024-character block-RAM queue) and Keyboard
 -- (serial receiver with a queue of bufferLength characters) in VHDL, with 8 FPGA clocks per bit: the same cases
--- as tb_io.v.
+-- as tb_io.v. It only uses the ports of the two components: the line is idle when no byte has arrived for
+-- longer than a frame, and the burst is checked against what was written, in order.
 LIBRARY ieee;
 USE ieee.std_logic_1164.all;
 USE ieee.numeric_std.all;
@@ -10,8 +11,10 @@ ENTITY tb_io IS
 END tb_io;
 
 ARCHITECTURE sim OF tb_io IS
-   CONSTANT CPB : integer := 8;
+   CONSTANT CPB   : integer := 8;      -- clocks per bit
+   CONSTANT QUEUE : integer := 1024;   -- characters the TTY can hold, so that many are never dropped
    TYPE bytes IS ARRAY (natural RANGE <>) OF std_logic_vector(7 DOWNTO 0);
+   TYPE chars IS ARRAY (natural RANGE <>) OF natural;
    SIGNAL clock      : std_logic := '0';
    SIGNAL done       : boolean := false;
    SIGNAL ttyTick    : std_logic := '0';
@@ -58,71 +61,90 @@ BEGIN
    END PROCESS;
 
    main : PROCESS
-      ALIAS queueFull  IS << SIGNAL .tb_io.tty.s_queueFull  : std_logic >>;
-      ALIAS queueEmpty IS << SIGNAL .tb_io.tty.s_queueEmpty : std_logic >>;
-      ALIAS bitsLeft   IS << SIGNAL .tb_io.tty.s_bitsLeft   : std_logic_vector(3 DOWNTO 0) >>;
-      ALIAS timer      IS << SIGNAL .tb_io.tty.s_timer      : std_logic_vector(15 DOWNTO 0) >>;
-      VARIABLE expect : bytes(0 TO 8191);
-      VARIABLE nexp, rxBase, errors : natural := 0;
+      VARIABLE written : chars(0 TO 4095);            -- the characters written to the TTY since the last check
+      VARIABLE nwritten, rxBase, errors : natural := 0;
       VARIABLE seed1, seed2 : positive := 7;
       VARIABLE r : real;
 
-      PROCEDURE put(b : natural) IS
+      -- what a terminal gets for a character the TTY component shows (nothing for the others)
+      PROCEDURE expandChar(c : natural; expansion : OUT bytes; n : OUT natural) IS
       BEGIN
-         expect(nexp) := std_logic_vector(to_unsigned(b, 8));
-         nexp := nexp + 1;
-      END PROCEDURE;
-
-      -- what a terminal gets for a character the TTY component shows (and nothing for the others)
-      PROCEDURE expectChar(c : natural) IS
-      BEGIN
-         IF c = 10 OR c = 13 THEN put(13); put(10);
-         ELSIF c = 8 THEN put(8); put(32); put(8);
-         ELSIF c = 12 THEN put(27); put(91); put(50); put(74); put(27); put(91); put(72);
-         ELSIF c >= 32 AND c /= 127 THEN put(c);
+         IF c = 10 OR c = 13 THEN
+            expansion(0) := x"0d"; expansion(1) := x"0a"; n := 2;
+         ELSIF c = 8 THEN
+            expansion(0) := x"08"; expansion(1) := x"20"; expansion(2) := x"08"; n := 3;
+         ELSIF c = 12 THEN
+            expansion(0) := x"1b"; expansion(1) := x"5b"; expansion(2) := x"32"; expansion(3) := x"4a";
+            expansion(4) := x"1b"; expansion(5) := x"5b"; expansion(6) := x"48"; n := 7;
+         ELSIF c >= 32 AND c /= 127 THEN
+            expansion(0) := std_logic_vector(to_unsigned(c, 8)); n := 1;
+         ELSE
+            n := 0;
          END IF;
       END PROCEDURE;
 
       -- write one character at a tick (the write enable is sampled with the tick)
-      PROCEDURE ttyWrite(c : natural) IS
+      PROCEDURE ttyWrite(c : natural; record_it : boolean := true) IS
       BEGIN
          WAIT UNTIL falling_edge(clock);
          ttyData <= std_logic_vector(to_unsigned(c, 7)); ttyWe <= '1'; ttyTick <= '1';
-         WAIT UNTIL falling_edge(clock);
-         ttyWe <= '0'; ttyTick <= '0';
-      END PROCEDURE;
-
-      PROCEDURE ttyWriteExpect(c : natural) IS
-      BEGIN
-         WAIT UNTIL falling_edge(clock);
-         IF queueFull /= '1' THEN expectChar(c); END IF;
-         ttyData <= std_logic_vector(to_unsigned(c, 7)); ttyWe <= '1'; ttyTick <= '1';
-         WAIT UNTIL falling_edge(clock);
-         ttyWe <= '0'; ttyTick <= '0';
-      END PROCEDURE;
-
-      PROCEDURE ttyCheck(name : string) IS
-         VARIABLE bad, got : natural := 0;
-      BEGIN
-         -- wait until the queue and the line are idle
-         IF NOT (queueEmpty = '1' AND unsigned(bitsLeft) = 0 AND unsigned(timer) = 0) THEN
-            WAIT UNTIL queueEmpty = '1' AND unsigned(bitsLeft) = 0 AND unsigned(timer) = 0;
+         IF record_it THEN
+            written(nwritten) := c;
+            nwritten := nwritten + 1;
          END IF;
-         FOR i IN 1 TO 4 * CPB LOOP WAIT UNTIL rising_edge(clock); END LOOP;
-         got := nrx - rxBase;
-         IF got /= nexp THEN bad := 1; END IF;
-         FOR i IN 0 TO minimum(got, nexp) - 1 LOOP
-            IF rx(rxBase + i) /= expect(i) THEN bad := bad + 1; END IF;
+         WAIT UNTIL falling_edge(clock);
+         ttyWe <= '0'; ttyTick <= '0';
+      END PROCEDURE;
+
+      -- the line is idle when no byte has arrived for longer than one frame
+      PROCEDURE waitIdle IS
+         VARIABLE last : natural;
+      BEGIN
+         LOOP
+            last := nrx;
+            FOR i IN 1 TO 12 * CPB LOOP WAIT UNTIL rising_edge(clock); END LOOP;
+            EXIT WHEN nrx = last AND tx = '1';
          END LOOP;
-         IF bad = 0 THEN
-            REPORT "TTY " & name & ": ok (" & integer'image(got) & " bytes)";
+      END PROCEDURE;
+
+      -- every character written must have arrived, in order; "guaranteed" of them may not be dropped
+      PROCEDURE ttyCheck(name : string; guaranteed : natural := integer'high) IS
+         VARIABLE expansion : bytes(0 TO 6);
+         VARIABLE n, pos, drops, bad : natural := 0;
+         VARIABLE matched : boolean;
+      BEGIN
+         waitIdle;
+         pos := rxBase;
+         drops := 0;
+         bad := 0;
+         FOR i IN 0 TO nwritten - 1 LOOP
+            expandChar(written(i), expansion, n);
+            matched := pos + n <= nrx;
+            IF matched THEN
+               FOR j IN 0 TO n - 1 LOOP
+                  IF rx(pos + j) /= expansion(j) THEN matched := false; END IF;
+               END LOOP;
+            END IF;
+            IF matched THEN
+               pos := pos + n;
+            ELSE
+               drops := drops + 1;
+               IF i < guaranteed THEN bad := bad + 1; END IF;
+            END IF;
+         END LOOP;
+         IF pos /= nrx THEN bad := bad + 1; END IF;      -- bytes arrived that were never written
+         IF bad = 0 AND drops = 0 THEN
+            REPORT "TTY " & name & ": ok (" & integer'image(nrx - rxBase) & " bytes)";
+         ELSIF bad = 0 THEN
+            REPORT "TTY " & name & ": ok (" & integer'image(nrx - rxBase) & " bytes, "
+                   & integer'image(drops) & " characters dropped when the queue was full)";
          ELSE
-            REPORT "TTY " & name & ": FAIL, " & integer'image(got) & " bytes received, " & integer'image(nexp)
-                   & " expected" SEVERITY error;
+            REPORT "TTY " & name & ": FAIL (" & integer'image(nrx - rxBase) & " bytes, "
+                   & integer'image(bad) & " wrong)" SEVERITY error;
             errors := errors + 1;
          END IF;
          rxBase := nrx;
-         nexp := 0;
+         nwritten := 0;
       END PROCEDURE;
 
       PROCEDURE send(c : natural) IS
@@ -162,32 +184,33 @@ BEGIN
    BEGIN
       FOR i IN 1 TO 10 LOOP WAIT UNTIL rising_edge(clock); END LOOP;
       -- TTY: a short text with a newline (sent as CR LF)
-      ttyWriteExpect(character'pos('H')); ttyWriteExpect(character'pos('i'));
-      ttyWriteExpect(10); ttyWriteExpect(character'pos('X'));
+      ttyWrite(character'pos('H')); ttyWrite(character'pos('i'));
+      ttyWrite(10); ttyWrite(character'pos('X'));
       ttyCheck("text");
       -- TTY: control characters the TTY component ignores are not sent; CR, backspace and form feed are
-      ttyWriteExpect(0); ttyWriteExpect(1); ttyWriteExpect(27); ttyWriteExpect(127);
-      ttyWriteExpect(character'pos('a')); ttyWriteExpect(13); ttyWriteExpect(character'pos('b'));
-      ttyWriteExpect(8); ttyWriteExpect(12); ttyWriteExpect(character'pos('c'));
+      ttyWrite(0); ttyWrite(1); ttyWrite(27); ttyWrite(127);
+      ttyWrite(character'pos('a')); ttyWrite(13); ttyWrite(character'pos('b'));
+      ttyWrite(8); ttyWrite(12); ttyWrite(character'pos('c'));
       ttyCheck("control characters");
       -- TTY: a rising clear clears the screen; while clear is 1 nothing is written
-      WAIT UNTIL falling_edge(clock); ttyClear <= '1'; expectChar(12);
-      ttyWrite(character'pos('x')); ttyWrite(character'pos('y'));
+      WAIT UNTIL falling_edge(clock); ttyClear <= '1';
+      written(nwritten) := 12; nwritten := nwritten + 1;          -- the clear itself clears the screen
+      ttyWrite(character'pos('x'), false); ttyWrite(character'pos('y'), false);
       WAIT UNTIL falling_edge(clock); ttyClear <= '0';
-      ttyWriteExpect(character'pos('z'));
+      ttyWrite(character'pos('z'));
       ttyCheck("clear");
       -- TTY: random gaps, including a write just as the line becomes idle
       FOR i IN 0 TO 299 LOOP
          uniform(seed1, seed2, r);
          FOR j IN 1 TO integer(floor(r * 128.0)) LOOP WAIT UNTIL rising_edge(clock); END LOOP;
-         IF i MOD 11 = 5 THEN ttyWriteExpect(10); ELSE ttyWriteExpect(33 + (i MOD 90)); END IF;
+         IF i MOD 11 = 5 THEN ttyWrite(10); ELSE ttyWrite(33 + (i MOD 90)); END IF;
       END LOOP;
       ttyCheck("random gaps");
-      -- TTY: a burst far faster than the line: 1024 queued, the rest dropped until there is room
+      -- TTY: a burst far faster than the line: the queue holds 1024, the rest are dropped until there is room
       FOR i IN 0 TO 1499 LOOP
-         IF i MOD 50 = 7 THEN ttyWriteExpect(8); ELSE ttyWriteExpect(65 + (i MOD 26)); END IF;
+         IF i MOD 50 = 7 THEN ttyWrite(8); ELSE ttyWrite(65 + (i MOD 26)); END IF;
       END LOOP;
-      ttyCheck("burst");
+      ttyCheck("burst", QUEUE);
 
       -- Keyboard: 6 characters into a buffer of 4 (the last 2 are dropped)
       send(97); send(98); send(99); send(100); send(101); send(102);

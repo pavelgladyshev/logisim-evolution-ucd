@@ -87,6 +87,8 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
 
       final var typedWires = myTypedWires.getTypedWires();
       final var mySignals = new HashMap<String, String>();
+      // registers and memories start at 0, as in a new simulation and in the FPGA
+      final var myInitialValues = new HashMap<String, String>();
       // first we gather some info on the wire names
       var maxNameLength = 0;
       for (final var wire : myWires.wireKeySet()) {
@@ -95,18 +97,24 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
       }
       for (final var reg : myWires.registerKeySet()) {
         maxNameLength = Math.max(maxNameLength, reg.length());
-        mySignals.put(reg, getTypeIdentifier(myWires.get(reg), attrs));
+        final var type = getTypeIdentifier(myWires.get(reg), attrs);
+        mySignals.put(reg, type);
+        myInitialValues.put(reg, type.contains("std_logic_vector") ? "(OTHERS => '0')" : "'0'");
       }
       for (final var wire : typedWires.keySet()) {
         maxNameLength = Math.max(maxNameLength, wire.length());
         mySignals.put(wire, typedWires.get(wire));
+        final var initialValue = myTypedWires.getVhdlInitialValue(wire);
+        if (initialValue != null) myInitialValues.put(wire, initialValue);
       }
       // now we add them
       if (maxNameLength > 0) contents.addRemarkBlock("All used signals are defined here");
       final var sortedSignals = new TreeSet<>(mySignals.keySet());
-      for (final var signal : sortedSignals)
-        contents.add("   {{signal}} {{1}}{{2}} : {{3}};", signal, " ".repeat(maxNameLength - signal.length()),
-            mySignals.get(signal));
+      for (final var signal : sortedSignals) {
+        final var initialValue = myInitialValues.get(signal);
+        contents.add("   {{signal}} {{1}}{{2}} : {{3}}{{4}};", signal, " ".repeat(maxNameLength - signal.length()),
+            mySignals.get(signal), initialValue == null ? "" : " := " + initialValue);
+      }
       if (maxNameLength > 0) contents.empty();
       contents.add("{{begin}}")
           .add(getModuleFunctionality(theNetlist, attrs).getWithIndent())

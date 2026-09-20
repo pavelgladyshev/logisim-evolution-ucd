@@ -7,8 +7,7 @@
 #   support/openxc7/tests/run_component_tests.sh [--vhdl] [spec ...]      default: arith comb seq io
 #
 # The Verilog runs in Icarus Verilog (iverilog, vvp). With --vhdl, the VHDL that Logisim generates is tested
-# instead, in GHDL (ghdl on the PATH, $GHDL, or ~/openxc7/ghdl/bin/ghdl); by default only arith and comb, see
-# README.md for seq and io.
+# instead, in GHDL (ghdl on the PATH, $GHDL, or ~/openxc7/ghdl/bin/ghdl).
 # Needs the built jar (./gradlew shadowJar), a JDK (javac) and python3. Results go to support/openxc7/tests/build/.
 set -euo pipefail
 
@@ -58,9 +57,7 @@ ghdl_run() {   # <dir> <top unit> <files ...>: analyse in dependency order, elab
 
 failures=0
 specs=("$@")
-if [ ${#specs[@]} -eq 0 ]; then
-  if [ "$LANGUAGE" = vhdl ]; then specs=(arith comb); else specs=(arith comb seq io); fi
-fi
+[ ${#specs[@]} -gt 0 ] || specs=(arith comb seq io)
 for spec in "${specs[@]}"; do
   if [ "$spec" = io ]; then
     echo "== TTY and Keyboard (UART) unit test, $LANGUAGE"

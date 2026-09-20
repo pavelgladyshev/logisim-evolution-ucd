@@ -155,7 +155,8 @@ Fixed, because the FPGA did not behave like the simulation:
 - **RAM**: the output enable (*ld*) was ignored, or an unconnected one disabled the output. The line-enable RAM
   (as in BEAG) read the wrong data.
 - **Gates** (Verilog): used the SystemVerilog keyword `bit`. **Arrays** (Verilog) used a SystemVerilog `typedef`.
-- Registers, shift registers and memories now also start at 0 in HDL simulation.
+- Registers, shift registers and memories now also start at 0 in HDL simulation, in both languages, as they do
+  in Logisim and in the FPGA.
 
 Friendlier:
 
@@ -175,5 +176,5 @@ written:
   Of the other 13, the Logisim toys were excluded; the rest are the kinds listed in section 3.
 - **Board**: the Week 7 hex code printer, the A2 ROT13 exercise (with its ROM filled) and the A4 BEAG solution,
   run on a Cmod A7-35T, print exactly what Logisim's simulation prints for the same keyboard input.
-- **VHDL** (used by the Vivado flow): the arithmetic and combinational configurations also match in VHDL, in
-  GHDL. The clocked components and the UART are not tested in VHDL yet (see `tests/README.md`).
+- **VHDL** (used by the Vivado flow): the same 96 configurations and the UART unit tests also pass in VHDL,
+  in GHDL.

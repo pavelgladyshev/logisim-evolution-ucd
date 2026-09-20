@@ -33,6 +33,11 @@ public class HdlTypes {
     default List<String> getVerilogInitialization(String wireName) {
       return List.of();
     }
+
+    /** The power-up value of a signal of this type in VHDL, or null when it needs none. */
+    default String getVhdlInitialValue() {
+      return null;
+    }
   }
 
   private static class HdlEnum implements HdlType {
@@ -127,6 +132,12 @@ public class HdlTypes {
       return String.format("reg [%s:0] %s [0:%d];", msbExpression(), wireName, myNrOfEntries - 1);
     }
 
+    /** Zeros, as in a new simulation and in the FPGA. */
+    @Override
+    public String getVhdlInitialValue() {
+      return (myGenericBitWidth == null && myBitWidth == 1) ? "(OTHERS => '0')" : "(OTHERS => (OTHERS => '0'))";
+    }
+
     /** Zeros, as in a new simulation and in the FPGA (for a block RAM, Yosys makes these its initial contents). */
     @Override
     public List<String> getVerilogInitialization(String wireName) {
@@ -201,6 +212,12 @@ public class HdlTypes {
       lines.addAll(type.getVerilogInitialization(wire));
     }
     return lines;
+  }
+
+  /** The power-up value of a typed signal in VHDL, or null when it needs none. */
+  public String getVhdlInitialValue(String wire) {
+    final var type = myTypes.get(myWires.get(wire));
+    return type == null ? null : type.getVhdlInitialValue();
   }
 
   public Map<String, String> getTypedWires() {

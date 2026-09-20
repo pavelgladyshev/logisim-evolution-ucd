@@ -20,14 +20,9 @@ is: set the inputs, rising edge, falling edge, read the outputs.
 `compare.py` must report `0 mismatches`. `trace.py build/run_<spec> <name>` shows one component step by step.
 The `io` test is a testbench (`tb_io.v`) for the UART TTY and Keyboard.
 
-With `--vhdl` the same tests run on the VHDL that Logisim generates, in GHDL (`harness/lstest/HdlDiff.java`
-writes a VHDL testbench for the same inputs). This is unfinished; for now it runs `arith` and `comb`, which match.
-Still to do:
-
-- `seq`: the VHDL registers and memories have no initial values, so they are undefined (`X`) in simulation until
-  first written, where Logisim and the FPGA start at 0.
-- `io`: `tb_io.vhd` reads the TTY's queue through VHDL-2008 external names, which GHDL 6.0 on macOS does not
-  resolve.
+With `--vhdl` the same tests run on the VHDL that Logisim generates, in GHDL: `harness/lstest/HdlDiff.java`
+writes a VHDL testbench (`tb.vhd`) for the same inputs, and `tb_io.vhd` is the VHDL version of the UART test.
+Both languages must give Logisim's results.
 
 ## Course circuits: `run_course_test.py`
 
