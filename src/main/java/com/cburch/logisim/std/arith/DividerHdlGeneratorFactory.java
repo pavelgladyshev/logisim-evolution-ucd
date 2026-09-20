@@ -119,9 +119,12 @@ public class DividerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
              s_numS <= std_logic_vector(resize(signed(inputA), {{calcBits}}));
           {{end}} {{generate}} withoutUpper;
 
-          s_denU <= std_logic_vector(to_unsigned(1, {{calcBits}})) {{when}} s_zeroDivisor = '1' {{else}}
+          -- the divisor tests inputB itself, not s_zeroDivisor: going through a signal would leave a delta
+          -- cycle in which inputB is already 0 while s_zeroDivisor is not yet '1', and dividing by that 0
+          -- aborts a VHDL simulation (numeric_std's DIVMOD indexes out of bounds)
+          s_denU <= std_logic_vector(to_unsigned(1, {{calcBits}})) {{when}} unsigned(inputB) = 0 {{else}}
                     std_logic_vector(resize(unsigned(inputB), {{calcBits}}));
-          s_denS <= std_logic_vector(to_signed(1, {{calcBits}})) {{when}} s_zeroDivisor = '1' {{else}}
+          s_denS <= std_logic_vector(to_signed(1, {{calcBits}})) {{when}} unsigned(inputB) = 0 {{else}}
                     std_logic_vector(resize(signed(inputB), {{calcBits}}));
 
           s_quot <= std_logic_vector(signed(s_numS) / signed(s_denS)) {{when}} {{signed}} = 1 {{else}}
