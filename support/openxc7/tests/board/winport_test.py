@@ -1,4 +1,4 @@
-"""Run the Windows branch of boardtest.py on this Mac: real ctypes for the structures, a stub for kernel32,
+"""Run the Windows branch of boardtest.py without Windows: real ctypes for the structures, a stub for kernel32,
 and a simulated registry, so the registry walk and the struct layouts are exercised rather than assumed."""
 import ctypes, pathlib, sys, textwrap, time, types
 
