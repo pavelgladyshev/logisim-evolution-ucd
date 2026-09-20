@@ -55,9 +55,16 @@ as *Logisim-evolution (openXC7)*.
 2. Choose the board **DIGILENT_CMOD_A7_35T** and the top-level circuit (**Toplevel**).
 3. Set the **frequency**. It is the tick frequency, as in *Simulate → Tick Frequency*: a clock with default
    settings completes one cycle every two ticks. The maximum on the Cmod A7 is 3 MHz, a quarter of its 12 MHz
-   clock. A few Hz lets students watch LEDs change; use 1 MHz for a processor.
-4. Choose **Synthesize & Download** and press **Execute**.
-5. The first time, Logisim asks you to **map** each I/O component to a board resource. Pick the component in the
+   clock. A few Hz lets students watch LEDs change; use 1 MHz for a processor. The list holds Logisim's tick
+   frequencies, so there is no 1 MHz entry: the board divides its 12 MHz by a whole number, and **1024 kHz**
+   gives exactly 1000 kHz (divider 6).
+4. Press **Annotate** if any component in the circuit has no label; the A4 BEAG solution is one such circuit.
+   Without it the run stops at once with *Found one or more components without a label*, because the generated
+   hardware needs a name for each of them. Leave the choice above the button on *Label only the components
+   without a label…*: *Relabel all components* renames the ones that have labels too, and a map already saved
+   for the circuit refers to them by name.
+5. Choose **Synthesize & Download** and press **Execute**.
+6. The first time, Logisim asks you to **map** each I/O component to a board resource. Pick the component in the
    list, then click the resource on the board picture:
    - buttons → **BTN0**/**BTN1**
    - LEDs → **LED1**/**LED2**, or the RGB LED **LED0**
@@ -67,7 +74,7 @@ as *Logisim-evolution (openXC7)*.
 
    Save the circuit, and the map is kept for next time. Maps are stored per board, so the same map serves whether
    the board is built with openXC7 or with Vivado.
-6. The console shows the steps, then `Load SRAM … 100%`: the circuit runs on the board until it loses power.
+7. The console shows the steps, then `Load SRAM … 100%`: the circuit runs on the board until it loses power.
 
 For circuits with a TTY or a Keyboard, open a terminal on the board's serial port (115200 baud):
 
@@ -76,7 +83,8 @@ support/openxc7/uart_terminal.sh
 ```
 
 This uses picocom (quit: Ctrl-A Ctrl-X) or screen (quit: Ctrl-A K). What the circuit prints appears there, and what
-you type goes to its Keyboard.
+you type goes to its Keyboard. Leave it open while you load the circuit again: programming and the serial port are
+separate interfaces of the board's USB chip.
 
 ### Settings
 
