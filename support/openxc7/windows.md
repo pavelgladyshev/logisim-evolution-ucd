@@ -34,10 +34,12 @@ that builds and misbehaves. 0.63 is above this project's own floor of 0.40 (`set
 settled by outcome below rather than by version number. YosysHQ publish no checksum file for that release, so the
 hash above is ours and is the only record of what was taken.
 
-Yosys needs more than its executable: `yosys-abc.exe` is spawned as a separate process by `synth_xilinx`,
-`yosys-filterlib.exe` is needed too, and `share\yosys` is a 24 MB data directory. With all of it in place a real
-`synth_xilinx` completes under a PATH holding nothing but `system32` and python. `bin` is then 427 MB and the
-whole tree 1.12 GB.
+Yosys needs more than its executable. `yosys-abc.exe` is spawned as a separate process by `synth_xilinx`, and
+`share\yosys` is a 24 MB data directory — without it yosys stops at `init_share_dirname: unable to determine
+share/ directory!`. Both were established by removing them one at a time and rerunning the real circuit.
+`yosys-filterlib.exe` was copied alongside and is **not** required by this flow: the same run completes without
+it. With the rest in place a real `synth_xilinx` completes under a PATH holding nothing but `system32` and
+python. `bin` is then 427 MB and the whole tree 1.12 GB.
 
 ## The DLL merge, which is the trap
 
@@ -93,24 +95,56 @@ and Windows-Update-backed. WiX publish a binaries-only zip of the identical buil
 it on PATH for the build. `createMsi` then takes 3 minutes 13 seconds and produces a 75.1 MB
 `logisim-evolution-5.0.0-amd64.msi`.
 
-The board's JTAG interface (`MI_00` of the FTDI composite device) has to be moved to WinUSB with Zadig. Its UART
-interface (`MI_01`) is a COM port and must be left alone: taking WinUSB to it deletes the COM port and there is
-nothing left to open.
+It installs: `msiexec` exits 0, the tree lands in `C:\Program Files\logisim-evolution` at 125.6 MB with a Start
+Menu entry, and it runs. **It is a per-machine install** — the MSI's property table carries `ALLUSERS=1` — so it
+raises a UAC elevation prompt and a student needs administrator rights on their own laptop. jpackage can produce
+a per-user install instead, which would remove that; it is a build change and nobody has asked for it yet.
+
+Two things make a working install look broken, and both caught the person who did it:
+
+`runtime\bin\java.exe` does not exist, and that is correct. jpackage's native launcher loads
+`runtime\bin\server\jvm.dll` (12.7 MB) directly rather than spawning `java.exe`. The bundled runtime is real
+and a student needs no JDK; testing for `java.exe` says otherwise.
+
+The launcher spawns a child of itself. `Start-Process -PassThru` hands back an 8 MB, two-thread stub; the JVM is
+the child, at 153 MB and 50 threads. Measuring the parent reads as an application that did not start.
+
+## The board
+
+The JTAG interface (`MI_00` of the FTDI composite device, VID `0403`, PID `6010`) has to be moved to WinUSB with
+Zadig. Tick **Options, List All Devices** first — without it neither interface appears in the dropdown at all.
+Then choose the entry naming **Interface 0**. Its UART interface (`MI_01`) is a COM port and must be left alone:
+the two entries differ by one digit, and taking WinUSB to the UART deletes the COM port with nothing left to open.
+
+Afterwards the board answers `openFPGALoader -b cmoda7_35t --detect` with idcode `0x362d093`, `artix a7 35t`.
+Without `-b` it reports nothing at all, which reads as a dead board rather than a missing argument.
 
 ## What is proven, and what is not
 
 Proven on the board, on a developer machine: the whole flow end to end in 26.4 seconds, all five stages reporting
 in order, `Load SRAM` to 100 percent. The A4 BEAG solution answers `-16` to `-15` and `32766` to `32767`, which is
 what macOS and Linux both give. That settles Yosys 0.63 by outcome, and makes the version skew across the three
-platforms a footnote rather than a risk.
+platforms a footnote rather than a risk. The BEAG takes **one number per load**: reload the bitstream between the
+two inputs, or the second answer looks wrong.
 
 `support/openxc7/tests/board/boardtest.py` does **not** run on Windows — it imports `termios` at module scope,
 selects on a serial file descriptor, globs the two Unix device paths, and builds the loader path without an
 executable suffix. The gate it defines is still reachable by driving `AutoMap` and `Main` directly and opening the
 port at 115200, which is how the numbers above were obtained, but the script itself would need porting.
 
-Not proven, and not provable on a machine that already has a JDK, two Pythons, WSL and a vendor FTDI stack:
-SmartScreen on an unsigned MSI on a machine with no JDK in its history, a first board plug with no FTDI driver in
-the store, and whether Windows' `python` App Execution Alias stands in for a real interpreter. The MSI has not yet
-been installed even here. Those belong to a clean virtual machine, and a developer box quietly passing them is
-worse than not testing them, because it looks like evidence.
+**SmartScreen needs a downloaded MSI, not a clean machine.** It fires on Mark-of-the-Web, and an MSI built
+locally by gradle carries none — its only stream is the data stream, with no `Zone.Identifier` — so it cannot
+raise the dialog wherever it is launched, including on a clean virtual machine that built it. What is needed is an
+MSI that arrived the way a student's does, carrying `ZoneId=3`. Two facts sit underneath: the MSI is unsigned
+(Authenticode `NotSigned`, no signer), so the warning is expected rather than a reputation that improves with
+downloads; and `msiexec` bypasses the shell entirely, so even a marked file installs silently by that route. The
+check lives in the Explorer double-click path, and reading the dialog needs a person at the screen.
+
+Not proven, and not provable on a machine that already has a JDK, two Pythons, WSL and a vendor FTDI stack: a
+first board plug with no FTDI driver in the store, and whether Windows' `python` App Execution Alias stands in for
+a real interpreter. Those belong to a clean virtual machine, and a developer box quietly passing them is worse
+than not testing them, because it looks like evidence.
+
+One hazard that is neither: the Gradle wrapper aborts the whole build if its distribution download stalls — a ten
+second read timeout and one attempt. On a contended link it fails at 90 percent and reads as a broken repository
+rather than a slow download.
