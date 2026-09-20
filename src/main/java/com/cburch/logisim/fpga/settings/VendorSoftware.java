@@ -15,6 +15,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class VendorSoftware {
   public static final char VENDOR_ALTERA = 0;
@@ -145,6 +146,10 @@ public class VendorSoftware {
   private static String[] load(char vendor) {
     ArrayList<String> progs = new ArrayList<>();
     String windowsExtension = ".exe";
+    // Not every program is an .exe on Windows: FPGAwars' openXC7 package ships fasm2frames as a .cmd
+    // that runs python on the script in its libexec, so the extension belongs to the program rather
+    // than to the vendor. Anything not named here keeps its vendor's extension.
+    final var windowsExtensions = Map.of("fasm2frames", ".cmd");
     if (vendor == VENDOR_ALTERA) {
       progs.add("quartus_sh");
       progs.add("quartus_pgm");
@@ -184,7 +189,7 @@ public class VendorSoftware {
     else {
       if (osname.toLowerCase().contains("windows")) {
         for (int i = 0; i < progsArray.length; i++) {
-          progsArray[i] += windowsExtension;
+          progsArray[i] += windowsExtensions.getOrDefault(progsArray[i], windowsExtension);
         }
       }
     }
