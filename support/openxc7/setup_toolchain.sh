@@ -68,8 +68,13 @@ if [ -z "$SYSTEM_YOSYS" ] && [ ! -x yosys/bin/yosys ]; then
   echo "== Yosys $YOSYS_TAG (the system has none, or one older than 0.$YOSYS_MIN)"
   [ -d yosys-src ] || git clone -q --depth 1 --branch "$YOSYS_TAG" --recurse-submodules --shallow-submodules \
     https://github.com/YosysHQ/yosys.git yosys-src
-  make -C yosys-src config-gcc > yosys-build.log
-  make -C yosys-src -j"$JOBS" PREFIX="$PWD/yosys" install >> yosys-build.log 2>&1
+  # Yosys builds with CMake from 0.6x on (it had a Makefile with a config-gcc target before). A static
+  # libyosys keeps the installed yosys self-contained: its CMake sets no RPATH, so a shared one in
+  # <dir>/yosys/lib would not be found.
+  cmake -S yosys-src -B yosys-src/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+    -DCMAKE_INSTALL_PREFIX="$PWD/yosys" > yosys-cmake.log
+  cmake --build yosys-src/build -j"$JOBS" > yosys-build.log 2>&1
+  cmake --install yosys-src/build --strip > yosys-install.log 2>&1
 fi
 
 echo "== nextpnr-xilinx $NEXTPNR_TAG"
