@@ -26,6 +26,12 @@ Both languages must give Logisim's results. GHDL comes from `sudo apt install gh
 Homebrew package is disabled, so unpack the release from https://github.com/ghdl/ghdl/releases into
 `~/openxc7/ghdl`, where the script also looks (or set `GHDL`).
 
+Only the VHDL run reports dropped characters in the TTY burst test (`441 characters dropped when the queue was
+full`), because the two testbenches count them differently: `tb_io.v` reads the TTY's own queue-full flag and
+never expects a character the queue refused, while `tb_io.vhd` cannot look inside the component and counts every
+character that never arrived. The two runs send the same number of bytes, which is what says the two TTYs behave
+alike.
+
 ## Course circuits: `run_course_test.py`
 
 ```bash

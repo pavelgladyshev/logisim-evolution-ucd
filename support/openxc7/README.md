@@ -17,7 +17,8 @@ The toolchain is:
 The scripts are in `support/openxc7/` of this repository, and at the top of the zip for other computers.
 `setup_toolchain.sh` builds the toolchain into `~/openxc7`, which Logisim finds by itself. It uses about 0.5 GB,
 and running it again only redoes what is missing. `install_logisim.sh` copies Logisim to `~/openxc7/logisim` and
-adds a launcher.
+adds a launcher. The zip carries a ready-made jar; from a clone, build one first with `./gradlew shadowJar`,
+which needs a JDK (`openjdk-21-jdk` on Ubuntu), not just the JRE below.
 
 ### macOS
 
@@ -41,9 +42,11 @@ sudo apt install git cmake build-essential pkg-config python3 python3-venv openf
 ./install_logisim.sh
 ```
 
-On Linux the setup also builds Yosys 0.68, because Ubuntu's Yosys 0.33 is too old. Allow 20–30 minutes for the
-whole build. Then **unplug the board and plug it in again**: the udev rule from the `openfpgaloader` package gives
-the desktop user access to the board's USB programmer and serial port. Logisim appears in the applications menu
+On Linux the setup also builds Yosys 0.68, because Ubuntu's Yosys 0.33 is too old. That build uses CMake and
+needs CMake 3.28 or newer, which is what 24.04 has. Allow 20–30 minutes for the whole build (11 minutes on a
+16-core laptop). The `openfpgaloader` package brings the udev rule that gives the desktop user access to the
+board's USB programmer and serial port; if the board was already plugged in and is not found, **unplug it and
+plug it in again**. Logisim appears in the applications menu
 as *Logisim-evolution (openXC7)*.
 
 ## 2. In class: from a circuit to the board
