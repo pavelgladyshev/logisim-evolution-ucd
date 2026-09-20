@@ -33,10 +33,36 @@ parser.add_argument("--seconds", type=float, default=5)
 parser.add_argument("--port", help="the board's serial port, instead of looking for it (e.g. COM5)")
 args = parser.parse_args()
 
+
+
+def jdk_commands():
+    """java and javac out of the JDK's own bin, rather than whatever those names reach on PATH.
+
+    On Windows a bare "java" is usually Oracle's javapath shim: it starts the real JVM as its own child
+    and exits. reference() below kills what it spawned and then reads to end of file, and with the shim
+    in between the kill reaches only the shim - the JVM outlives it, holding the write end of the pipe,
+    so the read waits for an EOF that can never arrive and the test hangs after the flow has passed. An
+    absolute path makes the JVM the direct child again, which is what the kill and the read already
+    assume. Whichever binary the name reached, the JVM it starts reports where it lives, so this needs
+    no registry, no JAVA_HOME and no guess about how Java was installed.
+    """
+    try:
+        settings = subprocess.run(["java", "-XshowSettings:properties", "-version"], capture_output=True, text=True)
+    except OSError:
+        return "java", "javac"                         # no java at all: fail at the compile, as before
+    home = re.search(r"java\.home = (.+)", settings.stderr)       # -XshowSettings writes to stderr
+    if not home:
+        return "java", "javac"
+    binaries = pathlib.Path(home.group(1).strip()) / "bin"
+    suffix = ".exe" if os.name == "nt" else ""
+    return str(binaries / f"java{suffix}"), str(binaries / f"javac{suffix}")
+
+
+JAVA, JAVAC = jdk_commands()
 JAR = sorted((REPO / "build" / "libs").glob("logisim-evolution-*-all.jar"))[0]
 CLASSES = TESTS / "build" / "classes"
 CLASSES.mkdir(parents=True, exist_ok=True)
-subprocess.run(["javac", "-nowarn", "-d", str(CLASSES), "-cp", str(JAR), *map(str, TESTS.glob("harness/*/*.java"))],
+subprocess.run([JAVAC, "-nowarn", "-d", str(CLASSES), "-cp", str(JAR), *map(str, TESTS.glob("harness/*/*.java"))],
                check=True)
 name = re.sub(r"[^A-Za-z0-9_]", "_", args.circ.stem)
 work = OUT / name
@@ -57,7 +83,7 @@ prefs.write_text(f"/com/cburch/logisim|FPGAWorkspace={as_property(work / 'ws')}\
 
 
 def java(*arguments):
-    return ["java", "-Djava.util.prefs.PreferencesFactory=isoprefs.FilePrefsFactory", f"-Disoprefs.file={prefs}",
+    return [JAVA, "-Djava.util.prefs.PreferencesFactory=isoprefs.FilePrefsFactory", f"-Disoprefs.file={prefs}",
             "-Djava.awt.headless=true", "-cp", f"{CLASSES}{os.pathsep}{JAR}", *arguments]
 
 
