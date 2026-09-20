@@ -124,8 +124,13 @@ Without `-b` it reports nothing at all, which reads as a dead board rather than 
 Proven on the board, on a developer machine: the whole flow end to end in 26.4 seconds, all five stages reporting
 in order, `Load SRAM` to 100 percent. The A4 BEAG solution answers `-16` to `-15` and `32766` to `32767`, which is
 what macOS and Linux both give. That settles Yosys 0.63 by outcome, and makes the version skew across the three
-platforms a footnote rather than a risk. The BEAG takes **one number per load**: reload the bitstream between the
-two inputs, or the second answer looks wrong.
+platforms a footnote rather than a risk.
+
+Two operational facts that `boardtest.py` encodes and a hand-driven run has to reproduce. The BEAG takes **one
+number per load**: the script reloads the bitstream before every input after the first, and without that the
+second answer looks wrong rather than missing. And the board is not ready when the load finishes — the script
+waits 3 seconds for a power-on reset of 2, and typing earlier loses the input, which again reads as a wrong
+answer rather than an error.
 
 `support/openxc7/tests/board/boardtest.py` does **not** run on Windows — it imports `termios` at module scope,
 selects on a serial file descriptor, globs the two Unix device paths, and builds the loader path without an
