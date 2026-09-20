@@ -2,7 +2,7 @@
 and a simulated registry, so the registry walk and the struct layouts are exercised rather than assumed."""
 import ctypes, pathlib, sys, textwrap, time, types
 
-SOURCE = pathlib.Path("/Users/pavelgladyshev/git/logisim-evolution-openxc7/support/openxc7/tests/board/boardtest.py")
+SOURCE = pathlib.Path(__file__).resolve().parent / "boardtest.py"
 lines = SOURCE.read_text().splitlines(keepends=True)
 start = next(i for i, line in enumerate(lines) if line.rstrip() == "else:") + 1
 end = next(i for i in range(start, len(lines)) if lines[i].strip() and not lines[i][0].isspace())
@@ -50,14 +50,18 @@ serial_port = namespace["serial_port"]
 FTDI = "SYSTEM\\CurrentControlSet\\Enum\\FTDIBUS"
 SERIALCOMM = "HARDWARE\\DEVICEMAP\\SERIALCOMM"
 
+failures = 0
+
+
 def case(label, registry, expect):
-    global REGISTRY
+    global REGISTRY, failures
     REGISTRY = registry
     try:
         got = serial_port()
     except SystemExit as e:
         got = f"exit: {str(e).splitlines()[0]}"
     ok = got.startswith(expect) if expect.startswith("exit") else got == expect
+    failures += not ok
     print(f"  {'ok  ' if ok else 'FAIL'} {label:38} -> {got}")
 
 board = "VID_0403+PID_6010+210328B0B6D1"
@@ -90,3 +94,5 @@ case("a different FTDI device (single channel)", {
     FTDI: {}, f"{FTDI}\\VID_0403+PID_6001+A50285BI": {}, f"{FTDI}\\VID_0403+PID_6001+A50285BI\\0000": {},
     f"{FTDI}\\VID_0403+PID_6001+A50285BI\\0000\\Device Parameters": {"PortName": "COM8"},
     SERIALCOMM: {"\\Device\\VCP0": "COM8"}}, "COM8")   # the fallback, and it says so
+
+sys.exit(1 if failures else 0)
