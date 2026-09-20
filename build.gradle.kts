@@ -667,6 +667,10 @@ tasks.register("createMsi") {
         "--win-shortcut",
         "--win-dir-chooser",
         "--win-menu",
+        // a per-user install: it lands in the user's own profile and needs no administrator. Without this
+        // jpackage sets ALLUSERS=1 and the MSI raises a UAC prompt, which a student may not be able to answer
+        // on their own laptop.
+        "--win-per-user-install",
         "--type", "msi",
         // we MUST use short version form (without any suffix like "-dev", as it is not allowed in MSI package:
         // https://docs.microsoft.com/en-us/windows/win32/msi/productversion?redirectedfrom=MSDN
