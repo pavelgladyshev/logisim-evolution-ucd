@@ -125,6 +125,23 @@ TTY's.
 **POR** (power-on reset) gives its start value for its configured time after the board is loaded, then its end
 value. It needs a clocked component in its own circuit to time it.
 
+**Buzzer** becomes a square wave on one mappable output, "Sound", for a piezo sounder on a header pin (JA1 is
+the one used by the COMP20020 buzzer toy). It is driven from the board clock rather than the tick, so the pitch
+is right whatever tick frequency is chosen:
+
+- The frequency input is read as the component reads it: hertz, or tenths of a hertz when its *frequency* attribute
+  is dHz. Over the whole 14-bit range the pitch is within 0.03%, and within 0.01% above 20 Hz.
+- The duty cycle input is a fraction of 256, and an unconnected one is 128 — half — as in the component.
+- **Every waveform comes out as a square wave**, and the **volume input is ignored**. A pin carries a frequency
+  and a duty cycle; it carries neither a waveshape nor an amplitude. The pitch and the rhythm are the component's;
+  the timbre is not.
+
+A **passive** buzzer is the kind this drives: it has no oscillator of its own and sounds at whatever frequency it
+is given. An **active** one has an oscillator and will sound its own single pitch no matter what the circuit
+plays, so a melody comes out as rhythm without tune. If you hear one fixed note where a tune was expected, the
+part is active rather than the flow being wrong. A passive buzzer is silent when a steady voltage is put across
+it, the right way round; an active one sounds.
+
 ### What cannot go onto the FPGA
 
 Logisim refuses these, and its message names the components:
