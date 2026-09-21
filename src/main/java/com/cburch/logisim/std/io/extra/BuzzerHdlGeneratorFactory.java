@@ -13,7 +13,9 @@ import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.fpga.hdlgenerator.AbstractHdlGeneratorFactory;
 import com.cburch.logisim.fpga.hdlgenerator.Hdl;
 import com.cburch.logisim.fpga.hdlgenerator.HdlParameters;
-import com.cburch.logisim.fpga.hdlgenerator.TickComponentHdlGeneratorFactory;
+import com.cburch.logisim.fpga.hdlgenerator.HdlGeneratorFactory;
+import com.cburch.logisim.fpga.designrulecheck.CorrectLabel;
+import com.cburch.logisim.std.wiring.ClockHdlGeneratorFactory;
 import com.cburch.logisim.instance.Port;
 import com.cburch.logisim.util.LineBuffer;
 import java.util.Map;
@@ -72,10 +74,9 @@ public class BuzzerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
         .addRegister("s_phase", 32)
         .addRegister("s_increment", 32);
     myPorts
-        // the board clock, not the tick: see the class comment. FPGA_CLOCK is the circuit's own
-        // fpgaGlobalClock port; SYNTHESIZED_CLOCK names a wire that exists only in the toplevel,
-        // so it would be implicitly declared here and the accumulator would never advance.
-        .add(Port.INPUT, "fpgaClock", 1, TickComponentHdlGeneratorFactory.FPGA_CLOCK)
+        // The board clock, not the tick: see the class comment. getPortMap binds it to the
+        // circuit's clock tree; the placeholder here only has to declare the port.
+        .add(Port.INPUT, "fpgaClock", 1, "open")
         .add(Port.INPUT, "freq", 14, Buzzer.FREQ, true)
         .add(Port.INPUT, "enable", 1, Buzzer.ENABLE, true)
         .add(Port.INPUT, "pw", 8, Buzzer.PW, true)
@@ -112,6 +113,15 @@ public class BuzzerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       if (!componentInfo.isEndConnected(Buzzer.PW)) {
         map.put("pw", Hdl.getConstantVector(128, 8));
       }
+      // The board clock, taken where every clocked component takes it: bit GLOBAL_CLOCK_INDEX of the
+      // circuit's clock tree, which is in scope inside the circuit module. The two tempting
+      // alternatives are both wrong. SYNTHESIZED_CLOCK names a toplevel-only wire, so it would be
+      // implicitly declared here and never toggle. Asking for the global clock with
+      // requiresGlobalClock does plumb fpgaGlobalClock in, but it also makes the tick generator
+      // assert every clock for the whole design, which runs every other component at 12 MHz instead
+      // of the chosen tick - a Buzzer would cost its circuit its tempo.
+      map.put("fpgaClock", LineBuffer.formatHdl("{{1}}{{2}}{{<}}{{3}}{{>}}",
+          HdlGeneratorFactory.CLOCK_TREE_NAME, 0, ClockHdlGeneratorFactory.GLOBAL_CLOCK_INDEX));
     }
     return map;
   }

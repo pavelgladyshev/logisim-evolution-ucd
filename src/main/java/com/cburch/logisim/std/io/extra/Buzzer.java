@@ -100,9 +100,11 @@ public class Buzzer extends InstanceFactory {
   }
 
   public Buzzer() {
-    // requires a label, and requires the FPGA global clock: a tone needs the board clock rather than
-    // the tick, and a circuit whose only clocked thing is a Buzzer still has to be given one
-    super(_ID, S.getter("buzzerComponent"), new BuzzerHdlGeneratorFactory(), true, true);
+    // Requires a label. NOT requiresGlobalClock: that flag makes the tick generator assert every
+    // clock for the whole circuit (TickComponentHdlGeneratorFactory), which runs every other component
+    // at the board clock instead of the chosen tick. The Buzzer reaches the board clock through its
+    // own port map instead, which costs the rest of the circuit nothing.
+    super(_ID, S.getter("buzzerComponent"), new BuzzerHdlGeneratorFactory(), true, false);
     setAttributes(
         new Attribute[] {
           StdAttr.FACING,
