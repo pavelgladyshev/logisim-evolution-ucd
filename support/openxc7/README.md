@@ -103,6 +103,16 @@ type to Verilog when it uses openXC7.
 The board behaves like a simulation. The Logisim clock runs at the chosen frequency, and all flip-flops, registers,
 counters and RAM start at 0, as in a new simulation.
 
+**The board keeps the tick it is given; the simulator only tries to.** On the board the tick is the 12 MHz clock
+divided by a whole number, so it is exact whenever the requested rate divides 12 MHz, and where it does not the
+division truncates and the rate comes out slightly *fast* - never slow, and wrong by the same amount on every board.
+Auto-tick in the simulator is a target: it keeps a running average of how long ticks are actually taking and pulls
+the next one earlier to catch up, which absorbs a brief overrun but not a machine that cannot keep up, and nothing
+in the interface says when it has fallen behind. So the achieved rate is at most the nominal one in the simulator
+and at least the nominal one on the board, and two people running the same circuit at the same auto-tick on
+different computers can hear two different speeds and will hear the same speed on hardware. A tempo judged by ear
+in the simulator is worth checking on the board.
+
 **TTY** becomes a serial transmitter (115200 baud, 8N1), and the terminal shows what the TTY shows:
 
 - Printable characters are sent as they are.
