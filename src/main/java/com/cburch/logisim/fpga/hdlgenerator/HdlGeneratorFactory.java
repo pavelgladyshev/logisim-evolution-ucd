@@ -15,6 +15,7 @@ import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.util.LineBuffer;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public interface HdlGeneratorFactory {
@@ -26,6 +27,15 @@ public interface HdlGeneratorFactory {
   String VERILOG = "Verilog";
   String NONE = "None";
   String LOCAL_INPUT_BUBBLE_BUS_NAME = "logisimInputBubbles";
+
+  /**
+   * The clock inputs of this component that are driven by something other than a Clock component,
+   * mapped to whether it triggers on the falling edge. Only generators that can be clocked have
+   * any, so the default is none.
+   */
+  default Map<String, Boolean> getGatedClockNets(Netlist nets, netlistComponent componentInfo) {
+    return java.util.Collections.emptyMap();
+  }
   String LOCAL_OUTPUT_BUBBLE_BUS_NAME = "logisimOutputBubbles";
   String LOCAL_INOUT_BUBBLE_BUS_NAME = "logisimInOutBubbles";
   String FPGA_TOP_LEVEL_NAME = "logisimTopLevelShell";

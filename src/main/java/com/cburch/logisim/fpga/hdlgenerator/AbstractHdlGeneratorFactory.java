@@ -404,6 +404,57 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
     return LineBuffer.getHdlBuffer();
   }
 
+  /**
+   * A net that drives a component's clock input without coming from a Clock component - a counter's
+   * carry, a comparator, a gate - needs a name for the two signals that turn it into a synchronous
+   * enable. Both are derived from the net's own name so that the circuit that declares them and the
+   * component that uses them agree without having to be told.
+   */
+  private static String gatedClockBase(String netName) {
+    return netName.replaceAll("[^A-Za-z0-9_]", "_");
+  }
+
+  /** The register holding the previous value of a gated clock net, for edge detection. */
+  public static String gatedClockSyncName(String netName) {
+    return gatedClockBase(netName) + "GatedReg";
+  }
+
+  /** The one-cycle pulse marking the active edge of a gated clock net. */
+  public static String gatedClockTickName(String netName) {
+    return gatedClockBase(netName) + "GatedTick";
+  }
+
+  /**
+   * The clock inputs of this component that are driven by something other than a Clock component,
+   * mapped to whether the component triggers on the falling edge. Empty in the usual case. The
+   * circuit uses this to declare an edge detector for each such net; see getPortMap, which decides
+   * the same way.
+   */
+  @Override
+  public Map<String, Boolean> getGatedClockNets(Netlist nets, netlistComponent componentInfo) {
+    final var result = new TreeMap<String, Boolean>();
+    if (myPorts.isEmpty()) return result;
+    final var attrs = componentInfo.getComponent().getAttributeSet();
+    if (getWiresPortsDuringHDLWriting) {
+      myWires.removeWires();
+      myTypedWires.clear();
+      myPorts.removePorts();
+      getGenerationTimeWiresPorts(nets, attrs);
+    }
+    for (final var port : myPorts.keySet()) {
+      if (!myPorts.isClock(port)) continue;
+      final var compPinId = myPorts.getComponentPortId(port);
+      if (!componentInfo.isEndConnected(compPinId)) continue;
+      if (!StringUtil.isNullOrEmpty(Hdl.getClockNetName(componentInfo, compPinId, nets))) continue;
+      var clockAttr = attrs.containsAttribute(StdAttr.EDGE_TRIGGER)
+          ? attrs.getValue(StdAttr.EDGE_TRIGGER) : attrs.getValue(StdAttr.TRIGGER);
+      if (clockAttr == null) clockAttr = StdAttr.TRIG_RISING;
+      final var activeLow = StdAttr.TRIG_LOW.equals(clockAttr) || StdAttr.TRIG_FALLING.equals(clockAttr);
+      result.put(Hdl.getNetName(componentInfo, compPinId, true, nets), activeLow);
+    }
+    return result;
+  }
+
   public Map<String, String> getPortMap(Netlist nets, Object mapInfo) {
     final var result = new TreeMap<String, String>();
     if ((mapInfo instanceof netlistComponent componentInfo) && !myPorts.isEmpty()) {
@@ -450,14 +501,26 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
           } else if (!hasClock) {
             result.put(myPorts.getTickName(port), Hdl.zeroBit());
             result.put(HdlPorts.CLOCK, Hdl.zeroBit());
-          } else {
+          } else if (!gatedClock) {
             result.put(myPorts.getTickName(port), Hdl.oneBit());
-            if (!gatedClock) {
-              final var clockIndex = activeLow ? ClockHdlGeneratorFactory.INVERTED_DERIVED_CLOCK_INDEX : ClockHdlGeneratorFactory.DERIVED_CLOCK_INDEX;
-              result.put(HdlPorts.CLOCK, LineBuffer.formatHdl("{{1}}{{<}}{{2}}{{>}}", clockNetName, clockIndex));
-            } else {
-              result.put(HdlPorts.CLOCK, Hdl.getNetName(componentInfo, compPinId, true, nets));
-            }
+            final var clockIndex = activeLow ? ClockHdlGeneratorFactory.INVERTED_DERIVED_CLOCK_INDEX : ClockHdlGeneratorFactory.DERIVED_CLOCK_INDEX;
+            result.put(HdlPorts.CLOCK, LineBuffer.formatHdl("{{1}}{{<}}{{2}}{{>}}", clockNetName, clockIndex));
+          } else if (nets.numberOfClockTrees() > 0) {
+            // A gated clock: the net driving this pin is combinational, so using it as a clock puts a
+            // decode glitch on a clock line - a counter's carry can read maxVal for a moment while its
+            // bits are still settling, and the component counts twice. The simulator cannot show that,
+            // being event driven, so it appears only on the board and only sometimes. Instead the net
+            // is edge-detected in the global clock domain and the pulse drives the tick, which is the
+            // same behaviour with nothing gated: see the circuit, which declares the detector.
+            final var gatedNet = Hdl.getNetName(componentInfo, compPinId, true, nets);
+            result.put(myPorts.getTickName(port), gatedClockTickName(gatedNet));
+            result.put(HdlPorts.CLOCK, LineBuffer.formatHdl("{{1}}0{{<}}{{2}}{{>}}",
+                HdlGeneratorFactory.CLOCK_TREE_NAME, ClockHdlGeneratorFactory.GLOBAL_CLOCK_INDEX));
+          } else {
+            // No clock tree at all, so there is no global clock to synchronise to and nothing better
+            // to do than what was done before: drive the component from the gated net itself.
+            result.put(myPorts.getTickName(port), Hdl.oneBit());
+            result.put(HdlPorts.CLOCK, Hdl.getNetName(componentInfo, compPinId, true, nets));
           }
         } else if (myPorts.isFixedMapped(port)) {
           final var fixedMap = myPorts.getFixedMap(port);
