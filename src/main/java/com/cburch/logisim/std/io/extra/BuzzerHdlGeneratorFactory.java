@@ -28,13 +28,18 @@ import java.util.TreeMap;
  * of a hertz when the component's frequency-measure attribute is dHz, and the 8-bit duty cycle input is
  * a fraction of 256, defaulting to 128 (half) when it is left unconnected, as the component does.
  *
- * <p>Two things differ from a simulation, and neither can be helped on a single digital pin:
+ * <p>Two things differ from a simulation, and both are decisions rather than impossibilities:
  * <ul>
- *   <li>the waveform is always a square wave. A pin carries a frequency and a duty cycle; it carries
- *       neither a waveshape nor an amplitude, so Sine, Triangle, Sawtooth and Noise all come out as the
- *       square wave of the same frequency. The pitch and the rhythm are right and the timbre is not;</li>
- *   <li>the volume input is ignored, for the same reason. A piezo on a pin is on or off.</li>
+ *   <li>the waveform is always a square wave, so Sine, Triangle, Sawtooth and Noise all come out as the
+ *       square wave of the same frequency. The pitch and the rhythm are right and the timbre is not. A
+ *       pin is not actually limited to a square wave - pulse-width or sigma-delta modulation would
+ *       approximate the others, and the piezo's own response would smooth them - but that is a good deal
+ *       of hardware for a difference a piezo on a header pin will barely render, and a tune needs the
+ *       pitch and the rhythm rather than the timbre;</li>
+ *   <li>the volume input is ignored, for the same reason and with the same caveat: an amplitude would
+ *       mean modulating the drive, and this emits a fixed-amplitude wave instead.</li>
  * </ul>
+ * Either could be built later without changing what is here; neither is needed to play a melody.
  *
  * <p>The square wave itself is not an approximation of the component but the component's own definition
  * of one. Buzzer's Square strategy is {@code (hz * i) mod 1 < pw/256}; here a 32-bit phase accumulator

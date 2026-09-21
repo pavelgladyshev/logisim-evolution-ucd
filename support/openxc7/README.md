@@ -132,9 +132,10 @@ is right whatever tick frequency is chosen:
 - The frequency input is read as the component reads it: hertz, or tenths of a hertz when its *frequency* attribute
   is dHz. Over the whole 14-bit range the pitch is within 0.03%, and within 0.01% above 20 Hz.
 - The duty cycle input is a fraction of 256, and an unconnected one is 128 — half — as in the component.
-- **Every waveform comes out as a square wave**, and the **volume input is ignored**. A pin carries a frequency
-  and a duty cycle; it carries neither a waveshape nor an amplitude. The pitch and the rhythm are the component's;
-  the timbre is not.
+- **Every waveform comes out as a square wave**, and the **volume input is ignored**. The pitch and the rhythm
+  are the component's; the timbre is not. This is a deliberate limit rather than one the hardware imposes:
+  modulating the pulse width could approximate the other waveshapes and an amplitude, but it buys little on a
+  piezo and a melody needs the notes, not the timbre.
 
 A **passive** buzzer is the kind this drives: it has no oscillator of its own and sounds at whatever frequency it
 is given. An **active** one has an oscillator and will sound its own single pitch no matter what the circuit
