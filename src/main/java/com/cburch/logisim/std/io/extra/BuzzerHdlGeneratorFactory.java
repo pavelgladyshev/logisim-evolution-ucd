@@ -12,11 +12,13 @@ import com.cburch.logisim.fpga.designrulecheck.Netlist;
 import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.fpga.hdlgenerator.AbstractHdlGeneratorFactory;
 import com.cburch.logisim.fpga.hdlgenerator.Hdl;
+import com.cburch.logisim.fpga.gui.Reporter;
 import com.cburch.logisim.fpga.hdlgenerator.HdlParameters;
 import com.cburch.logisim.fpga.hdlgenerator.HdlGeneratorFactory;
 import com.cburch.logisim.fpga.designrulecheck.CorrectLabel;
 import com.cburch.logisim.std.wiring.ClockHdlGeneratorFactory;
 import com.cburch.logisim.instance.Port;
+import com.cburch.logisim.instance.StdAttr;
 import com.cburch.logisim.util.LineBuffer;
 import java.util.Map;
 import java.util.TreeMap;
@@ -120,6 +122,21 @@ public class BuzzerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       // requiresGlobalClock does plumb fpgaGlobalClock in, but it also makes the tick generator
       // assert every clock for the whole design, which runs every other component at 12 MHz instead
       // of the chosen tick - a Buzzer would cost its circuit its tempo.
+      if (nets.numberOfClockTrees() < 1) {
+        // No Clock in the circuit means no clock tree is passed into it, and naming one here would
+        // only get an implicitly declared wire: the accumulator would never advance and the board
+        // would be silent while every stage of the flow reported success. Say so instead.
+        Reporter.report.addFatalError(
+            String.format(
+                "Buzzer \"%s\" needs a Clock component somewhere in the circuit: on an FPGA its tone is"
+                    + " counted from the board clock, which is only routed into a circuit that has one.",
+                componentInfo.getComponent().getAttributeSet().getValue(StdAttr.LABEL)));
+        // Tie it low rather than leaving the placeholder: the generated HDL stays well formed and the
+        // buzzer is provably silent instead of silent by accident, with the error above saying why.
+        // In the FPGA Commander this is a fatal entry in the report; the headless harness logs it.
+        map.put("fpgaClock", Hdl.zeroBit());
+        return map;
+      }
       map.put("fpgaClock", LineBuffer.formatHdl("{{1}}{{2}}{{<}}{{3}}{{>}}",
           HdlGeneratorFactory.CLOCK_TREE_NAME, 0, ClockHdlGeneratorFactory.GLOBAL_CLOCK_INDEX));
     }
