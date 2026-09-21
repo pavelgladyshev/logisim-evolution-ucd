@@ -67,6 +67,9 @@ public class FpgaReportTabbedPane extends JTabbedPane
   private final JTextArea textAreaConsole;
   private final JComponent panelConsole;
   private final ArrayList<String> consoleMessages;
+  /** Console lines that have arrived but are not on screen yet; see addConsole. */
+  private final ArrayList<String> pendingConsole = new ArrayList<>();
+  private boolean consoleFlushPending = false;
 
   private boolean drcTraceActive = false;
   private SimpleDrcContainer activeDrcContainer;
@@ -240,23 +243,45 @@ public class FpgaReportTabbedPane extends JTabbedPane
     }
   }
 
+  /**
+   * A line of a tool's output. Called from the thread running the tool, once per line, and a
+   * synthesis produces thousands of them: appending each one on arrival would redraw the console
+   * thousands of times and rebuild its whole text each time, which starves the event thread and
+   * leaves buttons - the one that cancels the run, in particular - unable to be pressed. So the
+   * lines are collected here and handed to the event thread in one batch, however many have piled
+   * up in the meantime, and appended rather than re-rendered.
+   */
   public void addConsole(String Message) {
-    consoleMessages.add(Message + "\n");
-    if (consoleWindow != null)
-      if (consoleWindow.isVisible()) {
-        updateConsoleWindow();
-      }
-    updateConsoleTab();
-  }
-
-  private void updateConsoleWindow() {
-    final var lines = new StringBuilder();
-    for (final var mes : consoleMessages) {
-      lines.append(mes);
+    synchronized (pendingConsole) {
+      pendingConsole.add(Message + "\n");
+      if (consoleFlushPending) return;
+      consoleFlushPending = true;
     }
-    consoleWindow.set(lines.toString(), 0);
+    EventQueue.invokeLater(this::flushConsole);
   }
 
+  private void flushConsole() {
+    final String batch;
+    synchronized (pendingConsole) {
+      consoleFlushPending = false;
+      if (pendingConsole.isEmpty()) return;
+      final var lines = new StringBuilder();
+      for (final var line : pendingConsole) lines.append(line);
+      consoleMessages.addAll(pendingConsole);
+      pendingConsole.clear();
+      batch = lines.toString();
+    }
+    textAreaConsole.append(batch);
+    if (consoleWindow != null && consoleWindow.isVisible()) updateConsoleWindow();
+    final var idx = indexOfComponent(panelConsole);
+    if (idx >= 0) {
+      setSelectedIndex(idx);
+      panelConsole.revalidate();
+      panelConsole.repaint();
+    }
+  }
+
+  /** The whole console, rendered again. For reattaching the tab, not for arriving lines. */
   private void updateConsoleTab() {
     final var lines = new StringBuilder();
     for (final var mes : consoleMessages) {
@@ -271,8 +296,24 @@ public class FpgaReportTabbedPane extends JTabbedPane
     }
   }
 
+  private void updateConsoleWindow() {
+    final var lines = new StringBuilder();
+    for (final var mes : consoleMessages) {
+      lines.append(mes);
+    }
+    consoleWindow.set(lines.toString(), 0);
+  }
+
   public void clearConsole() {
+    synchronized (pendingConsole) {
+      pendingConsole.clear();
+    }
     consoleMessages.clear();
+    // the text area is appended to rather than rebuilt, so emptying the list is no longer enough
+    EventQueue.invokeLater(() -> {
+      textAreaConsole.setText(null);
+      if (consoleWindow != null && consoleWindow.isVisible()) consoleWindow.set("", 0);
+    });
   }
 
   public void clearDrcTrace() {
