@@ -74,7 +74,10 @@ public class TickComponentHdlGeneratorFactory extends AbstractHdlGeneratorFactor
             .addRemarkBlock("Here the output is defined")
             .add(
                 TheNetlist.requiresGlobalClockConnection()
-                    ? "{{assign}} FPGATick {{=}} '1';"
+                    // a one-bit constant in whichever language: '1' alone is std_logic and Yosys
+                    // rejects it as Verilog, which only shows up once some component asks for the
+                    // global clock
+                    ? LineBuffer.formatHdl("{{assign}} FPGATick {{=}} {{1}};", Hdl.oneBit())
                     : "{{assign}} FPGATick {{=}} s_tickReg;")
             .add("")
             .addRemarkBlock("Here the update logic is defined");

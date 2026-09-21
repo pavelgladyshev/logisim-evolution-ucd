@@ -13,7 +13,7 @@ import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.fpga.hdlgenerator.AbstractHdlGeneratorFactory;
 import com.cburch.logisim.fpga.hdlgenerator.Hdl;
 import com.cburch.logisim.fpga.hdlgenerator.HdlParameters;
-import com.cburch.logisim.fpga.hdlgenerator.SynthesizedClockHdlGeneratorFactory;
+import com.cburch.logisim.fpga.hdlgenerator.TickComponentHdlGeneratorFactory;
 import com.cburch.logisim.instance.Port;
 import com.cburch.logisim.util.LineBuffer;
 import java.util.Map;
@@ -72,8 +72,10 @@ public class BuzzerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
         .addRegister("s_phase", 32)
         .addRegister("s_increment", 32);
     myPorts
-        // the board clock, not the tick: see the class comment
-        .add(Port.INPUT, "fpgaClock", 1, SynthesizedClockHdlGeneratorFactory.SYNTHESIZED_CLOCK)
+        // the board clock, not the tick: see the class comment. FPGA_CLOCK is the circuit's own
+        // fpgaGlobalClock port; SYNTHESIZED_CLOCK names a wire that exists only in the toplevel,
+        // so it would be implicitly declared here and the accumulator would never advance.
+        .add(Port.INPUT, "fpgaClock", 1, TickComponentHdlGeneratorFactory.FPGA_CLOCK)
         .add(Port.INPUT, "freq", 14, Buzzer.FREQ, true)
         .add(Port.INPUT, "enable", 1, Buzzer.ENABLE, true)
         .add(Port.INPUT, "pw", 8, Buzzer.PW, true)
