@@ -23,6 +23,7 @@ import com.cburch.logisim.data.BitWidth;
 import com.cburch.logisim.data.Bounds;
 import com.cburch.logisim.data.Direction;
 import com.cburch.logisim.data.Value;
+import com.cburch.logisim.fpga.data.ComponentMapInformationContainer;
 import com.cburch.logisim.instance.Instance;
 import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceFactory;
@@ -35,6 +36,8 @@ import com.cburch.logisim.util.GraphicsUtil;
 import java.awt.Color;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
@@ -50,10 +53,10 @@ public class Buzzer extends InstanceFactory {
    */
   public static final String _ID = "Buzzer";
 
-  private static final byte FREQ = 0;
-  private static final byte ENABLE = 1;
-  private static final byte VOL = 2;
-  private static final byte PW = 3;
+  public static final byte FREQ = 0;
+  public static final byte ENABLE = 1;
+  public static final byte VOL = 2;
+  public static final byte PW = 3;
   private static final Attribute<BitWidth> VOLUME_WIDTH =
       Attributes.forBitWidth("vol_width", S.getter("buzzerVolumeBitWidth"));
   private static final AttributeOption Hz = new AttributeOption("Hz", S.getter("Hz"));
@@ -91,8 +94,15 @@ public class Buzzer extends InstanceFactory {
   private static final Attribute<Integer> SMOOTH_WIDTH =
       Attributes.forIntegerRange("smooth_width", S.getter("buzzerSmoothWidth"), 1, 10);
 
+  /** Whether the frequency input is read as tenths of a hertz rather than as hertz. */
+  public static boolean isDeciHertz(AttributeSet attrs) {
+    return attrs.getValue(FREQUENCY_MEASURE) == dHz;
+  }
+
   public Buzzer() {
-    super(_ID, S.getter("buzzerComponent"));
+    // requires a label, and requires the FPGA global clock: a tone needs the board clock rather than
+    // the tick, and a circuit whose only clocked thing is a Buzzer still has to be given one
+    super(_ID, S.getter("buzzerComponent"), new BuzzerHdlGeneratorFactory(), true, true);
     setAttributes(
         new Attribute[] {
           StdAttr.FACING,
@@ -104,7 +114,8 @@ public class Buzzer extends InstanceFactory {
           WAVEFORM,
           CHANNEL,
           SMOOTH_LEVEL,
-          SMOOTH_WIDTH
+          SMOOTH_WIDTH,
+          StdAttr.MAPINFO
         },
         new Object[] {
           Direction.WEST,
@@ -116,7 +127,9 @@ public class Buzzer extends InstanceFactory {
           Sine,
           C_BOTH,
           2,
-          2
+          2,
+          // one FPGA output, the square wave for a piezo: see BuzzerHdlGeneratorFactory
+          new ComponentMapInformationContainer(0, 1, 0, null, new ArrayList<>(List.of("Sound")), null)
         });
     setFacingAttribute(StdAttr.FACING);
     setIcon(new BuzzerIcon());
