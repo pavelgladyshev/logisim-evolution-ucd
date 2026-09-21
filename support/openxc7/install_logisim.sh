@@ -1,15 +1,21 @@
 #!/bin/bash
 # Install this Logisim-evolution (with the openXC7 FPGA flow) for the current user:
 #
-#   support/openxc7/install_logisim.sh [logisim jar]     default: the jar next to this script, else build/libs
+#   support/openxc7/install_logisim.sh [--force] [logisim jar]   default: the jar next to this script, else build/libs
 #
 # Copies the jar to ~/openxc7/logisim/ and adds a launcher:
 #   Linux: "Logisim-evolution (openXC7)" in the applications menu (and the logisim-openxc7 command)
 #   macOS: ~/Applications/Logisim-evolution openXC7.app
 # Needs Java 21 or newer (Kubuntu: sudo apt install openjdk-21-jre).
+# Refuses to overwrite the jar while Logisim is running from it, because a running JVM keeps reading
+# classes out of that file all session: replace it and the running copy loses every class it has not
+# loaded yet - the file chooser, the theme, and the quit handler, so it cannot even be closed, and a
+# save part way through can truncate the circuit. --force overrides, when you know nothing is open.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+FORCE=no
+if [ "${1:-}" = --force ]; then FORCE=yes; shift; fi
 JAR="${1:-}"
 if [ -z "$JAR" ]; then
   for candidate in "$HERE"/logisim-evolution*.jar "$HERE"/../../build/libs/logisim-evolution-*-all.jar; do
@@ -30,8 +36,23 @@ if [ -z "$version" ] || [ "$version" -lt 21 ]; then
 fi
 
 DEST="$HOME/openxc7/logisim"
+TARGET="$DEST/logisim-evolution-openxc7.jar"
+if [ "$FORCE" = no ] && [ -f "$TARGET" ]; then
+  # Anything with the target jar open: the running Logisim holds it for the life of the process.
+  running="$(pgrep -f "[j]ava.*$TARGET" 2>/dev/null || true)"
+  if [ -z "$running" ] && command -v lsof > /dev/null 2>&1; then
+    running="$(lsof -t -- "$TARGET" 2>/dev/null || true)"
+  fi
+  if [ -n "$running" ]; then
+    echo "Logisim is running from $TARGET (pid $(echo $running | tr '\n' ' '))." >&2
+    echo "Installing over it would leave that copy unable to load the classes it has not touched yet:" >&2
+    echo "it could not be closed, and saving a circuit could truncate it. Quit Logisim and run this" >&2
+    echo "again, or pass --force if you are sure nothing has it open." >&2
+    exit 1
+  fi
+fi
 mkdir -p "$DEST"
-cp "$JAR" "$DEST/logisim-evolution-openxc7.jar"
+cp "$JAR" "$TARGET"
 icon() {   # an icon next to this script (as in the zip for another computer), else in the repository
   for f in "$HERE/$1" "$HERE/../jpackage/$2/$1"; do [ -f "$f" ] && { echo "$f"; return; }; done
 }
