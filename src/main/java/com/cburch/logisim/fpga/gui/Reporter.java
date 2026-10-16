@@ -40,9 +40,16 @@ public class Reporter {
       myCommander.addErrors(new SimpleDrcContainer(message, SimpleDrcContainer.LEVEL_NORMAL, true));
   }
 
+  /** Text of a report item for the console when there is no FPGA Commander window (e.g. --test-fpga). */
+  private static String headlessText(Object message) {
+    if (message instanceof SimpleDrcContainer drc && drc.hasCircuit())
+      return String.format("%s (circuit \"%s\")", drc, drc.getCircuit().getName());
+    return String.valueOf(message);
+  }
+
   public void addError(Object message) {
     if (myCommander == null) {
-      if (message instanceof String msg) logger.error(msg);
+      logger.error(headlessText(message));
     } else {
       myCommander.addErrors((message instanceof String)
           ? new SimpleDrcContainer(message, SimpleDrcContainer.LEVEL_NORMAL)
@@ -91,7 +98,7 @@ public class Reporter {
 
   public void addWarning(Object message) {
     if (myCommander == null) {
-      if (message instanceof String msg) logger.warn(msg);
+      logger.warn(headlessText(message));
     } else {
       myCommander.addWarning(message instanceof String
           ? new SimpleDrcContainer(message, SimpleDrcContainer.LEVEL_NORMAL)

@@ -9,6 +9,8 @@
 
 package com.cburch.logisim.circuit;
 
+import static com.cburch.logisim.fpga.Strings.S;
+
 import com.cburch.logisim.data.AttributeSet;
 import com.cburch.logisim.fpga.data.MapComponent;
 import com.cburch.logisim.fpga.data.MappableResourcesContainer;
@@ -58,6 +60,12 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     for (final var wire : theNetlist.getAllNets())
       if (wire.isBus() && wire.isRootNet())
         myWires.addWire(String.format("%s%d", BUS_NAME, theNetlist.getNetId(wire)), wire.getBitWidth());
+    // Each net that drives a clock input without being a Clock gets an edge detector, so that the
+    // component it clocks runs off a synchronous enable rather than off a combinational signal.
+    for (final var gated : gatedClockNets(theNetlist).keySet()) {
+      myWires.addRegister(AbstractHdlGeneratorFactory.gatedClockSyncName(gated), 1);
+      myWires.addWire(AbstractHdlGeneratorFactory.gatedClockTickName(gated), 1);
+    }
     if (inOutBubbles > 0)
       myPorts.add(Port.INOUT, LOCAL_INOUT_BUBBLE_BUS_NAME, inOutBubbles > 1 ? inOutBubbles : 0, 0);
     for (var clock = 0; clock < theNetlist.numberOfClockTrees(); clock++)
@@ -124,10 +132,7 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
                 .getFactory()
                 .getHDLGenerator(thisComponent.getComponent().getAttributeSet());
         if (worker == null) {
-          // FIXME: hardcoded string
-          Reporter.report.addFatalError(
-              "INTERNAL ERROR: Cannot find the VHDL generator factory for component "
-                  + componentName);
+          Reporter.report.addFatalError(S.get("HdlMissingGeneratorFactoryError", componentName));
           return false;
         }
         if (!worker.isOnlyInlined()) {
@@ -161,11 +166,10 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
                   .getFactory()
                   .getHDLGenerator(thisCircuit.getComponent().getAttributeSet());
       if (worker == null) {
-        // FIXME: hardcoded string
         Reporter.report.addFatalError(
-            "INTERNAL ERROR: Unable to get a subcircuit VHDL generator for '"
-                + thisCircuit.getComponent().getFactory().getName()
-                + "'");
+            S.get(
+                "HdlMissingSubcircuitGeneratorError",
+                thisCircuit.getComponent().getFactory().getName()));
         return false;
       }
       hierarchy.add(
@@ -277,6 +281,22 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     return contents;
   }
 
+  /**
+   * Every net in this circuit that drives some component's clock input without coming from a Clock,
+   * mapped to whether that component triggers on the falling edge. Empty for all but the circuits
+   * that clock one component from another's output. Returns nothing when the circuit has no clock
+   * tree, since there is then no global clock to synchronise against.
+   */
+  private Map<String, Boolean> gatedClockNets(Netlist theNetlist) {
+    final var result = new TreeMap<String, Boolean>();
+    if (theNetlist.numberOfClockTrees() < 1) return result;
+    for (final var comp : theNetlist.getNormalComponents()) {
+      final var worker = comp.getComponent().getFactory().getHDLGenerator(comp.getComponent().getAttributeSet());
+      if (worker != null) result.putAll(worker.getGatedClockNets(theNetlist, comp));
+    }
+    return result;
+  }
+
   @Override
   public LineBuffer getModuleFunctionality(Netlist theNetList, AttributeSet attrs) {
     final var contents = LineBuffer.getHdlBuffer();
@@ -286,16 +306,15 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     /* we start with the connection of the clock sources */
     for (final var clockSource : theNetList.getClockSources()) {
       if (!clockSource.isEndConnected(0)) {
-        // FIXME: hardcoded string
-        final var msg = String.format("Clock component found with no connection, skipping: '%s'",
-                clockSource.getComponent().getAttributeSet().getValue(StdAttr.LABEL));
-        Reporter.report.addWarning(msg);
+        Reporter.report.addWarning(
+            S.get(
+                "HdlUnconnectedClockWarning",
+                clockSource.getComponent().getAttributeSet().getValue(StdAttr.LABEL)));
         continue;
       }
       final var clockNet = Hdl.getClockNetName(clockSource, 0, theNetList);
       if (clockNet.isEmpty()) {
-        // FIXME: hardcoded string
-        Reporter.report.addFatalError("INTERNAL ERROR: Cannot find clocknet!");
+        Reporter.report.addFatalError(S.get("HdlMissingClockNetError"));
       }
       final var destination = Hdl.getNetName(clockSource, 0, true, theNetList);
       final var source = theNetList.requiresGlobalClockConnection() ? TickComponentHdlGeneratorFactory.FPGA_CLOCK
@@ -305,6 +324,41 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     if (!wires.isEmpty()) {
       contents.empty().addRemarkBlock("All clock generator connections are defined here");
       Hdl.addAllWiresSorted(contents, wires);
+    }
+    final var gatedClocks = gatedClockNets(theNetList);
+    if (!gatedClocks.isEmpty()) {
+      final var globalClock = LineBuffer.formatHdl("{{1}}0{{<}}{{2}}{{>}}",
+          CLOCK_TREE_NAME, ClockHdlGeneratorFactory.GLOBAL_CLOCK_INDEX);
+      contents.empty().addRemarkBlock(
+          "Clock inputs not driven by a Clock are edge detected here, rather than being gated clocks");
+      for (final var gated : gatedClocks.entrySet()) {
+        final var net = gated.getKey();
+        final var activeLow = gated.getValue();
+        final var reg = AbstractHdlGeneratorFactory.gatedClockSyncName(net);
+        final var tick = AbstractHdlGeneratorFactory.gatedClockTickName(net);
+        if (Hdl.isVhdl()) {
+          contents.addVhdlKeywords().add(
+              "{{1}} <= '1' {{when}} {{2}} = '{{3}}' {{and}} {{4}} = '{{5}}' {{else}} '0';",
+              tick, net, activeLow ? "0" : "1", reg, activeLow ? "1" : "0");
+          contents.add("""
+              {{1}} : {{process}}({{2}}) {{is}}
+              {{begin}}
+                 {{if}} (rising_edge({{2}})) {{then}}
+                    {{3}} <= {{4}};
+                 {{end}} {{if}};
+              {{end}} {{process}} {{1}};
+              """, reg + "Detect", globalClock, reg, net).empty();
+        } else {
+          contents.add("assign {{1}} = {{2}}{{3}} & {{4}}{{5}};",
+              tick, activeLow ? "~" : "", net, activeLow ? "" : "~", reg);
+          contents.add("""
+              always @(posedge {{1}})
+              begin
+                 {{2}} <= {{3}};
+              end
+              """, globalClock, reg, net).empty();
+        }
+      }
     }
     /* Here we define all wiring; hence all complex splitter connections */
     wires.putAll(getHdlWiring(theNetList));
@@ -451,8 +505,7 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
             }
           }
           if (map == null || compPin < 0) {
-            // FIXME: hardcoded string
-            Reporter.report.addError("BUG: did not find IOpin");
+            Reporter.report.addError(S.get("HdlMissingIoPinError"));
             continue;
           }
           if (!map.isMapped(compPin) || map.isOpenMapped(compPin)) {
@@ -492,9 +545,8 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
           } else {
             final var endId = nets.getEndIndex(componentInfo, pinLabel, false);
             if (endId < 0) {
-              // FIXME: hardcoded string
               Reporter.report.addFatalError(
-                  String.format("INTERNAL ERROR! Could not find the end-index of a sub-circuit component: '%s'", pinLabel));
+                  S.get("HdlMissingSubcircuitEndIndexError", pinLabel));
             } else {
               portMap.putAll(Hdl.getNetMap(pinLabel, true, componentInfo, endId, nets));
             }
@@ -515,9 +567,8 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
           } else {
             final var endId = nets.getEndIndex(componentInfo, pinLabel, false);
             if (endId < 0) {
-              // FIXME: hardcoded string
               Reporter.report.addFatalError(
-                      String.format("INTERNAL ERROR! Could not find the end-index of a sub-circuit component: '%s'", pinLabel));
+                  S.get("HdlMissingSubcircuitEndIndexError", pinLabel));
             } else {
               portMap.putAll(Hdl.getNetMap(pinLabel, true, componentInfo, endId, nets));
             }
@@ -537,9 +588,8 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
           } else {
             final var endid = nets.getEndIndex(componentInfo, pinLabel, true);
             if (endid < 0) {
-              // FIXME: hardcoded string
               Reporter.report.addFatalError(
-                      String.format("INTERNAL ERROR! Could not find the end-index of a sub-circuit component: '%s'", pinLabel));
+                  S.get("HdlMissingSubcircuitEndIndexError", pinLabel));
             } else {
               portMap.putAll(Hdl.getNetMap(pinLabel, true, componentInfo, endid, nets));
             }
@@ -550,13 +600,14 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     return portMap;
   }
 
-  private static Map<String, String> getSignalMap(String portName, netlistComponent comp, int endIndex, Netlist theNets) {
+  static Map<String, String> getSignalMap(
+      String portName, netlistComponent comp, int endIndex, Netlist theNets) {
     final var signal = new HashMap<String, String>();
     if ((endIndex < 0) || (endIndex >= comp.nrOfEnds())) {
-      // FIXME: hardcoded string
-      Reporter.report.addFatalErrorFmt(
-              "INTERNAL ERROR: Component tried to index non-existing SolderPoint: '%s'",
-              comp.getComponent().getAttributeSet().getValue(StdAttr.LABEL));
+      Reporter.report.addFatalError(
+          S.get(
+              "HdlInvalidSolderPointComponentError",
+              comp.getComponent().getAttributeSet().getValue(StdAttr.LABEL)));
       return signal;
     }
     final var connectionInformation = comp.getEnd(endIndex);
@@ -570,8 +621,7 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
         if (comp.isEndConnected(endIndex)) {
           signal.put(portName, Hdl.getNetName(comp, endIndex, true, theNets));
         } else {
-          // FIXME: hardcoded string
-          Reporter.report.addSevereWarning("Found an unconnected output pin, tied the pin to ground!");
+          Reporter.report.addSevereWarning(S.get("HdlUnconnectedOutputPinWarning"));
           signal.put(portName, Hdl.zeroBit());
         }
       }
@@ -588,8 +638,7 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       if (!connected) {
         /* Here is the easy case, the bus is unconnected */
         if (!isInputConnection) {
-          // FIXME: hardcoded string
-          Reporter.report.addSevereWarning("Found an unconnected output bus pin, tied all the pin bits to ground!");
+          Reporter.report.addSevereWarning(S.get("HdlUnconnectedOutputBusWarning"));
           signal.put(portName, Hdl.getZeroVector(nrOfBits, true));
         }
       } else {
@@ -612,8 +661,8 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
             if (solderPoint.getParentNet() == null) {
               /* The net is not connected */
               if (isInputConnection) continue;
-              // FIXME: hardcoded string
-              Reporter.report.addSevereWarning(String.format("Found an unconnected output bus pin, tied bit %d to ground!", bit));
+              Reporter.report.addSevereWarning(
+                  S.get("HdlUnconnectedOutputBusBitWarning", bit));
               signal.put(bitConnection, Hdl.zeroBit());
             } else {
               /*

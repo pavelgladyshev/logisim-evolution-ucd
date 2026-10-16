@@ -9,6 +9,8 @@
 
 package com.cburch.logisim.fpga.hdlgenerator;
 
+import static com.cburch.logisim.fpga.Strings.S;
+
 import com.cburch.logisim.circuit.Circuit;
 import com.cburch.logisim.circuit.CircuitHdlGeneratorFactory;
 import com.cburch.logisim.data.AttributeSet;
@@ -357,9 +359,7 @@ public class ToplevelHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
   private static Map<String, String> getToplevelWires(MapComponent component) {
     final var wires = new HashMap<String, String>();
     if (component.getNrOfPins() <= 0) {
-      // FIXME: hardcoded string
-      Reporter.report.addError(
-          "BUG: Found a component with no pins. Please report this occurance!");
+      Reporter.report.addError(S.get("HdlToplevelComponentNoPinsError"));
       return wires;
     }
     for (var i = 0; i < component.getNrOfPins(); i++) {

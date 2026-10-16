@@ -163,8 +163,20 @@ public class PortIo extends InstanceFactory {
     @Override
     public void mouseReleased(InstanceState state, MouseEvent e) {
       final var loc = state.getInstance().getLocation();
-      final var cx = e.getX() - loc.getX() - 7 + 2;
-      final var cy = e.getY() - loc.getY() - 25 + 2;
+      final var facing = state.getAttributeValue(StdAttr.FACING);
+      var cx = e.getX() - loc.getX(); // Move to component location.
+      var cy = e.getY() - loc.getY();
+      if (facing == Direction.NORTH || facing == Direction.SOUTH) { // Rotate quarter circle.
+        final var tmpX = cx;
+        cx = -cy;
+        cy = tmpX;
+      }
+      if (facing == Direction.WEST || facing == Direction.SOUTH) { // Rotate half circle.
+        cx = -cx;
+        cy = -cy;
+      }
+      cx = cx - 7 + 2; // Move to start of matrix.
+      cy = cy - 25 + 2;
       if (cx < 0 || cy < 0) return;
       final var i = cx / 10;
       final var j = cy / 10;
@@ -246,6 +258,7 @@ public class PortIo extends InstanceFactory {
         .setValue(
             StdAttr.MAPINFO,
             new ComponentMapInformationContainer(0, 0, dipSize, null, null, getLabels(dipSize)));
+    updateMapInfo(instance);
   }
 
   private void updatePorts(Instance instance) {
@@ -287,7 +300,7 @@ public class PortIo extends InstanceFactory {
         x += dx;
         y += dy;
       }
-      if (dir == INPUT || dir == INOUTSE || dir == INOUTME) {
+      if (dir == OUTPUT || dir == INOUTSE || dir == INOUTME) {
         ps[p] = new Port(x, y, Port.INPUT, e);
         ps[p].setToolTip(S.getter("pioOutputs", range));
         p++;
@@ -302,7 +315,7 @@ public class PortIo extends InstanceFactory {
     while (n > 0) {
       final var e = Math.min(n, BitWidth.MAXWIDTH);
       String range = "[" + i + "..." + (i + e - 1) + "]";
-      if (dir == OUTPUT || dir == INOUTSE || dir == INOUTME) {
+      if (dir == INPUT || dir == INOUTSE || dir == INOUTME) {
         ps[p] = new Port(x, y, Port.OUTPUT, e);
         ps[p].setToolTip(S.getter("pioInputs", range));
         p++;
@@ -335,24 +348,7 @@ public class PortIo extends InstanceFactory {
       instance.recomputeBounds();
       updatePorts(instance);
       instance.computeLabelTextField(Instance.AVOID_BOTTOM);
-      ComponentMapInformationContainer map = instance.getAttributeValue(StdAttr.MAPINFO);
-      if (map != null) {
-        final var nrPins = instance.getAttributeValue(ATTR_SIZE).getWidth();
-        var inputs = 0;
-        var outputs = 0;
-        var ios = 0;
-        final var labels = getLabels(nrPins);
-        if (instance.getAttributeValue(ATTR_DIR) == INPUT) {
-          inputs = nrPins;
-        } else if (instance.getAttributeValue(ATTR_DIR) == OUTPUT) {
-          outputs = nrPins;
-        } else {
-          ios = nrPins;
-        }
-        map.setNrOfInports(inputs, labels);
-        map.setNrOfOutports(outputs, labels);
-        map.setNrOfInOutports(ios, labels);
-      }
+      updateMapInfo(instance);
       if (attr == ATTR_DIR) {
         // we have to reset simulatio, as otherwise strange things can happen.
         final var stateImpl = instance.getComponent().getInstanceStateImpl();
@@ -368,6 +364,26 @@ public class PortIo extends InstanceFactory {
         simulator.reset();
       }
     }
+  }
+
+  private static void updateMapInfo(Instance instance) {
+    ComponentMapInformationContainer map = instance.getAttributeValue(StdAttr.MAPINFO);
+    if (map == null) return;
+    final var nrPins = instance.getAttributeValue(ATTR_SIZE).getWidth();
+    var inputs = 0;
+    var outputs = 0;
+    var ios = 0;
+    final var labels = getLabels(nrPins);
+    if (instance.getAttributeValue(ATTR_DIR) == INPUT) {
+      inputs = nrPins;
+    } else if (instance.getAttributeValue(ATTR_DIR) == OUTPUT) {
+      outputs = nrPins;
+    } else {
+      ios = nrPins;
+    }
+    map.setNrOfInports(inputs, labels);
+    map.setNrOfOutports(outputs, labels);
+    map.setNrOfInOutports(ios, labels);
   }
 
   @Override

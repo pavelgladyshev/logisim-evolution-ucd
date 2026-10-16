@@ -43,6 +43,7 @@ public class HdlParameters {
     private long parameterValue = -1;
     private long multiplyValue = 1;
     private long offsetValue = 0;
+    private int fixedVectorWidth = -1;
     private final List<Attribute<?>> attributesList = new ArrayList<>();
     private Map<AttributeOption, Integer> attributeOptionMap = new HashMap<>();
     private final Attribute<BitWidth> attributeToCheckForBus;
@@ -246,12 +247,24 @@ public class HdlParameters {
       return isIntParameter;
     }
 
+    /** A vector whose width comes from a component attribute (a gate's input mask is per module anyway). */
+    public boolean hasInstanceVectorWidth() {
+      return !isIntParameter && fixedVectorWidth <= 0 && myMapType != MAP_GATE_INPUT_BUBLE;
+    }
+
     public void setVectorRepresentation() {
       isIntParameter = false;
     }
 
+    public void setVectorRepresentation(int width) {
+      if (width < 1) throw new IllegalArgumentException("Vector width must be positive");
+      isIntParameter = false;
+      fixedVectorWidth = width;
+    }
+
     public int getNumberOfVectorBits(AttributeSet attrs) {
       if (isIntParameter) throw new UnsupportedOperationException("Parameter is not a bit vector!");
+      if (fixedVectorWidth > 0) return fixedVectorWidth;
       var nrOfVectorBits = -1;
       if (myMapType == MAP_GATE_INPUT_BUBLE) {
         if (!attrs.containsAttribute(GateAttributes.ATTR_INPUTS)) throw new UnsupportedOperationException("Component has not the required attribute");
@@ -348,6 +361,21 @@ public class HdlParameters {
   }
 
   /**
+   * Constructs a fixed-width vector parameter with a zero placeholder value. Generators that need
+   * to derive an instance-specific value can replace the placeholder in their parameter map.
+   *
+   * @param name Name used for the parameter
+   * @param id Identifier of the parameter (must be negative)
+   * @param width Fixed vector width in bits
+   */
+  public HdlParameters addVectorWithFixedWidth(String name, int id, int width) {
+    final var newParameter = new ParameterInfo(name, id, MAP_CONSTANT, 0L);
+    newParameter.setVectorRepresentation(width);
+    myParameters.add(newParameter);
+    return this;
+  }
+
+  /**
    * Constructs a conditional module parameter where the map-value of the parameter is the Value stored in
    * the attribute StdAttr.BitWidth. This parameter is only used if the StdAttr.BitWidth > 1
    *
@@ -390,6 +418,13 @@ public class HdlParameters {
       if (id == parameter.getParameterId(attrs)) return parameter.getNumberOfVectorBits(attrs);
     }
     throw new UnsupportedOperationException("Parameter not found");
+  }
+
+  public boolean hasInstanceVectorWidth(int id, AttributeSet attrs) {
+    for (final var parameter : myParameters) {
+      if (id == parameter.getParameterId(attrs)) return parameter.hasInstanceVectorWidth();
+    }
+    return false;
   }
 
   public boolean isPresentedByInteger(int id, AttributeSet attrs) {

@@ -12,9 +12,12 @@ package com.cburch.logisim.fpga.designrulecheck;
 import com.cburch.logisim.circuit.Circuit;
 import com.cburch.logisim.circuit.Splitter;
 import com.cburch.logisim.circuit.Wire;
+import com.cburch.logisim.comp.Component;
 import com.cburch.logisim.instance.InstanceComponent;
+import com.cburch.logisim.instance.StdAttr;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.TreeSet;
 
 public class SimpleDrcContainer {
 
@@ -42,12 +45,12 @@ public class SimpleDrcContainer {
     this.suppressCount = false;
   }
 
-  public SimpleDrcContainer(String message, int level, boolean supressCount) {
+  public SimpleDrcContainer(String message, int level, boolean suppressCount) {
     this.message = message;
     this.severityLevel = level;
     this.markType = MARK_NONE;
     this.listNumber = 0;
-    this.suppressCount = supressCount;
+    this.suppressCount = suppressCount;
   }
 
   public SimpleDrcContainer(Object message, int level) {
@@ -58,12 +61,12 @@ public class SimpleDrcContainer {
     this.suppressCount = false;
   }
 
-  public SimpleDrcContainer(Object message, int level, boolean supressCount) {
+  public SimpleDrcContainer(Object message, int level, boolean suppressCount) {
     this.message = message.toString();
     this.severityLevel = level;
     this.markType = MARK_NONE;
     this.listNumber = 0;
-    this.suppressCount = supressCount;
+    this.suppressCount = suppressCount;
   }
 
   public SimpleDrcContainer(Circuit circ, Object message, int level, int markMask) {
@@ -75,18 +78,49 @@ public class SimpleDrcContainer {
     this.suppressCount = false;
   }
 
-  public SimpleDrcContainer(Circuit circ, Object message, int level, int markMask, boolean supressCount) {
+  public SimpleDrcContainer(Circuit circ, Object message, int level, int markMask, boolean suppressCount) {
     this.message = message.toString();
     this.severityLevel = level;
     this.myCircuit = circ;
     this.markType = markMask;
     this.listNumber = 0;
-    this.suppressCount = supressCount;
+    this.suppressCount = suppressCount;
   }
+
+  private static final int MAX_LISTED_COMPONENTS = 5;
 
   @Override
   public String toString() {
-    return message;
+    final var marked = describeMarkedComponents();
+    return marked.isEmpty() ? message : message + " " + marked;
+  }
+
+  /** The components a message is about, e.g. "[Controlled Buffer (240,310), RAM "memory" (400,120)]". */
+  private String describeMarkedComponents() {
+    if (!isDrcInfoPresent()) return "";
+    final var names = new TreeSet<String>();
+    for (final var obj : drcComponents) {
+      if (obj instanceof Wire wire) {
+        names.add(wire.getEnd0() + "-" + wire.getEnd1());
+      } else if (obj instanceof Component comp) {
+        final var attrs = comp.getAttributeSet();
+        final var label = attrs.containsAttribute(StdAttr.LABEL) ? attrs.getValue(StdAttr.LABEL) : null;
+        names.add(comp.getFactory().getDisplayName()
+            + (label == null || label.isEmpty() ? "" : " \"" + label + "\"") + " " + comp.getLocation());
+      }
+    }
+    if (names.isEmpty()) return "";
+    final var listed = new StringBuilder();
+    var count = 0;
+    for (final var name : names) {
+      if (count++ == MAX_LISTED_COMPONENTS) {
+        listed.append(", +").append(names.size() - MAX_LISTED_COMPONENTS);
+        break;
+      }
+      if (listed.length() > 0) listed.append(", ");
+      listed.append(name);
+    }
+    return "[" + listed + "]";
   }
 
   public int getSeverity() {
@@ -120,7 +154,7 @@ public class SimpleDrcContainer {
     listNumber = number;
   }
 
-  public boolean getSupressCount() {
+  public boolean getSuppressCount() {
     return suppressCount;
   }
 

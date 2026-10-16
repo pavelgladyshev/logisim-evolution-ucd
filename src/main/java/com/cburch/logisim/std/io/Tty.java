@@ -11,8 +11,8 @@ package com.cburch.logisim.std.io;
 
 import static com.cburch.logisim.std.Strings.S;
 
-import com.cburch.logisim.circuit.appear.DynamicElement;
 import com.cburch.logisim.circuit.appear.DynamicElement.Path;
+import com.cburch.logisim.circuit.appear.DynamicElement;
 import com.cburch.logisim.circuit.appear.DynamicElementProvider;
 import com.cburch.logisim.data.Attribute;
 import com.cburch.logisim.data.AttributeSet;
@@ -20,6 +20,7 @@ import com.cburch.logisim.data.Attributes;
 import com.cburch.logisim.data.Bounds;
 import com.cburch.logisim.data.Direction;
 import com.cburch.logisim.data.Value;
+import com.cburch.logisim.fpga.data.ComponentMapInformationContainer;
 import com.cburch.logisim.gui.icons.TtyIcon;
 import com.cburch.logisim.instance.Instance;
 import com.cburch.logisim.instance.InstanceFactory;
@@ -31,6 +32,8 @@ import com.cburch.logisim.prefs.AppPreferences;
 import com.cburch.logisim.util.GraphicsUtil;
 import java.awt.Color;
 import java.awt.Font;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Tty extends InstanceFactory implements DynamicElementProvider {
   /**
@@ -50,11 +53,11 @@ public class Tty extends InstanceFactory implements DynamicElementProvider {
     else return 4;
   }
 
-  private static final int CLR = 0;
-  private static final int CK = 1;
+  static final int CLR = 0;
+  static final int CK = 1;
 
-  private static final int WE = 2;
-  private static final int IN = 3;
+  static final int WE = 2;
+  static final int IN = 3;
   public static final int BORDER = 6;
   public static final int ROW_HEIGHT = 15;
 
@@ -70,16 +73,22 @@ public class Tty extends InstanceFactory implements DynamicElementProvider {
       Attributes.forIntegerRange("rows", S.getter("ttyRowsAttr"), 1, 48);
 
   public Tty() {
-    super(_ID, S.getter("ttyComponent"));
+    // On an FPGA the TTY is a serial transmitter whose output "TX" is mapped to the board's UART.
+    super(_ID, S.getter("ttyComponent"), new TtyHdlGeneratorFactory(), true, false);
     setAttributes(
         new Attribute[] {
           ATTR_ROWS,
           ATTR_COLUMNS,
           StdAttr.EDGE_TRIGGER,
           IoLibrary.ATTR_COLOR,
-          IoLibrary.ATTR_BACKGROUND
+          IoLibrary.ATTR_BACKGROUND,
+          StdAttr.LABEL,
+          StdAttr.MAPINFO
         },
-        new Object[] {8, 32, StdAttr.TRIG_RISING, Color.BLACK, DEFAULT_BACKGROUND});
+        new Object[] {
+          8, 32, StdAttr.TRIG_RISING, Color.BLACK, DEFAULT_BACKGROUND, "",
+          new ComponentMapInformationContainer(0, 1, 0, null, new ArrayList<>(List.of("TX")), null)
+        });
     setIcon(new TtyIcon());
 
     final var ps = new Port[4];

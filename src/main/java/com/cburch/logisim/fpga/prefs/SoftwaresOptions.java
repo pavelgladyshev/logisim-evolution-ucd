@@ -14,9 +14,12 @@ import static com.cburch.logisim.fpga.Strings.S;
 import com.cburch.logisim.fpga.gui.FpgaCommander;
 import com.cburch.logisim.fpga.settings.VendorSoftware;
 import com.cburch.logisim.gui.prefs.OptionsPanel;
+import com.cburch.logisim.gui.prefs.PrefOption;
+import com.cburch.logisim.gui.prefs.PrefOptionList;
 import com.cburch.logisim.gui.prefs.PreferencesFrame;
 import com.cburch.logisim.prefs.AppPreferences;
 import com.cburch.logisim.util.Softwares;
+import com.cburch.logisim.util.StringGetter;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -50,6 +53,10 @@ public class SoftwaresOptions extends OptionsPanel {
         FpgaCommander.selectToolPath(VendorSoftware.VENDOR_VIVADO);
       } else if (source == openfpgaPathButton) {
         FpgaCommander.selectToolPath(VendorSoftware.VENDOR_OPENFPGA);
+      } else if (source == openxc7PathButton) {
+        FpgaCommander.selectToolPath(VendorSoftware.VENDOR_OPENXC7);
+      } else if (source == openxc7ForXilinxCheckBox) {
+        AppPreferences.OpenXc7ForXilinx.setBoolean(openxc7ForXilinxCheckBox.isSelected());
       }
     }
 
@@ -69,6 +76,10 @@ public class SoftwaresOptions extends OptionsPanel {
         vivadoPathField.setText(AppPreferences.VivadoToolPath.get());
       } else if (property.equals(AppPreferences.OpenFpgaToolPath.getIdentifier())) {
         openfpgaPathField.setText(AppPreferences.OpenFpgaToolPath.get());
+      } else if (property.equals(AppPreferences.OpenXc7ToolPath.getIdentifier())) {
+        openxc7PathField.setText(AppPreferences.OpenXc7ToolPath.get());
+      } else if (property.equals(AppPreferences.OpenXc7ForXilinx.getIdentifier())) {
+        openxc7ForXilinxCheckBox.setSelected(AppPreferences.OpenXc7ForXilinx.getBoolean());
       }
     }
   }
@@ -78,6 +89,15 @@ public class SoftwaresOptions extends OptionsPanel {
   private final MyListener myListener = new MyListener();
 
   private final JCheckBox questaValidationCheckBox = new JCheckBox();
+  private final PrefOptionList vhdlStandard =
+      new PrefOptionList(
+          AppPreferences.VHDL_STANDARD,
+          S.getter("softwaresVhdlStandardLabel"),
+          new PrefOption[] {
+              new PrefOption(AppPreferences.VHDL_STANDARD_1993, fixedString("VHDL-1993")),
+              new PrefOption(AppPreferences.VHDL_STANDARD_2002, fixedString("VHDL-2002")),
+              new PrefOption(AppPreferences.VHDL_STANDARD_2008, fixedString("VHDL-2008")),
+          });
   private final JLabel questaPathLabel = new JLabel();
   private final JTextField questaPathField = new JTextField(40);
   private final JButton questaPathButton = new JButton();
@@ -93,6 +113,10 @@ public class SoftwaresOptions extends OptionsPanel {
   private final JLabel openfpgaPathLabel = new JLabel();
   private final JTextField openfpgaPathField = new JTextField(40);
   private final JButton openfpgaPathButton = new JButton();
+  private final JLabel openxc7PathLabel = new JLabel();
+  private final JTextField openxc7PathField = new JTextField(40);
+  private final JButton openxc7PathButton = new JButton();
+  private final JCheckBox openxc7ForXilinxCheckBox = new JCheckBox();
 
   public SoftwaresOptions(PreferencesFrame window) {
     super(window);
@@ -103,6 +127,8 @@ public class SoftwaresOptions extends OptionsPanel {
     isePathButton.addActionListener(myListener);
     vivadoPathButton.addActionListener(myListener);
     openfpgaPathButton.addActionListener(myListener);
+    openxc7PathButton.addActionListener(myListener);
+    openxc7ForXilinxCheckBox.addActionListener(myListener);
     AppPreferences.getPrefs().addPreferenceChangeListener(myListener);
 
     final var sep = new JSeparator(JSeparator.HORIZONTAL);
@@ -126,6 +152,15 @@ public class SoftwaresOptions extends OptionsPanel {
     gbc.gridwidth = 3;
     gbc.fill = GridBagConstraints.NONE;
     add(questaValidationCheckBox, gbc);
+
+    gbc.gridx = 0;
+    gbc.gridy = gridY++;
+    gbc.gridwidth = 1;
+    gbc.fill = GridBagConstraints.NONE;
+    add(vhdlStandard.getJLabel(), gbc);
+    gbc.gridx = 1;
+    gbc.gridwidth = 2;
+    add(vhdlStandard.getJComboBox(), gbc);
 
     gbc.gridx = 0;
     gbc.gridy = gridY++;
@@ -253,6 +288,38 @@ public class SoftwaresOptions extends OptionsPanel {
     gbc.fill = GridBagConstraints.NONE;
     add(openfpgaPathButton, gbc);
 
+    gbc.gridx = 0;
+    gbc.gridy = gridY++;
+    gbc.gridwidth = 4;
+    gbc.weightx = 1.0;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    add(new JSeparator(JSeparator.HORIZONTAL), gbc);
+
+    gbc.gridx = 0;
+    gbc.gridy = gridY++;
+    gbc.gridwidth = 4;
+    gbc.weightx = 1.0;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    add(openxc7PathLabel, gbc);
+
+    gbc.gridx = 0;
+    gbc.gridy = gridY;
+    gbc.gridwidth = 2;
+    gbc.weightx = 1.0;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    add(openxc7PathField, gbc);
+
+    gbc.gridx = 2;
+    gbc.gridy = gridY++;
+    gbc.fill = GridBagConstraints.NONE;
+    add(openxc7PathButton, gbc);
+
+    gbc.gridx = 0;
+    gbc.gridy = gridY++;
+    gbc.gridwidth = 3;
+    gbc.fill = GridBagConstraints.NONE;
+    add(openxc7ForXilinxCheckBox, gbc);
+
     questaValidationCheckBox.setSelected(AppPreferences.QUESTA_VALIDATION.getBoolean());
 
     quartusPathField.setText(AppPreferences.QuartusToolPath.get());
@@ -265,6 +332,9 @@ public class SoftwaresOptions extends OptionsPanel {
     questaPathField.setEditable(false);
     openfpgaPathField.setText(AppPreferences.OpenFpgaToolPath.get());
     openfpgaPathField.setEditable(false);
+    openxc7PathField.setText(AppPreferences.OpenXc7ToolPath.get());
+    openxc7PathField.setEditable(false);
+    openxc7ForXilinxCheckBox.setSelected(AppPreferences.OpenXc7ForXilinx.getBoolean());
   }
 
   @Override
@@ -280,6 +350,7 @@ public class SoftwaresOptions extends OptionsPanel {
   @Override
   public void localeChanged() {
     questaValidationCheckBox.setText(S.get("softwaresQuestaValidationLabel"));
+    vhdlStandard.getJLabel().setText(S.get("softwaresVhdlStandardLabel") + " ");
     questaPathButton.setText(S.get("softwaresQuestaPathButton"));
     questaPathLabel.setText(S.get("softwaresQuestaPathLabel"));
     quartusPathButton.setText(S.get("softwaresQuestaPathButton"));
@@ -290,5 +361,17 @@ public class SoftwaresOptions extends OptionsPanel {
     vivadoPathLabel.setText(S.get("VivadoToolPath"));
     openfpgaPathButton.setText(S.get("softwaresQuestaPathButton"));
     openfpgaPathLabel.setText(S.get("openfpgaToolPath"));
+    openxc7PathButton.setText(S.get("softwaresQuestaPathButton"));
+    openxc7PathLabel.setText(S.get("openxc7ToolPath"));
+    openxc7ForXilinxCheckBox.setText(S.get("openxc7ForXilinx"));
+  }
+
+  private static StringGetter fixedString(String value) {
+    return new StringGetter() {
+      @Override
+      public String toString() {
+        return value;
+      }
+    };
   }
 }

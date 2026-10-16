@@ -22,8 +22,8 @@
       <PortIo BiDirPinSet="K2" FPGAPinIOStandard="LVCMOS33" Label="PIO12" Rect_x_y_w_h="347,77,18,22"/>
       <PortIo BiDirPinSet="L1" FPGAPinIOStandard="LVCMOS33" Label="PIO13" Rect_x_y_w_h="317,75,23,24"/>
       <PortIo BiDirPinSet="L2" FPGAPinIOStandard="LVCMOS33" Label="PIO14" Rect_x_y_w_h="294,77,18,21"/>
-      <PortIo BiDirPinSet="G3" Label="AIN15" Rect_x_y_w_h="271,76,18,23"/>
-      <PortIo BiDirPinSet="H2" Label="AIN16" Rect_x_y_w_h="241,76,21,22"/>
+      <PortIo BiDirPinSet="G3" FPGAPinIOStandard="LVCMOS33" Label="AIN15" Rect_x_y_w_h="271,76,18,23"/>
+      <PortIo BiDirPinSet="H2" FPGAPinIOStandard="LVCMOS33" Label="AIN16" Rect_x_y_w_h="241,76,21,22"/>
       <PortIo BiDirPinSet="N3" FPGAPinIOStandard="LVCMOS33" Label="PIO18" Rect_x_y_w_h="189,76,20,23"/>
       <PortIo BiDirPinSet="M1" FPGAPinIOStandard="LVCMOS33" Label="PIO17" Rect_x_y_w_h="215,76,19,24"/>
       <PortIo BiDirPinSet="P3" FPGAPinIOStandard="LVCMOS33" Label="PIO19" Rect_x_y_w_h="165,76,17,23"/>

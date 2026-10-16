@@ -1,0 +1,23 @@
+dff D_Flip-Flop clock=1 rare=4,5
+dffF D_Flip-Flop trigger=falling clock=1 rare=4,5
+tff T_Flip-Flop clock=1 rare=4,5
+jkff J-K_Flip-Flop clock=2 rare=5,6
+srff S-R_Flip-Flop clock=2 rare=5,6
+reg16 Register width=16 clock=2 rare=3
+reg7 Register width=7 clock=2 rare=3
+reg1 Register width=1 clock=2 rare=3
+regF Register width=8 trigger=falling clock=2 rare=3
+cnt7 Counter width=7 max=0x7f clock=2 rare=3
+cnt4 Counter width=4 max=0x9 clock=2 rare=3
+cnt4stay Counter width=4 max=0x9 ongoal=stay clock=2 rare=3
+cnt4cont Counter width=4 max=0x9 ongoal=continue clock=2 rare=3
+cnt4load Counter width=4 max=0x9 ongoal=load clock=2 rare=3
+rnd8 Random width=8 seed=42 clock=1 rare=3
+sreg Shift_Register width=4 length=3 parallel=true clock=2 rare=3
+ram77 RAM addrWidth=7 dataWidth=7 databus=bibus clock=ram
+ram_beag RAM addrWidth=12 dataWidth=16 databus=bibus enables=line clock=ram
+cnt4free Counter width=4 max=0xf clock=2 rare=3 skip=4,5,6
+cnt8ud Counter width=8 max=0xc8 clock=2 rare=3 skip=6
+ramasync RAM addrWidth=3 dataWidth=8 databus=bibus asyncread=true clock=ram
+ram16be RAM addrWidth=4 dataWidth=16 databus=bibus enables=byte clock=ram
+ramraw RAM addrWidth=4 dataWidth=8 databus=bibus readbehav=raw clock=ram

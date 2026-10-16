@@ -1,0 +1,3 @@
+build/
+# the repository ignores *.py; these test scripts belong here
+!*.py

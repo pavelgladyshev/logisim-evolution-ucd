@@ -37,9 +37,56 @@ import com.cburch.logisim.vhdl.sim.VhdlSimulatorTop;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Iterator;
 import javax.swing.JFileChooser;
 
 public class Project {
+  public void discardAllEdits() {
+    undoLog.clear();
+    redoLog.clear();
+    undoMods = 0;
+    fireEvent(new ProjectEvent(ProjectEvent.ACTION_COMPLETE, this, null));
+  }
+
+  public List<Action> getRedoActions() {
+    List<Action> actions = new ArrayList<>();
+    Iterator<ActionData> iter = redoLog.descendingIterator();
+    while (iter.hasNext()) {
+      actions.add(iter.next().action);
+    }
+    return actions;
+  }
+
+  public void redoUpTo(Action targetAction) {
+    Action lastRedoneAction = null;
+    while (lastRedoneAction != targetAction && !redoLog.isEmpty()) {
+      redoAction();
+      if (!undoLog.isEmpty()) {
+        lastRedoneAction = undoLog.getLast().action;
+      }
+    }
+  }
+
+  public List<Action> getUndoActions() {
+    List<Action> actions = new ArrayList<>();
+    Iterator<ActionData> iter = undoLog.descendingIterator();
+    while (iter.hasNext()) {
+      actions.add(iter.next().action);
+    }
+    return actions;
+  }
+
+  public void undoUpTo(Action targetAction) {
+    Action lastUndoneAction = null;
+    while (lastUndoneAction != targetAction && !undoLog.isEmpty()) {
+      undoAction();
+      if (!redoLog.isEmpty()) {
+        lastUndoneAction = redoLog.getLast().action;
+      }
+    }
+  }
+
   private static class ActionData {
     final CircuitState circuitState;
     final HdlModel hdlModel;
@@ -81,6 +128,7 @@ public class Project {
   }
 
   private static final int MAX_UNDO_SIZE = 64;
+  private static final int MAX_REDO_SIZE = 64;
 
   private final Simulator simulator = new Simulator();
   private VhdlSimulatorTop vhdlSimulator = null;
@@ -481,12 +529,8 @@ public class Project {
         for (final var l : circuitListeners) {
           newCircuit.addCircuitListener(l);
         }
-        final var circTickFrequency = newCircuit.getTickFrequency();
-        final var simTickFrequency = simulator.getTickFrequency();
-        if (circTickFrequency < 0) {
-          newCircuit.setTickFrequency(simTickFrequency);
-        } else if (circTickFrequency != simTickFrequency) {
-          simulator.setTickFrequency(circTickFrequency);
+        if (circuitState.getParentState() == null && newCircuit.getTickFrequency() < 0) {
+          newCircuit.setTickFrequency(simulator.getTickFrequency());
         }
       }
       if (oldCircuit != null) oldCircuit.displayChanged();
@@ -594,6 +638,9 @@ public class Project {
   public void undoAction() {
     if (CollectionUtil.isNotEmpty(undoLog)) {
       redoLog.addLast(undoLog.getLast());
+      while (redoLog.size() > MAX_REDO_SIZE) {
+        redoLog.removeFirst();
+      }
       final var data = undoLog.removeLast();
       if (data.circuitState != null) setCircuitState(data.circuitState);
       else if (data.hdlModel != null) setCurrentHdlModel(data.hdlModel);

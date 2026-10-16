@@ -9,6 +9,8 @@
 
 package com.cburch.logisim.fpga.hdlgenerator;
 
+import static com.cburch.logisim.fpga.Strings.S;
+
 import com.cburch.logisim.data.AttributeSet;
 import com.cburch.logisim.fpga.designrulecheck.CorrectLabel;
 import com.cburch.logisim.fpga.designrulecheck.Netlist;
@@ -85,6 +87,8 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
 
       final var typedWires = myTypedWires.getTypedWires();
       final var mySignals = new HashMap<String, String>();
+      // registers and memories start at 0, as in a new simulation and in the FPGA
+      final var myInitialValues = new HashMap<String, String>();
       // first we gather some info on the wire names
       var maxNameLength = 0;
       for (final var wire : myWires.wireKeySet()) {
@@ -93,18 +97,24 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
       }
       for (final var reg : myWires.registerKeySet()) {
         maxNameLength = Math.max(maxNameLength, reg.length());
-        mySignals.put(reg, getTypeIdentifier(myWires.get(reg), attrs));
+        final var type = getTypeIdentifier(myWires.get(reg), attrs);
+        mySignals.put(reg, type);
+        myInitialValues.put(reg, type.contains("std_logic_vector") ? "(OTHERS => '0')" : "'0'");
       }
       for (final var wire : typedWires.keySet()) {
         maxNameLength = Math.max(maxNameLength, wire.length());
         mySignals.put(wire, typedWires.get(wire));
+        final var initialValue = myTypedWires.getVhdlInitialValue(wire);
+        if (initialValue != null) myInitialValues.put(wire, initialValue);
       }
       // now we add them
       if (maxNameLength > 0) contents.addRemarkBlock("All used signals are defined here");
       final var sortedSignals = new TreeSet<>(mySignals.keySet());
-      for (final var signal : sortedSignals)
-        contents.add("   {{signal}} {{1}}{{2}} : {{3}};", signal, " ".repeat(maxNameLength - signal.length()),
-            mySignals.get(signal));
+      for (final var signal : sortedSignals) {
+        final var initialValue = myInitialValues.get(signal);
+        contents.add("   {{signal}} {{1}}{{2}} : {{3}}{{4}};", signal, " ".repeat(maxNameLength - signal.length()),
+            mySignals.get(signal), initialValue == null ? "" : " := " + initialValue);
+      }
       if (maxNameLength > 0) contents.empty();
       contents.add("{{begin}}")
           .add(getModuleFunctionality(theNetlist, attrs).getWithIndent())
@@ -132,9 +142,17 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
         body.empty().addRemarkBlock("Here all module parameters are defined with a dummy value");
         final var parameters = new TreeSet<String>();
         for (final var paramId : myParametersList.keySet(attrs)) {
-          // For verilog we specify a maximum vector, this seems the best way to do it
-          final var paramName = myParametersList.isPresentedByInteger(paramId, attrs)
-              ? myParametersList.get(paramId, attrs) : String.format("[64:0] %s", myParametersList.get(paramId, attrs));
+          // Verilog vector parameters get their width in the module declaration, except those whose width
+          // depends on the instance (a module is shared by all widths): they take the width of each
+          // instance's value.
+          final var paramName =
+              myParametersList.isPresentedByInteger(paramId, attrs)
+                      || myParametersList.hasInstanceVectorWidth(paramId, attrs)
+                  ? myParametersList.get(paramId, attrs)
+                  : String.format(
+                      "[%d:0] %s",
+                      myParametersList.getNumberOfVectorBits(paramId, attrs) - 1,
+                      myParametersList.get(paramId, attrs));
           parameters.add(paramName);
         }
         for (final var param : parameters)
@@ -174,17 +192,10 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
         body.empty().addRemarkBlock("The registers are defined here");
         if (!getVerilogSignalSet("reg", regs, attrs, false, body)) return null;
       }
-      final var typedWires = myTypedWires.getTypedWires();
+      final var typedWires = myTypedWires.getVerilogDeclarations();
       if (!typedWires.isEmpty()) {
         body.empty().addRemarkBlock("The type defined signals are defined here");
-        final var sortedWires = new TreeSet<>(typedWires.keySet());
-        var maxNameLength = 0;
-        for (final var wire : sortedWires)
-          maxNameLength = Math.max(maxNameLength, typedWires.get(wire).length());
-        for (final var wire : sortedWires) {
-          final var typeName = typedWires.get(wire);
-          body.add(LineBuffer.format("{{1}}{{2}} {{3}};", typeName, " ".repeat(maxNameLength - typeName.length()), wire));
-        }
+        for (final var declaration : typedWires) body.add(declaration);
       }
       body.empty()
           .addRemarkBlock("The module functionality is described here")
@@ -222,10 +233,9 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
     final var compName = StringUtil.isNotEmpty(name) ? name : componentHdlName;
     final var thisInstanceIdentifier = getInstanceIdentifier(componentInfo, componentId);
     final var oneLine = new StringBuilder();
-    if (componentInfo == null) parameterMap.putAll(myParametersList.getMaps(null));
+    if (componentInfo == null) parameterMap.putAll(getParameterMap(null));
     else if (componentInfo instanceof netlistComponent comp) {
-      final var attrs = comp.getComponent().getAttributeSet();
-      parameterMap.putAll(myParametersList.getMaps(attrs));
+      parameterMap.putAll(getParameterMap(nets, comp));
     }
     var tabLength = 0;
     var first = true;
@@ -324,6 +334,38 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
     return contents;
   }
 
+  /**
+   * Returns the parameter values used for a component instance. Subclasses may override this hook
+   * when a parameter must be derived from several attributes or requires a nontrivial transform.
+   */
+  protected Map<String, String> getParameterMap(AttributeSet attrs) {
+    return myParametersList.getMaps(attrs);
+  }
+
+  /**
+   * Returns the parameter values used for one component instance. Subclasses may override this hook
+   * when a parameter depends on how the instance is connected, not only on its attributes.
+   */
+  protected Map<String, String> getParameterMap(Netlist nets, netlistComponent componentInfo) {
+    return getParameterMap(componentInfo.getComponent().getAttributeSet());
+  }
+
+  /**
+   * Returns the VHDL generic names and declaration types used by this generator. Subclasses may
+   * override this hook when their declarations do not originate from {@link HdlParameters}.
+   */
+  protected Map<String, String> getVhdlParameterDeclarations(AttributeSet attrs) {
+    final var declarations = new TreeMap<String, String>();
+    for (final var generic : myParametersList.keySet(attrs)) {
+      declarations.put(
+          myParametersList.get(generic, attrs),
+          myParametersList.isPresentedByInteger(generic, attrs)
+              ? "{{integer}}"
+              : "std_logic_vector");
+    }
+    return declarations;
+  }
+
   @Override
   public List<String> getEntity(Netlist theNetlist, AttributeSet attrs, String componentName) {
     final var contents = LineBuffer.getHdlBuffer();
@@ -362,6 +404,57 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
     return LineBuffer.getHdlBuffer();
   }
 
+  /**
+   * A net that drives a component's clock input without coming from a Clock component - a counter's
+   * carry, a comparator, a gate - needs a name for the two signals that turn it into a synchronous
+   * enable. Both are derived from the net's own name so that the circuit that declares them and the
+   * component that uses them agree without having to be told.
+   */
+  private static String gatedClockBase(String netName) {
+    return netName.replaceAll("[^A-Za-z0-9_]", "_");
+  }
+
+  /** The register holding the previous value of a gated clock net, for edge detection. */
+  public static String gatedClockSyncName(String netName) {
+    return gatedClockBase(netName) + "GatedReg";
+  }
+
+  /** The one-cycle pulse marking the active edge of a gated clock net. */
+  public static String gatedClockTickName(String netName) {
+    return gatedClockBase(netName) + "GatedTick";
+  }
+
+  /**
+   * The clock inputs of this component that are driven by something other than a Clock component,
+   * mapped to whether the component triggers on the falling edge. Empty in the usual case. The
+   * circuit uses this to declare an edge detector for each such net; see getPortMap, which decides
+   * the same way.
+   */
+  @Override
+  public Map<String, Boolean> getGatedClockNets(Netlist nets, netlistComponent componentInfo) {
+    final var result = new TreeMap<String, Boolean>();
+    if (myPorts.isEmpty()) return result;
+    final var attrs = componentInfo.getComponent().getAttributeSet();
+    if (getWiresPortsDuringHDLWriting) {
+      myWires.removeWires();
+      myTypedWires.clear();
+      myPorts.removePorts();
+      getGenerationTimeWiresPorts(nets, attrs);
+    }
+    for (final var port : myPorts.keySet()) {
+      if (!myPorts.isClock(port)) continue;
+      final var compPinId = myPorts.getComponentPortId(port);
+      if (!componentInfo.isEndConnected(compPinId)) continue;
+      if (!StringUtil.isNullOrEmpty(Hdl.getClockNetName(componentInfo, compPinId, nets))) continue;
+      var clockAttr = attrs.containsAttribute(StdAttr.EDGE_TRIGGER)
+          ? attrs.getValue(StdAttr.EDGE_TRIGGER) : attrs.getValue(StdAttr.TRIGGER);
+      if (clockAttr == null) clockAttr = StdAttr.TRIG_RISING;
+      final var activeLow = StdAttr.TRIG_LOW.equals(clockAttr) || StdAttr.TRIG_FALLING.equals(clockAttr);
+      result.put(Hdl.getNetName(componentInfo, compPinId, true, nets), activeLow);
+    }
+    return result;
+  }
+
   public Map<String, String> getPortMap(Netlist nets, Object mapInfo) {
     final var result = new TreeMap<String, String>();
     if ((mapInfo instanceof netlistComponent componentInfo) && !myPorts.isEmpty()) {
@@ -383,16 +476,16 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
           final var activeLow = StdAttr.TRIG_LOW.equals(clockAttr) || StdAttr.TRIG_FALLING.equals(clockAttr);
           final var compPinId = myPorts.getComponentPortId(port);
           if (!componentInfo.isEndConnected(compPinId)) {
-            // FIXME hard coded string
             Reporter.report.addSevereWarning(
-                String.format("Component \"%s\" in circuit \"%s\" has no clock connection!", compName, nets.getCircuitName()));
+                getClockWarning(
+                    "HDLGenerator_NoClockConnection", compName, nets.getCircuitName()));
             hasClock = false;
           }
           final var clockNetName = Hdl.getClockNetName(componentInfo, compPinId, nets);
           if (StringUtil.isNullOrEmpty(clockNetName)) {
-            // FIXME hard coded string
             Reporter.report.addSevereWarning(
-                String.format("Component \"%s\" in circuit \"%s\" has a gated clock connection!", compName, nets.getCircuitName()));
+                getClockWarning(
+                    "HDLGenerator_GatedClockConnection", compName, nets.getCircuitName()));
             gatedClock = true;
           }
           if (hasClock && !gatedClock && Netlist.isFlipFlop(attrs)) {
@@ -408,14 +501,26 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
           } else if (!hasClock) {
             result.put(myPorts.getTickName(port), Hdl.zeroBit());
             result.put(HdlPorts.CLOCK, Hdl.zeroBit());
-          } else {
+          } else if (!gatedClock) {
             result.put(myPorts.getTickName(port), Hdl.oneBit());
-            if (!gatedClock) {
-              final var clockIndex = activeLow ? ClockHdlGeneratorFactory.INVERTED_DERIVED_CLOCK_INDEX : ClockHdlGeneratorFactory.DERIVED_CLOCK_INDEX;
-              result.put(HdlPorts.CLOCK, LineBuffer.formatHdl("{{1}}{{<}}{{2}}{{>}}", clockNetName, clockIndex));
-            } else {
-              result.put(HdlPorts.CLOCK, Hdl.getNetName(componentInfo, compPinId, true, nets));
-            }
+            final var clockIndex = activeLow ? ClockHdlGeneratorFactory.INVERTED_DERIVED_CLOCK_INDEX : ClockHdlGeneratorFactory.DERIVED_CLOCK_INDEX;
+            result.put(HdlPorts.CLOCK, LineBuffer.formatHdl("{{1}}{{<}}{{2}}{{>}}", clockNetName, clockIndex));
+          } else if (nets.numberOfClockTrees() > 0) {
+            // A gated clock: the net driving this pin is combinational, so using it as a clock puts a
+            // decode glitch on a clock line - a counter's carry can read maxVal for a moment while its
+            // bits are still settling, and the component counts twice. The simulator cannot show that,
+            // being event driven, so it appears only on the board and only sometimes. Instead the net
+            // is edge-detected in the global clock domain and the pulse drives the tick, which is the
+            // same behaviour with nothing gated: see the circuit, which declares the detector.
+            final var gatedNet = Hdl.getNetName(componentInfo, compPinId, true, nets);
+            result.put(myPorts.getTickName(port), gatedClockTickName(gatedNet));
+            result.put(HdlPorts.CLOCK, LineBuffer.formatHdl("{{1}}0{{<}}{{2}}{{>}}",
+                HdlGeneratorFactory.CLOCK_TREE_NAME, ClockHdlGeneratorFactory.GLOBAL_CLOCK_INDEX));
+          } else {
+            // No clock tree at all, so there is no global clock to synchronise to and nothing better
+            // to do than what was done before: drive the component from the gated net itself.
+            result.put(myPorts.getTickName(port), Hdl.oneBit());
+            result.put(HdlPorts.CLOCK, Hdl.getNetName(componentInfo, compPinId, true, nets));
           }
         } else if (myPorts.isFixedMapped(port)) {
           final var fixedMap = myPorts.getFixedMap(port);
@@ -431,6 +536,10 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
       }
     }
     return result;
+  }
+
+  static String getClockWarning(String messageKey, String componentName, String circuitName) {
+    return S.get(messageKey, componentName, circuitName);
   }
 
   @Override
@@ -457,27 +566,25 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
       getGenerationTimeWiresPorts(theNetlist, attrs);
     }
     contents.add(isEntity ? "{{entity}} {{1}} {{is}}" : "{{component}} {{1}}", componentName);
-    if (!myParametersList.isEmpty(attrs)) {
+    final var parameterDeclarations = getVhdlParameterDeclarations(attrs);
+    if (!parameterDeclarations.isEmpty()) {
       // first we build a list with parameters to determine the max. string length
-      final var myParameters = new HashMap<String, Boolean>();
-      for (final var generic : myParametersList.keySet(attrs)) {
-        final var parameterName = myParametersList.get(generic, attrs);
+      for (final var parameterName : parameterDeclarations.keySet()) {
         maxNameLength = Math.max(maxNameLength, parameterName.length());
-        myParameters.put(parameterName, myParametersList.isPresentedByInteger(generic, attrs));
       }
       maxNameLength += 1; // add one space after the longest one
-      final var myGenerics = new TreeSet<>(myParameters.keySet());
+      final var myGenerics = new TreeSet<>(parameterDeclarations.keySet());
       var currentGenericId = 0;
       for (final var thisGeneric : myGenerics) {
         if (currentGenericId == 0) {
           contents.add("   {{generic}} ( {{1}}{{2}}: {{3}}{{4}};", thisGeneric,
               " ".repeat(Math.max(0, maxNameLength - thisGeneric.length())),
-              myParameters.get(thisGeneric) ? "{{integer}}" : "std_logic_vector",
+              parameterDeclarations.get(thisGeneric),
               currentGenericId == (myGenerics.size() - 1) ? " )" : "");
         } else {
           contents.add("             {{1}}{{2}}: {{3}}{{4}};", thisGeneric,
               " ".repeat(Math.max(0, maxNameLength - thisGeneric.length())),
-              myParameters.get(thisGeneric) ? "{{integer}}" : "std_logic_vector",
+              parameterDeclarations.get(thisGeneric),
               currentGenericId == (myGenerics.size() - 1) ? " )" : "");
         }
         currentGenericId++;
@@ -574,8 +681,7 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
         if (myParametersList.containsKey(nrOfBits, attrs)) {
           signalSet.put(input, String.format("%s [%s-1:0]", preamble, myParametersList.get(nrOfBits, attrs)));
         } else {
-          // FIXME: hard coded String
-          Reporter.report.addFatalError("Internal Error, Parameter not present in HDL generation, your HDL code will not work!");
+          Reporter.report.addFatalError(S.get("HdlMissingParameterError"));
           return false;
         }
       } else if (nrOfBits == 0) {

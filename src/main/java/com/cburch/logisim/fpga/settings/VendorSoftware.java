@@ -9,24 +9,28 @@
 
 package com.cburch.logisim.fpga.settings;
 
+import com.cburch.logisim.fpga.data.FpgaClass;
 import com.cburch.logisim.prefs.AppPreferences;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class VendorSoftware {
   public static final char VENDOR_ALTERA = 0;
   public static final char VENDOR_XILINX = 1;
   public static final char VENDOR_VIVADO = 2;
   public static final char VENDOR_OPENFPGA = 3;
+  public static final char VENDOR_OPENXC7 = 4;
   public static final char VENDOR_UNKNOWN = 255;
-  public static final String[] VENDORS = {"Altera", "Xilinx", "Vivado", "openFPGA"};
+  public static final String[] VENDORS = {"Altera", "Xilinx", "Vivado", "openFPGA", "openXC7"};
 
   private static final String XilinxName = "XilinxToolsPath";
   private static final String AlteraName = "AlteraToolsPath";
   private static final String VivadoName = "VivadoToolsPath";
   private static final String OpenFpgaName = "OpenFpgaToolsPath";
+  private static final String OpenXc7Name = "OpenXc7ToolsPath";
   public static final String UNKNOWN = "Unknown";
 
   private final char vendor;
@@ -45,6 +49,7 @@ public class VendorSoftware {
       case VENDOR_XILINX -> AppPreferences.ISEToolPath.get();
       case VENDOR_VIVADO -> AppPreferences.VivadoToolPath.get();
       case VENDOR_OPENFPGA -> AppPreferences.OpenFpgaToolPath.get();
+      case VENDOR_OPENXC7 -> AppPreferences.OpenXc7ToolPath.get();
       default -> "Unknown";
     };
   }
@@ -72,6 +77,7 @@ public class VendorSoftware {
     result.add(VendorSoftware.VENDORS[1]);
     result.add(VendorSoftware.VENDORS[2]);
     result.add(VendorSoftware.VENDORS[3]);
+    result.add(VendorSoftware.VENDORS[4]);
 
     return result;
   }
@@ -82,6 +88,7 @@ public class VendorSoftware {
       case VENDOR_XILINX -> VENDORS[1];
       case VENDOR_VIVADO -> VENDORS[2];
       case VENDOR_OPENFPGA -> VENDORS[3];
+      case VENDOR_OPENXC7 -> VENDORS[4];
       default -> "Unknown";
     };
   }
@@ -92,6 +99,7 @@ public class VendorSoftware {
       case VENDOR_XILINX -> new VendorSoftware(VENDOR_XILINX, XilinxName, load(VENDOR_XILINX));
       case VENDOR_VIVADO -> new VendorSoftware(VENDOR_VIVADO, VivadoName, load(VENDOR_VIVADO));
       case VENDOR_OPENFPGA -> new VendorSoftware(VENDOR_OPENFPGA, OpenFpgaName, load(VENDOR_OPENFPGA));
+      case VENDOR_OPENXC7 -> new VendorSoftware(VENDOR_OPENXC7, OpenXc7Name, load(VENDOR_OPENXC7));
       default -> null;
     };
   }
@@ -102,6 +110,7 @@ public class VendorSoftware {
       case VENDOR_XILINX -> AppPreferences.ISEToolPath.get();
       case VENDOR_VIVADO -> AppPreferences.VivadoToolPath.get();
       case VENDOR_OPENFPGA -> AppPreferences.OpenFpgaToolPath.get();
+      case VENDOR_OPENXC7 -> AppPreferences.OpenXc7ToolPath.get();
       default -> null;
     };
   }
@@ -121,6 +130,9 @@ public class VendorSoftware {
       case VENDOR_OPENFPGA:
         AppPreferences.OpenFpgaToolPath.set(path);
         return true;
+      case VENDOR_OPENXC7:
+        AppPreferences.OpenXc7ToolPath.set(path);
+        return true;
       default:
         return false;
     }
@@ -134,6 +146,10 @@ public class VendorSoftware {
   private static String[] load(char vendor) {
     ArrayList<String> progs = new ArrayList<>();
     String windowsExtension = ".exe";
+    // Not every program is an .exe on Windows: FPGAwars' openXC7 package ships fasm2frames as a .cmd
+    // that runs python on the script in its libexec, so the extension belongs to the program rather
+    // than to the vendor. Anything not named here keeps its vendor's extension.
+    final var windowsExtensions = Map.of("fasm2frames", ".cmd");
     if (vendor == VENDOR_ALTERA) {
       progs.add("quartus_sh");
       progs.add("quartus_pgm");
@@ -157,6 +173,14 @@ public class VendorSoftware {
       progs.add("nextpnr-ecp5");
       progs.add("ecppack");
       progs.add("openFPGALoader");
+    } else if (vendor == VENDOR_OPENXC7) {
+      // One folder (normally ~/openxc7/bin, made by setup_toolchain.sh) with these programs; the chip
+      // databases are in ../chipdb and the Project X-Ray database in ../prjxray-db next to it.
+      progs.add("yosys");
+      progs.add("nextpnr-xilinx");
+      progs.add("fasm2frames");
+      progs.add("xc7frames2bit");
+      progs.add("openFPGALoader");
     }
 
     String[] progsArray = progs.toArray(new String[0]);
@@ -165,13 +189,35 @@ public class VendorSoftware {
     else {
       if (osname.toLowerCase().contains("windows")) {
         for (int i = 0; i < progsArray.length; i++) {
-          progsArray[i] += windowsExtension;
+          progsArray[i] += windowsExtensions.getOrDefault(progsArray[i], windowsExtension);
         }
       }
     }
     return progsArray;
   }
 
+  /**
+   * The toolchain that builds the designs for an FPGA: its vendor's, except that Xilinx 7-series FPGAs are
+   * built with the open-source openXC7 tools when the preferences say so.
+   */
+  public static char getToolchain(FpgaClass fpga) {
+    final var part = fpga.getPart();
+    if (fpga.getVendor() == VENDOR_VIVADO
+        && AppPreferences.OpenXc7ForXilinx.getBoolean()
+        && part != null
+        && part.toLowerCase().startsWith("xc7")) {
+      return VENDOR_OPENXC7;
+    }
+    return fpga.getVendor();
+  }
+
+  /**
+   * Whether all of the vendor's programs are in that folder. The path has to end in a separator
+   * already: correctPath below is applied to the path and the program name together, so without one
+   * the separator lands after the program and nothing is ever found. Three callers pass the stored
+   * preference or AppPreferences' default, both of which carry one; the fourth is the folder chooser
+   * in FpgaCommander, which appends one first because File.getPath strips it off what was selected.
+   */
   public static boolean toolsPresent(char vendor, String path) {
     String[] tools = load(vendor);
     for (String tool : tools) {

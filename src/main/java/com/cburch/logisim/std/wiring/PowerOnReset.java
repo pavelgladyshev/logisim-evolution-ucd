@@ -68,7 +68,14 @@ public class PowerOnReset extends InstanceFactory {
       Attributes.forOption(
           "porTransition", S.getter("porTransition"), new AttributeOption[] {HTOL, LTOH});
 
+  static final String DURATION_NAME = "PorHighDuration";
+
   public static final PowerOnReset FACTORY = new PowerOnReset();
+
+  /** True when the output starts at 1 (and goes to 0 after the reset time). */
+  static boolean startsHigh(AttributeSet attrs) {
+    return attrs.getValue(PORTRANS) != LTOH;
+  }
 
   public static class Poker extends InstancePoker {
     @Override
@@ -79,13 +86,13 @@ public class PowerOnReset extends InstanceFactory {
   }
 
   public PowerOnReset() {
-    super(_ID, S.getter("PowerOnResetComponent"));
+    super(_ID, S.getter("PowerOnResetComponent"), new PorHdlGeneratorFactory());
     setAttributes(
         new Attribute[] {
           StdAttr.FACING,
           PORSIZE,
           PORTRANS,
-          new DurationAttribute("PorHighDuration", S.getter("porHighAttr"), 1, 10, false),
+          new DurationAttribute(DURATION_NAME, S.getter("porHighAttr"), 1, 10, false),
         },
         new Object[] {
           Direction.EAST,
@@ -247,12 +254,14 @@ public class PowerOnReset extends InstanceFactory {
       if (((facing == Direction.NORTH) || (facing == Direction.SOUTH)) && (g instanceof Graphics2D g2)) {
         int xpos = facing == Direction.NORTH ? x + 20 - fm.getDescent() : x + 20 + fm.getDescent();
         int ypos = facing == Direction.NORTH ? y + offset : y + height - offset;
+        g.setColor(Color.BLACK);
         g2.translate(xpos, ypos);
         g2.rotate(facing.toRadians());
         g.drawString(txt, 0, 0);
         g2.rotate(-facing.toRadians());
         g2.translate(-xpos, -ypos);
       } else {
+        g.setColor(Color.BLACK);
         g.drawString(txt, x + offset, y + fm.getDescent() + 20);
       }
     } else {
@@ -305,7 +314,7 @@ public class PowerOnReset extends InstanceFactory {
       g.drawLine(x2, y1, x2, y2);
       g.drawLine(x2, y2, x3, y2);
 
-      g.setColor(Color.BLACK);
+      g.setColor(new Color(AppPreferences.COMPONENT_COLOR.get()));
       String txt = S.get("PowerOnResetComponent");
       g.drawString(txt, x + 2, y + offset - 1);
     }

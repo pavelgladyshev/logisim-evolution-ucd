@@ -19,6 +19,7 @@ import com.cburch.logisim.file.LibraryEvent;
 import com.cburch.logisim.file.LibraryListener;
 import com.cburch.logisim.fpga.data.BoardInformation;
 import com.cburch.logisim.fpga.download.Download;
+import com.cburch.logisim.fpga.download.DownloadBase;
 import com.cburch.logisim.fpga.file.BoardReaderClass;
 import com.cburch.logisim.fpga.hdlgenerator.SynthesizedClockHdlGeneratorInstanceFactory;
 import com.cburch.logisim.fpga.settings.VendorSoftware;
@@ -86,21 +87,32 @@ public class FpgaCommander
   public void preferenceChange(PreferenceChangeEvent pce) {
     String property = pce.getKey();
     if (property.equals(AppPreferences.SelectedBoard.getIdentifier())) {
-      MyBoardInformation =
-          new BoardReaderClass(AppPreferences.Boards.getSelectedBoardFileName())
-              .getBoardInformation();
-      MyBoardInformation.setBoardName(AppPreferences.SelectedBoard.get());
-      boardIcon = new BoardIcon(MyBoardInformation.getImage());
-      boardPic.setIcon(boardIcon);
-      boardPic.repaint();
-      FrequencyPanel.setFpgaClockFrequency(MyBoardInformation.fpga.getClockFrequency());
-      if (SynthesizedClockHdlGeneratorInstanceFactory.isClockScalingSupported(MyBoardInformation.fpga.getTechnology(), MyBoardInformation.fpga.getVendor())) {
-        FrequencyPanel.setClockScaling(true);
-      } else {
-        FrequencyPanel.setClockScaling(false);
-      }
+      updateBoardInformation();
+    } else if (property.equals(AppPreferences.HdlType.getIdentifier())) {
       handleHdlOnly();
     }
+  }
+
+  public void updateBoardInformation(String boardName) {
+    if (boardName.equals(AppPreferences.SelectedBoard.get())) {
+      updateBoardInformation();
+    }
+  }
+
+  private void updateBoardInformation() {
+    MyBoardInformation =
+        new BoardReaderClass(AppPreferences.Boards.getSelectedBoardFileName())
+            .getBoardInformation();
+    boardIcon = new BoardIcon(MyBoardInformation.getImage());
+    boardPic.setIcon(boardIcon);
+    boardPic.repaint();
+    FrequencyPanel.setFpgaClockFrequency(MyBoardInformation.fpga.getClockFrequency());
+    if (SynthesizedClockHdlGeneratorInstanceFactory.isClockScalingSupported(MyBoardInformation.fpga.getTechnology(), MyBoardInformation.fpga.getVendor())) {
+      FrequencyPanel.setClockScaling(true);
+    } else {
+      FrequencyPanel.setClockScaling(false);
+    }
+    handleHdlOnly();
   }
 
   @Override
@@ -144,7 +156,6 @@ public class FpgaCommander
     MyBoardInformation =
         new BoardReaderClass(AppPreferences.Boards.getSelectedBoardFileName())
             .getBoardInformation();
-    MyBoardInformation.setBoardName(AppPreferences.SelectedBoard.get());
     if (SynthesizedClockHdlGeneratorInstanceFactory.isClockScalingSupported(MyBoardInformation.fpga.getTechnology(), MyBoardInformation.fpga.getVendor())) {
       FrequencyPanel.setClockScaling(true);
     } else {
@@ -161,8 +172,8 @@ public class FpgaCommander
     BoardSelectionPanel.add(boardPic, gbc);
     if (MyBoardInformation != null
         && !VendorSoftware.toolsPresent(
-            MyBoardInformation.fpga.getVendor(),
-            VendorSoftware.getToolPath(MyBoardInformation.fpga.getVendor()))) {
+            VendorSoftware.getToolchain(MyBoardInformation.fpga),
+            VendorSoftware.getToolPath(VendorSoftware.getToolchain(MyBoardInformation.fpga)))) {
       /* add the select toolpath button */
       gbc.gridy++;
       BoardSelectionPanel.add(ToolPath, gbc);
@@ -241,6 +252,17 @@ public class FpgaCommander
   private void setExecuteWindowEnabled(boolean enabled) {
     circuitsList.setEnabled(enabled);
     textMainCircuit.setEnabled(enabled);
+    setHdlControlsEnabled(
+        actionCommands, validateButton, enabled, AppPreferences.HdlType.get());
+  }
+
+  static void setHdlControlsEnabled(
+      JComboBox<?> actionCommands,
+      JButton validateButton,
+      boolean executeWindowEnabled,
+      String hdlType) {
+    final var enabled =
+        executeWindowEnabled && DownloadBase.isHdlGenerationEnabled(hdlType);
     actionCommands.setEnabled(enabled);
     validateButton.setEnabled(enabled);
   }
@@ -330,15 +352,24 @@ public class FpgaCommander
     int sel = actionCommands.getItemCount() == 0 ? 1 : actionCommands.getSelectedIndex();
     int nrItems = 1;
     actionCommands.removeAllItems();
+    final var hdlType = AppPreferences.HdlType.get();
+    setHdlControlsEnabled(
+        actionCommands, validateButton, circuitsList.isEnabled(), hdlType);
+    if (!DownloadBase.isHdlGenerationEnabled(hdlType)) {
+      actionCommands.addItem(S.getter("FpgaGuiSelectHdl"));
+      actionCommands.setSelectedIndex(0);
+      panel.pack();
+      return;
+    }
     actionCommands.addItem(S.getter("FpgaGuiHdlOnly"));
     ToolPath.setText(
         S.get(
             "FpgaGuiToolpath",
-            VendorSoftware.getVendorString(MyBoardInformation.fpga.getVendor())));
+            VendorSoftware.getVendorString(VendorSoftware.getToolchain(MyBoardInformation.fpga))));
     if (MyBoardInformation != null
         && VendorSoftware.toolsPresent(
-            MyBoardInformation.fpga.getVendor(),
-            VendorSoftware.getToolPath(MyBoardInformation.fpga.getVendor()))) {
+            VendorSoftware.getToolchain(MyBoardInformation.fpga),
+            VendorSoftware.getToolPath(VendorSoftware.getToolchain(MyBoardInformation.fpga)))) {
       actionCommands.addItem(S.getter("FpgaGuiSyntAndD"));
       nrItems++;
       actionCommands.addItem(S.getter("FpgaGuiDownload"));
@@ -360,7 +391,7 @@ public class FpgaCommander
     } else if (e.getActionCommand().equals("Settings")) {
       PreferencesFrame.showFPGAPreferences();
     } else if (e.getActionCommand().equals("ToolPath")) {
-      selectToolPath(MyBoardInformation.fpga.getVendor());
+      selectToolPath(VendorSoftware.getToolchain(MyBoardInformation.fpga));
       handleHdlOnly();
     } else if (e.getActionCommand().equals(STOP_REQUESTED)) {
       if (downloader != null) downloader.stop();
@@ -459,6 +490,7 @@ public class FpgaCommander
       if (retval == JFileChooser.APPROVE_OPTION) {
         File file = fc.getSelectedFile();
         ToolPath = file.getPath();
+        // not redundant: toolsPresent needs the separator to be on the path already
         if (!ToolPath.endsWith(File.separator)) {
           ToolPath += File.separator;
         }

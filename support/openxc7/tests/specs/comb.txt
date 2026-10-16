@@ -1,0 +1,56 @@
+# gates: 1-bit and bus, 2..5 inputs, negated inputs, XOR one-hot vs odd parity
+and2 AND_Gate inputs=2
+and3n AND_Gate inputs=3 width=4 negate1=true
+or4 OR_Gate inputs=4 width=3
+nand2 NAND_Gate inputs=2 width=8
+nor3 NOR_Gate inputs=3
+xor2 XOR_Gate inputs=2 width=4
+xor3odd XOR_Gate inputs=3 xor=odd
+xor3one XOR_Gate inputs=3 xor=1
+xnor3 XNOR_Gate inputs=3 width=2
+xnor3odd XNOR_Gate inputs=3 xor=odd
+not1 NOT_Gate
+not8 NOT_Gate width=8
+buf4 Buffer width=4
+# plexers
+mux2 Multiplexer select=1 width=4
+mux8 Multiplexer select=3 width=8
+mux4en Multiplexer select=2 width=1 enable=true
+demux4 Demultiplexer select=2 width=4 tristate=false
+demux2en Demultiplexer select=1 width=1 enable=true tristate=false
+dec3 Decoder select=3 tristate=false
+dec2en Decoder select=2 enable=true tristate=false
+prio8 Priority_Encoder select=3
+bitsel BitSelector width=8 group=2
+# wiring / arithmetic
+ext48z Bit_Extender in_width=4 out_width=8 type=zero
+ext48s Bit_Extender in_width=4 out_width=8 type=sign
+ext48o Bit_Extender in_width=4 out_width=8 type=one
+ext48i Bit_Extender in_width=4 out_width=8 type=input
+ext84 Bit_Extender in_width=8 out_width=4 type=sign
+cmp8s Comparator width=8 mode=twosComplement
+cmp8u Comparator width=8 mode=unsigned
+cmp1u Comparator width=1 mode=unsigned
+add1 Adder width=1
+add16 Adder width=16
+add8nc Adder width=8 skip=3
+sub1 Subtractor width=1
+sub16 Subtractor width=16
+sub8nb Subtractor width=8 skip=3
+neg8 Negator width=8
+neg1 Negator width=1
+shll8 Shifter width=8 shift=ll
+shlr8 Shifter width=8 shift=lr
+shar8 Shifter width=8 shift=ar
+shrl8 Shifter width=8 shift=rl
+shrr8 Shifter width=8 shift=rr
+shar5 Shifter width=5 shift=ar
+bitfind BitFinder width=8 type=low1
+bitfind2 BitFinder width=8 type=high0
+shll2 Shifter width=2 shift=ll
+shrr2 Shifter width=2 shift=rr
+shar2 Shifter width=2 shift=ar
+shrl32 Shifter width=32 shift=rl
+shar32 Shifter width=32 shift=ar
+shll1 Shifter width=1 shift=ll
+shrr1 Shifter width=1 shift=rr

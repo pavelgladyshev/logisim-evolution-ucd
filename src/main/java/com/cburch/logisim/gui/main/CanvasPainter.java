@@ -17,6 +17,7 @@ import com.cburch.logisim.data.Value;
 import com.cburch.logisim.gui.generic.GridPainter;
 import com.cburch.logisim.prefs.AppPreferences;
 import com.cburch.logisim.proj.Project;
+import com.cburch.logisim.tools.PokeTool;
 import com.cburch.logisim.util.CollectionUtil;
 import com.cburch.logisim.util.GraphicsUtil;
 import java.awt.Color;
@@ -45,6 +46,10 @@ class CanvasPainter implements PropertyChangeListener {
     AppPreferences.GRID_BG_COLOR.addPropertyChangeListener(this);
     AppPreferences.GRID_DOT_COLOR.addPropertyChangeListener(this);
     AppPreferences.GRID_ZOOMED_DOT_COLOR.addPropertyChangeListener(this);
+    AppPreferences.COMPONENT_COLOR.addPropertyChangeListener(this);
+    AppPreferences.COMPONENT_SECONDARY_COLOR.addPropertyChangeListener(this);
+    AppPreferences.COMPONENT_GHOST_COLOR.addPropertyChangeListener(this);
+    AppPreferences.COMPONENT_ICON_COLOR.addPropertyChangeListener(this);
   }
 
   private void drawWidthIncompatibilityData(Graphics base, Graphics g, Project proj) {
@@ -135,7 +140,9 @@ class CanvasPainter implements PropertyChangeListener {
     final var context = new ComponentDrawContext(canvas, circ, circState, base, g, false);
     context.setHighlightedWires(highlightedWires);
     circ.draw(context, hidden);
-    sel.draw(context, hidden);
+    if (!(proj.getTool() instanceof PokeTool)) {
+      sel.draw(context, hidden);
+    }
 
     // draw tool
     final var tool = dragTool != null ? dragTool : proj.getTool();
@@ -187,9 +194,13 @@ class CanvasPainter implements PropertyChangeListener {
     if (zoomFactor != 1.0 && gfxScaled instanceof Graphics2D g2d) {
       g2d.scale(zoomFactor, zoomFactor);
     }
+    final var circ = proj.getCurrentCircuit();
+    if (circ == null) {
+      gfxScaled.dispose();
+      return;
+    }
     drawWithUserState(g, gfxScaled, proj);
     drawWidthIncompatibilityData(g, gfxScaled, proj);
-    final var circ = proj.getCurrentCircuit();
 
     final var circState = proj.getCircuitState();
     final var ptContext = new ComponentDrawContext(canvas, circ, circState, g, gfxScaled);
@@ -207,7 +218,11 @@ class CanvasPainter implements PropertyChangeListener {
   public void propertyChange(PropertyChangeEvent event) {
     if (AppPreferences.GRID_BG_COLOR.isSource(event)
         || AppPreferences.GRID_DOT_COLOR.isSource(event)
-        || AppPreferences.GRID_ZOOMED_DOT_COLOR.isSource(event)) {
+        || AppPreferences.GRID_ZOOMED_DOT_COLOR.isSource(event)
+        || AppPreferences.COMPONENT_COLOR.isSource(event)
+        || AppPreferences.COMPONENT_SECONDARY_COLOR.isSource(event)
+        || AppPreferences.COMPONENT_GHOST_COLOR.isSource(event)
+        || AppPreferences.COMPONENT_ICON_COLOR.isSource(event)) {
       canvas.repaint();
     }
   }

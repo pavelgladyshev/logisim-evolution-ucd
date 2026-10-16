@@ -56,6 +56,7 @@ public class CounterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     myWires
         .addWire("s_clock", 1)
         .addWire("s_realEnable", 1)
+        .addWire("s_loadValue", NR_OF_BITS_ID)
         .addRegister("s_nextCounterValue", NR_OF_BITS_ID)
         .addRegister("s_carry", 1)
         .addRegister("s_counterValue", NR_OF_BITS_ID);
@@ -64,7 +65,7 @@ public class CounterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
         .add(Port.INPUT, LOAD_DATA_INPUT, NR_OF_BITS_ID, Counter.IN)
         .add(Port.INPUT, "clear", 1, Counter.CLR)
         .add(Port.INPUT, "load", 1, Counter.LD)
-        .add(Port.INPUT, "upNotDown", 1, Counter.UD)
+        .add(Port.INPUT, "upNotDown", 1, Counter.UD, false)
         .add(Port.INPUT, "enable", 1, Counter.EN, false)
         .add(Port.OUTPUT, COUNT_DATA_OUTPUT, NR_OF_BITS_ID, Counter.OUT)
         .add(Port.OUTPUT, "compareOut", 1, Counter.CARRY);
@@ -106,8 +107,10 @@ public class CounterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
         .empty();
     if (Hdl.isVhdl()) {
       contents.addVhdlKeywords().add("""
-          compareOut   <= s_carry;
+          -- as in the simulation: no carry while clearing, a loaded value above the maximum is ANDed with it
+          compareOut   <= s_carry {{and}} {{not}}(clear);
           countValue   <= s_counterValue;
+          s_loadValue  <= loadData {{and}} maxVal {{when}} unsigned(loadData) > unsigned(maxVal) {{else}} loadData;
 
           s_clock      <= {{clock}} {{when}} {{invertClock}} = 0 {{else}} {{not}}({{clock}});
 
@@ -132,13 +135,13 @@ public class CounterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
                                  {{or}} (mode = 1 {{and}} s_carry = '1' {{and}} load = '0') -- Stay at value situation
                                {{else}} {{Tick}};
 
-          makeNextValue : {{process}}(load ,upNotDown ,s_counterValue ,loadData , s_carry) {{is}}
+          makeNextValue : {{process}}(load ,upNotDown ,s_counterValue ,s_loadValue , s_carry) {{is}}
              {{variable}} v_downcount : std_logic;
           {{begin}}
              v_downcount := {{not}}(upNotDown);
              {{if}} ((load = '1') {{or}} -- load condition
                  (mode = 3 {{and}} s_carry = '1')    -- Wrap load condition
-                ) {{then}} s_nextCounterValue <= loadData;
+                ) {{then}} s_nextCounterValue <= s_loadValue;
              {{else}}
                 {{case}} (mode) {{is}}
                    {{when}}  0    => {{if}} (s_carry = '1') {{then}}
@@ -174,8 +177,12 @@ public class CounterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
           """);
     } else {
       contents.add("""
-          assign compareOut = s_carry;
-          assign countValue = s_counterValue;
+          // as in the simulation: no carry while clearing, a loaded value above the maximum is ANDed with it
+          assign compareOut  = s_carry & ~clear;
+          assign countValue  = s_counterValue;
+          assign s_loadValue = (loadData > maxVal) ? (loadData & maxVal) : loadData;
+
+          initial s_counterValue = 0;
           assign s_clock = ({{invertClock}} == 0) ? {{clock}} : ~{{clock}};
 
           always@(*)
@@ -192,7 +199,7 @@ public class CounterHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
           always @(*)
           begin
              if ((load)|((mode==3)&s_carry))
-                s_nextCounterValue = loadData;
+                s_nextCounterValue = s_loadValue;
              else if ((mode==0)&s_carry&upNotDown)
                 s_nextCounterValue = 0;
              else if ((mode==0)&s_carry)
