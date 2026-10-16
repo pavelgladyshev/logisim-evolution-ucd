@@ -170,14 +170,36 @@ deep for 12 MHz.
 
 ## 4. Troubleshooting
 
-| Message or problem | What to do |
-|---|---|
-| `No nextpnr-xilinx chip database for <part>` | Make it once: `~/openxc7/bin/openxc7-chipdb <part>`, e.g. `xc7a15tcpg236-1` for the Cmod A7-15T. A ready-made one from a *stable* release of [FPGAwars/tools-openxc7](https://github.com/FPGAwars/tools-openxc7/releases) does as well, if it was built against the nextpnr revision in `setup_toolchain.sh`: the database depends only on its input data, so theirs and ours are then the same file. |
-| The board is not found when loading | Check the USB cable. On Linux, unplug and plug in the board after installing `openfpgaloader`. `openFPGALoader -b cmoda7_35t --detect` shows the FPGA it finds on the board. Without `-b` it reads the JTAG chain with a generic pinout and finds nothing on a Cmod A7, so look for an `idcode` in the output rather than at the exit code, which is not a reliable check. |
-| Logisim seems to stall at `Loading file…` | Not openXC7: a prompt about an autosave, left behind by a Logisim that was killed, can sit behind the splash screen. Alt-tab to it and answer it. |
-| No FPGA actions in the FPGA Commander | Set the tool path under *Preferences → Software → openXC7*. |
-| Characters missing in the terminal | The circuit prints faster than 115200 baud for longer than the queue lasts. Lower the frequency. |
-| Want Vivado instead | Untick *Use openXC7 instead of Vivado…* in *Preferences → Software*. |
+- **`No nextpnr-xilinx chip database for <part>`**
+
+  Make it once: `~/openxc7/bin/openxc7-chipdb <part>`, e.g. `xc7a15tcpg236-1` for the Cmod A7-15T. A ready-made one from a
+  *stable* release of [FPGAwars/tools-openxc7](https://github.com/FPGAwars/tools-openxc7/releases) does as well, if it was built
+  against the nextpnr revision in `setup_toolchain.sh`: the database depends only on its input data, so theirs and ours are then
+  the same file.
+
+- **The board is not found when loading**
+
+  Check the USB cable. On Linux, unplug and plug in the board after installing `openfpgaloader`.
+  `openFPGALoader -b cmoda7_35t --detect` shows the FPGA it finds on the board. Without `-b` it reads the JTAG chain with a
+  generic pinout and finds nothing on a Cmod A7, so look for an `idcode` in the output rather than at the exit code, which is not
+  a reliable check.
+
+- **Logisim seems to stall at `Loading file…`**
+
+  Not openXC7: a prompt about an autosave, left behind by a Logisim that was killed, can sit behind the splash screen. Alt-tab to
+  it and answer it.
+
+- **No FPGA actions in the FPGA Commander**
+
+  Set the tool path under *Preferences → Software → openXC7*.
+
+- **Characters missing in the terminal**
+
+  The circuit prints faster than 115200 baud for longer than the queue lasts. Lower the frequency.
+
+- **Want Vivado instead**
+
+  Untick *Use openXC7 instead of Vivado…* in *Preferences → Software*.
 
 ## 5. What is changed in Logisim
 
