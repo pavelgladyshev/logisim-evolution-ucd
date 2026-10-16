@@ -50,46 +50,62 @@ java -jar build/libs/logisim-evolution-ucd-4.1.1-all.jar
 
 ## Architecture Overview
 
-Logisim-evolution is a Java 21 Swing application for digital logic circuit design and simulation. Entry point: `com.cburch.logisim.Main`.
+Logisim-evolution is a Java 21 Swing application for digital logic circuit design and simulation. Entry point:
+`com.cburch.logisim.Main`.
 
 ### Core Packages
 
-- **`com.cburch.logisim.circuit`** - Circuit model and simulation engine. `Circuit` holds components/wires, `CircuitState` maintains execution state, `Simulator` drives propagation.
+- **`com.cburch.logisim.circuit`** - Circuit model and simulation engine. `Circuit` holds components/wires, `CircuitState`
+  maintains execution state, `Simulator` drives propagation.
 
-- **`com.cburch.logisim.comp` / `instance`** - Component system. `ComponentFactory` defines component types, `InstanceFactory`/`Instance` is the modern implementation pattern with `InstanceState` for runtime state.
+- **`com.cburch.logisim.comp` / `instance`** - Component system. `ComponentFactory` defines component types,
+  `InstanceFactory`/`Instance` is the modern implementation pattern with `InstanceState` for runtime state.
 
 - **`com.cburch.logisim.std.*`** - Standard component libraries (gates, arithmetic, memory, I/O, TTL ICs, plexers, wiring).
 
-- **`com.cburch.logisim.gui`** - Swing UI. `Frame` is the main window with canvas-based circuit editing. Uses FlatLAF for modern look-and-feel.
+- **`com.cburch.logisim.gui`** - Swing UI. `Frame` is the main window with canvas-based circuit editing. Uses FlatLAF for modern
+  look-and-feel.
 
-- **`com.cburch.logisim.proj` / `file`** - Project management and XML persistence. `Project` is the main container, `LogisimFile` handles serialization.
+- **`com.cburch.logisim.proj` / `file`** - Project management and XML persistence. `Project` is the main container, `LogisimFile`
+  handles serialization.
 
-- **`com.cburch.logisim.data`** - Core data types. `Value` represents 4-state logic (0, 1, X, Z), `BitWidth` for bus widths, `Attribute`/`AttributeSet` for component properties.
+- **`com.cburch.logisim.data`** - Core data types. `Value` represents 4-state logic (0, 1, X, Z), `BitWidth` for bus widths,
+  `Attribute`/`AttributeSet` for component properties.
 
 ### RISC-V Implementation (UCD Fork)
 
 This fork includes a custom RISC-V RV32IM processor implementation with SV32 virtual memory:
 
 - **`com.cburch.logisim.riscv.cpu`** - Core processor
-  - `rv32im.java` - Component factory (14 ports: clock, reset, data bus, address bus, mem read/write, timer/external interrupt inputs, byte enables, bus request/ack)
-  - `rv32imData.java` - Complete CPU state (registers, CSRs, TLB, cache, privilege mode, GDB server integration). Key methods: `isTranslationEnabled()` (fetch), `isTranslationEnabledForLoadStore()` (MPRV-aware), `getEffectivePrivilegeForLoadStore()`, `checkTlbPermissions()` (fetch), `checkTlbPermissionsForLoadStore()` (MPRV-aware)
-  - `ArithmeticInstruction` - I-type, R-type, and M-extension (MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU). Shift instructions cast to `int` for 32-bit semantics; logical shifts zero-extend result with `& 0xFFFFFFFFL`
+  - `rv32im.java` - Component factory (14 ports: clock, reset, data bus, address bus, mem read/write, timer/external interrupt
+    inputs, byte enables, bus request/ack)
+  - `rv32imData.java` - Complete CPU state (registers, CSRs, TLB, cache, privilege mode, GDB server integration). Key methods:
+    `isTranslationEnabled()` (fetch), `isTranslationEnabledForLoadStore()` (MPRV-aware), `getEffectivePrivilegeForLoadStore()`,
+    `checkTlbPermissions()` (fetch), `checkTlbPermissionsForLoadStore()` (MPRV-aware)
+  - `ArithmeticInstruction` - I-type, R-type, and M-extension (MUL/MULH/MULHSU/MULHU/DIV/DIVU/REM/REMU). Shift instructions cast
+    to `int` for 32-bit semantics; logical shifts zero-extend result with `& 0xFFFFFFFFL`
   - `BranchInstruction` - BEQ, BNE, BLT, BGE, BLTU, BGEU
   - `LoadInstruction`, `StoreInstruction` - Memory operations with virtual address translation
   - `JumpAndLink` - JAL, JALR
-  - `SystemInstruction` - ECALL, EBREAK, MRET (clears MPRV when MPP!=M per §3.1.6.3), SRET, SFENCE.VMA, all Zicsr instructions (CSRRW/S/C/WI/SI/CI)
+  - `SystemInstruction` - ECALL, EBREAK, MRET (clears MPRV when MPP!=M per §3.1.6.3), SRET, SFENCE.VMA, all Zicsr instructions
+    (CSRRW/S/C/WI/SI/CI)
   - `TrapHandler` - Exception/interrupt dispatch with M/S-mode delegation via MEDELEG/MIDELEG
   - `IntegerRegisters` - x0-x31 register file
   - `ProgramCounter`, `InstructionRegister` - PC and instruction decoding
 
 - **`com.cburch.logisim.riscv.cpu` (virtual memory subsystem)**
-  - `TranslationLookasideBuffer` - 128-entry fully associative TLB with LRU, ASID isolation, global page support, 4KB and 4MB megapages, fast-path single-entry cache, direct-mapped 256-entry accelerator. All address inputs masked to 32 bits (`& 0xFFFFFFFFL`) to prevent sign-extension bugs
-  - `PageTableWalker` - SV32 two-level page table walk state machine (L1→L0), PTE validation (V, reserved W+!R, megapage alignment), delegates permission checks to `PermissionCheck` (MPRV-aware for load/store walks)
-  - `PermissionCheck` - Static permission validation per Spec §4.3.2 step 6: A/D bit enforcement, U-bit privilege isolation, MXR (Make eXecutable Readable), SUM (Supervisor User Memory access), MPRV (Modify PRiVilege for M-mode load/store)
+  - `TranslationLookasideBuffer` - 128-entry fully associative TLB with LRU, ASID isolation, global page support, 4KB and 4MB
+    megapages, fast-path single-entry cache, direct-mapped 256-entry accelerator. All address inputs masked to 32 bits (`&
+    0xFFFFFFFFL`) to prevent sign-extension bugs
+  - `PageTableWalker` - SV32 two-level page table walk state machine (L1→L0), PTE validation (V, reserved W+!R, megapage
+    alignment), delegates permission checks to `PermissionCheck` (MPRV-aware for load/store walks)
+  - `PermissionCheck` - Static permission validation per Spec §4.3.2 step 6: A/D bit enforcement, U-bit privilege isolation, MXR
+    (Make eXecutable Readable), SUM (Supervisor User Memory access), MPRV (Modify PRiVilege for M-mode load/store)
   - `MemoryCache` - Instruction cache
 
 - **`com.cburch.logisim.riscv.cpu`** (CSR access)
-  - `ControlAndStatusRegisters` - CSR file (4096 entries), privilege-checked access via `checkAccess()` (privilege level from bits [9:8], read-only from bits [11:10])
+  - `ControlAndStatusRegisters` - CSR file (4096 entries), privilege-checked access via `checkAccess()` (privilege level from bits
+    [9:8], read-only from bits [11:10])
 
 - **`com.cburch.logisim.riscv.cpu.csrs`** - Control and Status Registers
   - `MSTATUS_CSR` - Machine status (MIE, MPIE, MPP, SIE, SPIE, SPP, MPRV, SUM, MXR)
@@ -139,12 +155,14 @@ This fork includes a custom RISC-V RV32IM processor implementation with SV32 vir
 ### Generated Sources
 
 Build generates files in `build/generated/`:
+
 - `BuildInfo.java` - Version, git info, build timestamp
 - `VhdlSyntax.java` - Generated from JFlex
 
 ## Code Style
 
-Uses Google Java Style with Checkstyle 11.0.0 and suppressions in `checkstyle-suppressions.xml`. Run `./gradlew checkstyleMain` to verify.
+Uses Google Java Style with Checkstyle 11.0.0 and suppressions in `checkstyle-suppressions.xml`. Run `./gradlew checkstyleMain` to
+verify.
 
 ## Testing
 
@@ -153,6 +171,7 @@ Tests are in `src/test/java/com/cburch/logisim/riscv/`. JUnit 5 with Mockito.
 ### RISC-V Test Files (18 classes)
 
 **Instruction tests:**
+
 - `ArithmeticTypeITest` - Immediate arithmetic (ADDI, SLTI, XORI, ORI, ANDI, SLLI, SRLI, SRAI)
 - `ArithmeticTypeRTest` - Register arithmetic (ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND)
 - `ArithmeticTypeRMulAndDivTest` - M-extension (MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU)
@@ -161,22 +180,28 @@ Tests are in `src/test/java/com/cburch/logisim/riscv/`. JUnit 5 with Mockito.
 - `JumpAndLinkTest` - JAL/JALR
 
 **System and control tests:**
+
 - `SystemInstructionTest` - ECALL, EBREAK, MRET, SRET
 - `CSRAccessTest` - CSR read/write, privilege checks, write suppression
 - `ExceptionTest` - Exception generation and trap handling
 
 **Memory tests:**
+
 - `LoadDataCacheTest`, `StoreDataCacheTest` - Load/store with caching
 - `MemoryCacheTest` - Cache hit/miss behavior
 
 **Virtual memory tests (SV32):**
+
 - `PageTableWalkerTest` - TLB operations, SATP CSR fields
 - `PermissionCheckTest` - A/D bits, U-bit, MXR, R/W/X enforcement
-- `Sv32Test` - Comprehensive SV32 suite (102 tests in 9 nested classes): SATP, MSTATUS/SSTATUS SUM+MXR, permissions, TLB, translation enable, SFENCE.VMA, SRET/MRET, page fault traps, edge cases
-- `MprvTest` - MPRV functionality (37 tests in 6 nested classes): bitfield, effective privilege, translation enable for load/store vs fetch, permission checks with MPRV, MRET clearing, OS scenarios (copy_from_user)
+- `Sv32Test` - Comprehensive SV32 suite (102 tests in 9 nested classes): SATP, MSTATUS/SSTATUS SUM+MXR, permissions, TLB,
+  translation enable, SFENCE.VMA, SRET/MRET, page fault traps, edge cases
+- `MprvTest` - MPRV functionality (37 tests in 6 nested classes): bitfield, effective privilege, translation enable for load/store
+  vs fetch, permission checks with MPRV, MRET clearing, OS scenarios (copy_from_user)
 - `TlbPerformanceTest` - TLB hit rates, fast-path cache, LRU eviction, statistics
 
 **Integration tests:**
+
 - `rv32imDataTest` - CPU state lifecycle
 
 ### Running Tests
@@ -201,6 +226,7 @@ Tests are in `src/test/java/com/cburch/logisim/riscv/`. JUnit 5 with Mockito.
 ### Key Test Patterns
 
 Tests use `rv32imData` directly without the full simulation harness:
+
 ```java
 rv32imData cpu = new rv32imData(Value.FALSE, resetAddr, tcpPort, false, false,
     rv32imData.CPUState.RUNNING, null);
