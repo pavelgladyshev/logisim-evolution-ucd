@@ -141,10 +141,27 @@ second answer looks wrong rather than missing. And the board is not ready when t
 waits 3 seconds for a power-on reset of 2, and typing earlier loses the input, which again reads as a wrong
 answer rather than an error.
 
-`support/openxc7/tests/board/boardtest.py` does **not** run on Windows — it imports `termios` at module scope,
-selects on a serial file descriptor, globs the two Unix device paths, and builds the loader path without an
-executable suffix. The gate it defines is still reachable by driving `AutoMap` and `Main` directly and opening the
-port at 115200, which is how the numbers above were obtained, but the script itself would need porting.
+The numbers above were obtained by driving `AutoMap` and `Main` directly and opening the port at 115200, because
+`support/openxc7/tests/board/boardtest.py` did not run on Windows then. It has been ported since. Its serial code
+is split by platform: `termios` and `select` on macOS and Linux, `kernel32` through `ctypes` on Windows, neither
+needing pyserial. On Windows the loader is `openFPGALoader.exe`, and the board's port comes from the registry: the
+`FTDIBUS` entry for `PID_6010` whose name ends in `B`, which is channel B of the FT2232H — the UART, beside the
+JTAG that Zadig moved to WinUSB, and the same second interface the Unix globs pick. `--port COM5` names it
+outright; with no channel B and only one serial port the script takes that one and says so, and otherwise it stops
+and lists the ports it saw.
+
+Two more of its details are there for Windows. `as_property()` doubles the backslashes in the paths it writes to
+the preferences file, which is loaded with `java.util.Properties`, where a backslash is an escape: undoubled,
+`C:\Users\pavel` arrives as `C:Userspavel`, and the workspace and the tool path point somewhere else. And
+`jdk_commands()` takes `java` and `javac` from the `bin` of the `java.home` that `java` reports, rather than
+whatever the names reach on PATH, because on Windows a bare `java` is usually Oracle's `javapath` shim: it starts
+the real JVM as its child and exits, so killing the reference simulation reaches only the shim, the JVM keeps the
+pipe open, and the test hangs after the flow has passed.
+
+`support/openxc7/tests/board/winport_test.py` runs the Windows branch of `boardtest.py` on any machine, against a
+stub `kernel32` and a simulated registry. It checks which port is chosen in seven registry layouts and prints the
+sizes of `DCB` and `COMMTIMEOUTS`, but calls no `kernel32` function, so the serial I/O itself is exercised only by
+a run on Windows with the board.
 
 **SmartScreen needs a downloaded MSI, not a clean machine.** It fires on Mark-of-the-Web, and an MSI built
 locally by gradle carries none — its only stream is the data stream, with no `Zone.Identifier` — so it cannot
