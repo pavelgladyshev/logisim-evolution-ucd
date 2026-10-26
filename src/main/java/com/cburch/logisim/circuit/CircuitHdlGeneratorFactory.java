@@ -182,7 +182,7 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       hierarchy.remove(hierarchy.size() - 1);
     }
     /* I also have to generate myself */
-    var componentName = CorrectLabel.getCorrectLabel(myCircuit.getName());
+    var componentName = CorrectLabel.getHdlModuleName(myCircuit.getName());
     if (gatedInstance) componentName = componentName.concat("_gated");
     if (!handledComponents.contains(componentName)) {
       if (!Hdl.writeEntity(
@@ -236,7 +236,7 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     }
     instantiatedComponents.clear();
     for (final var gate : theNetlist.getSubCircuits()) {
-      var compName = gate.getComponent().getFactory().getHDLName(gate.getComponent().getAttributeSet());
+      var compName = CorrectLabel.getHdlModuleName(gate.getComponent().getFactory().getName());
       if (gate.isGatedInstance()) compName = compName.concat("_gated");
       if (!instantiatedComponents.contains(compName)) {
         instantiatedComponents.add(compName);
@@ -437,7 +437,7 @@ public class CircuitHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     for (final var comp : theNetList.getSubCircuits()) {
       final var worker = comp.getComponent().getFactory().getHDLGenerator(comp.getComponent().getAttributeSet());
       if (worker != null) {
-        var compName = comp.getComponent().getFactory().getHDLName(comp.getComponent().getAttributeSet());
+        var compName = CorrectLabel.getHdlModuleName(comp.getComponent().getFactory().getName());
         if (comp.isGatedInstance())  compName = compName.concat("_gated");
         final var CompId = "SubCircuits";
         var id = (compIds.containsKey(CompId)) ? compIds.get(CompId) : (long) 1;

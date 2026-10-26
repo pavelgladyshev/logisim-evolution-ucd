@@ -272,7 +272,7 @@ public class ToplevelHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     final var worker = new CircuitHdlGeneratorFactory(myCircuit);
     components.add(
         worker.getComponentInstantiation(
-            theNetlist, null, CorrectLabel.getCorrectLabel(myCircuit.getName())));
+            theNetlist, null, CorrectLabel.getHdlModuleName(myCircuit.getName())));
     return components;
   }
 
@@ -320,7 +320,7 @@ public class ToplevelHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     final var dut = new CircuitHdlGeneratorFactory(myCircuit);
     contents.add(
         dut.getComponentMap(
-            theNetlist, 0L, myIOComponents, CorrectLabel.getCorrectLabel(myCircuit.getName())));
+            theNetlist, 0L, myIOComponents, CorrectLabel.getHdlModuleName(myCircuit.getName())));
     // Here the led arrays are connected
     if (hasLedArray) {
       contents.empty().addRemarkBlock("The Led arrays are connected here");
