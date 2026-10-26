@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""On-board test of a circuit with a Keyboard and a TTY, through Logisim's whole FPGA flow, on a Cmod A7-35T:
+"""On-board test of a circuit with a Keyboard and a TTY, through Logisim's whole FPGA flow, on a Cmod A7-35T
+(or with --board SIPEED_TANG_NANO_20K, a Tang Nano 20K):
 
-  support/openxc7/tests/board/boardtest.py [--reference other.circ] [--seconds S] [--port NAME] \
+  support/openxc7/tests/board/boardtest.py [--board NAME] [--reference other.circ] [--seconds S] [--port NAME] \
         <file.circ> <top> <tick Hz> [--] <input> [<input> ...]   (-- before inputs that start with '-')
 
 The circuit's board map is completed automatically (TTY/Keyboard to the UART), then Logisim builds and loads it
@@ -10,8 +11,9 @@ is typed on the board's USB-UART ('\\n' = Enter, sent as CR like a terminal does
 Logisim's own simulation (--tty tty) prints for the same input, shown as on a terminal. --reference simulates
 another file (e.g. one without a POR, which the --tty mode does not release); --seconds is the simulation time.
 
-Needs the built jar, a JDK, the toolchain (~/openxc7, or $OPENXC7_DIR) and the board. Runs on macOS, Linux and
-Windows; --port names the board's serial port (COM5, /dev/cu.usbserial-…) when it is not found by itself.
+Needs the built jar, a JDK, the board's toolchain (~/openxc7 or $OPENXC7_DIR for the Cmod, ~/gowin or $GOWIN_DIR
+for the Tang Nano) and the board. Runs on macOS, Linux and Windows; --port names the board's serial port (COM5,
+/dev/cu.usbserial-…) when it is not found by itself.
 """
 import argparse, glob, os, pathlib, re, subprocess, sys, time
 
@@ -19,9 +21,15 @@ HERE = pathlib.Path(__file__).resolve().parent
 TESTS = HERE.parent
 REPO = TESTS.parents[2]
 OUT = TESTS / "build" / "board"
-TOOLCHAIN = pathlib.Path(os.environ.get("OPENXC7_DIR", pathlib.Path.home() / "openxc7"))
-LOADER = TOOLCHAIN / "bin" / ("openFPGALoader.exe" if os.name == "nt" else "openFPGALoader")
-BOARD = "DIGILENT_CMOD_A7_35T"
+# For each board: the folder of its toolchain (and the variable that moves it), the preference that holds Logisim's
+# tool path for that flow, the bitstream the flow makes, openFPGALoader's name for the board, and the maker of its
+# USB-UART as Linux names it under /dev/serial/by-id.
+BOARDS = {
+    "DIGILENT_CMOD_A7_35T": dict(tools="openxc7", variable="OPENXC7_DIR", preference="OpenXc7ToolPath",
+                                 bitstream="toplevel.bit", loader="cmoda7_35t", usb="Digilent"),
+    "SIPEED_TANG_NANO_20K": dict(tools="gowin", variable="GOWIN_DIR", preference="GowinToolPath",
+                                 bitstream="toplevel.fs", loader="tangnano20k", usb="SIPEED"),
+}
 
 parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
 parser.add_argument("circ", type=pathlib.Path)
@@ -31,7 +39,12 @@ parser.add_argument("inputs", nargs="+")
 parser.add_argument("--reference", type=pathlib.Path)
 parser.add_argument("--seconds", type=float, default=5)
 parser.add_argument("--port", help="the board's serial port, instead of looking for it (e.g. COM5)")
+parser.add_argument("--board", choices=BOARDS, default="DIGILENT_CMOD_A7_35T")
 args = parser.parse_args()
+BOARD = args.board
+SETUP = BOARDS[BOARD]
+TOOLCHAIN = pathlib.Path(os.environ.get(SETUP["variable"], pathlib.Path.home() / SETUP["tools"]))
+LOADER = TOOLCHAIN / "bin" / ("openFPGALoader.exe" if os.name == "nt" else "openFPGALoader")
 
 
 
@@ -88,7 +101,7 @@ def as_property(path):
 prefs = work / "prefs.properties"
 prefs.write_text(f"/com/cburch/logisim|FPGAWorkspace={as_property(work / 'ws')}\n"
                  f"/com/cburch/logisim|hdlType=Verilog\n"
-                 f"/com/cburch/logisim|OpenXc7ToolPath={as_property(str(LOADER.parent) + os.sep)}\n")
+                 f"/com/cburch/logisim|{SETUP['preference']}={as_property(str(LOADER.parent) + os.sep)}\n")
 
 
 def java(*arguments):
@@ -146,9 +159,12 @@ if os.name != "nt":
 
     def serial_port():
         if sys.platform == "darwin":
+            # the second interface of an FT2232, which the Tang Nano's debugger presents itself as too
             ports = sorted(glob.glob("/dev/cu.usbserial-*1"))
+            if len(ports) > 1:
+                sys.exit(f"more than one board's serial port: name this one with --port ({', '.join(ports)})")
         else:
-            ports = sorted(glob.glob("/dev/serial/by-id/*Digilent*-if01-port0")) or ["/dev/ttyUSB1"]
+            ports = sorted(glob.glob(f"/dev/serial/by-id/*{SETUP['usb']}*-if01-port0")) or ["/dev/ttyUSB1"]
         return ports[0]
 
 else:
@@ -278,17 +294,24 @@ flow = subprocess.run(java("com.cburch.logisim.Main", "--test-fpga", str(mapped)
 print(f"{name}: Logisim flow exit {flow.returncode} in {time.time() - start:.0f} s (log: {work / 'flow.log'})")
 if flow.returncode != 0:
     sys.exit(1)
-bitstream = next(work.glob("ws/**/toplevel.bit"))
+bitstream = next(work.glob(f"ws/**/{SETUP['bitstream']}"))
 
 port_name = args.port or serial_port()
 failures = 0
 for index, raw in enumerate(args.inputs):
     text = raw.encode().decode("unicode_escape")
     if index > 0:
-        subprocess.run([str(LOADER), "-b", "cmoda7_35t", str(bitstream)], capture_output=True)
+        try:
+            subprocess.run([str(LOADER), "-b", SETUP["loader"], str(bitstream)], capture_output=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            sys.exit(f"openFPGALoader did not finish loading {bitstream.name} in 120 s")
     time.sleep(3)                                      # e.g. for a power-on reset of 2 s
     port = Port(port_name)
     try:
+        # what the board sent before the port was opened, which the Tang Nano's debugger keeps and hands over now
+        end = time.time() + 0.3
+        while time.time() < end:
+            port.read()
         for byte in text.replace("\n", "\r").encode():
             port.write(bytes([byte]))
             time.sleep(0.02)

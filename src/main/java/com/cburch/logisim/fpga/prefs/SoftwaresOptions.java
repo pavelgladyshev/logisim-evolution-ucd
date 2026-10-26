@@ -57,6 +57,8 @@ public class SoftwaresOptions extends OptionsPanel {
         FpgaCommander.selectToolPath(VendorSoftware.VENDOR_OPENXC7);
       } else if (source == openxc7ForXilinxCheckBox) {
         AppPreferences.OpenXc7ForXilinx.setBoolean(openxc7ForXilinxCheckBox.isSelected());
+      } else if (source == gowinPathButton) {
+        FpgaCommander.selectToolPath(VendorSoftware.VENDOR_GOWIN);
       }
     }
 
@@ -80,6 +82,8 @@ public class SoftwaresOptions extends OptionsPanel {
         openxc7PathField.setText(AppPreferences.OpenXc7ToolPath.get());
       } else if (property.equals(AppPreferences.OpenXc7ForXilinx.getIdentifier())) {
         openxc7ForXilinxCheckBox.setSelected(AppPreferences.OpenXc7ForXilinx.getBoolean());
+      } else if (property.equals(AppPreferences.GowinToolPath.getIdentifier())) {
+        gowinPathField.setText(AppPreferences.GowinToolPath.get());
       }
     }
   }
@@ -117,6 +121,9 @@ public class SoftwaresOptions extends OptionsPanel {
   private final JTextField openxc7PathField = new JTextField(40);
   private final JButton openxc7PathButton = new JButton();
   private final JCheckBox openxc7ForXilinxCheckBox = new JCheckBox();
+  private final JLabel gowinPathLabel = new JLabel();
+  private final JTextField gowinPathField = new JTextField(40);
+  private final JButton gowinPathButton = new JButton();
 
   public SoftwaresOptions(PreferencesFrame window) {
     super(window);
@@ -129,6 +136,7 @@ public class SoftwaresOptions extends OptionsPanel {
     openfpgaPathButton.addActionListener(myListener);
     openxc7PathButton.addActionListener(myListener);
     openxc7ForXilinxCheckBox.addActionListener(myListener);
+    gowinPathButton.addActionListener(myListener);
     AppPreferences.getPrefs().addPreferenceChangeListener(myListener);
 
     final var sep = new JSeparator(JSeparator.HORIZONTAL);
@@ -320,6 +328,32 @@ public class SoftwaresOptions extends OptionsPanel {
     gbc.fill = GridBagConstraints.NONE;
     add(openxc7ForXilinxCheckBox, gbc);
 
+    gbc.gridx = 0;
+    gbc.gridy = gridY++;
+    gbc.gridwidth = 4;
+    gbc.weightx = 1.0;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    add(new JSeparator(JSeparator.HORIZONTAL), gbc);
+
+    gbc.gridx = 0;
+    gbc.gridy = gridY++;
+    gbc.gridwidth = 4;
+    gbc.weightx = 1.0;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    add(gowinPathLabel, gbc);
+
+    gbc.gridx = 0;
+    gbc.gridy = gridY;
+    gbc.gridwidth = 2;
+    gbc.weightx = 1.0;
+    gbc.fill = GridBagConstraints.HORIZONTAL;
+    add(gowinPathField, gbc);
+
+    gbc.gridx = 2;
+    gbc.gridy = gridY++;
+    gbc.fill = GridBagConstraints.NONE;
+    add(gowinPathButton, gbc);
+
     questaValidationCheckBox.setSelected(AppPreferences.QUESTA_VALIDATION.getBoolean());
 
     quartusPathField.setText(AppPreferences.QuartusToolPath.get());
@@ -335,6 +369,8 @@ public class SoftwaresOptions extends OptionsPanel {
     openxc7PathField.setText(AppPreferences.OpenXc7ToolPath.get());
     openxc7PathField.setEditable(false);
     openxc7ForXilinxCheckBox.setSelected(AppPreferences.OpenXc7ForXilinx.getBoolean());
+    gowinPathField.setText(AppPreferences.GowinToolPath.get());
+    gowinPathField.setEditable(false);
   }
 
   @Override
@@ -364,6 +400,8 @@ public class SoftwaresOptions extends OptionsPanel {
     openxc7PathButton.setText(S.get("softwaresQuestaPathButton"));
     openxc7PathLabel.setText(S.get("openxc7ToolPath"));
     openxc7ForXilinxCheckBox.setText(S.get("openxc7ForXilinx"));
+    gowinPathButton.setText(S.get("softwaresQuestaPathButton"));
+    gowinPathLabel.setText(S.get("gowinToolPath"));
   }
 
   private static StringGetter fixedString(String value) {

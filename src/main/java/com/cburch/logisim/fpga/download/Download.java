@@ -217,6 +217,20 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
                 entities,
                 writeToFlash);
       }
+      case VendorSoftware.VENDOR_GOWIN -> {
+        // the open-source Gowin flow reads Verilog too: switch before the DRC and HDL generation
+        if (!HdlGeneratorFactory.VERILOG.equals(AppPreferences.HdlType.get())) {
+          AppPreferences.HdlType.set(HdlGeneratorFactory.VERILOG);
+          Reporter.report.addInfo(S.get("GowinUsesVerilog"));
+        }
+        downloader =
+            new GowinDownload(
+                getProjDir(topLevelSheet),
+                rootSheet.getNetList(),
+                myBoardInformation,
+                entities,
+                writeToFlash);
+      }
       case VendorSoftware.VENDOR_OPENFPGA -> downloader =
           new OpenFpgaDownload(
               getProjDir(topLevelSheet),

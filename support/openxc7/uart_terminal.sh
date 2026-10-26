@@ -1,18 +1,19 @@
 #!/bin/sh
-# A terminal on the Cmod A7's USB-UART (115200 baud, 8N1): what a circuit's TTY prints on the FPGA appears here,
-# and what you type goes to its Keyboard (Enter and Backspace work as in Logisim).
+# A terminal on the board's USB-UART (Cmod A7, Tang Nano 20K; 115200 baud, 8N1): what a circuit's TTY prints on
+# the FPGA appears here, and what you type goes to its Keyboard (Enter and Backspace work as in Logisim).
 #
 #   support/openxc7/uart_terminal.sh [port]
 #
 # The port is found automatically: on macOS the board's second USB channel, /dev/cu.usbserial-<serial>1; on
-# Linux /dev/serial/by-id/...Digilent...-if01-port0 (usually /dev/ttyUSB1).
+# Linux /dev/serial/by-id/...Digilent...-if01-port0 or ...SIPEED...-if01-port0 (usually /dev/ttyUSB1).
 # Uses picocom if installed (quit: Ctrl-A Ctrl-X), otherwise screen (quit: Ctrl-A K y).
 # Kubuntu: sudo apt install picocom
 PORT="$1"
 if [ -z "$PORT" ]; then
   case "$(uname)" in
     Darwin) PORT="$(ls /dev/cu.usbserial-*1 2>/dev/null | head -n 1)" ;;
-    *)      PORT="$(ls /dev/serial/by-id/*Digilent*-if01-port0 2>/dev/null | head -n 1)"
+    *)      PORT="$(ls /dev/serial/by-id/*Digilent*-if01-port0 /dev/serial/by-id/*SIPEED*-if01-port0 2>/dev/null \
+              | head -n 1)"
             [ -n "$PORT" ] || PORT=/dev/ttyUSB1 ;;
   esac
 fi
