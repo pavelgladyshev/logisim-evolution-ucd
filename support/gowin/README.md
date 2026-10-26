@@ -25,6 +25,20 @@ of the Tang Nano 20K (GW2A-18C) and 9K (GW1N-9C), all in `~/gowin` (about 0.5 GB
 from the openXC7 setup. The prerequisites for Kubuntu/Ubuntu 24.04 are at the top of `setup_toolchain.sh`; so far
 the script has been run on macOS only.
 
+On Windows nothing is built: YosysHQ's [OSS CAD Suite](https://github.com/YosysHQ/oss-cad-suite-build) has every
+program of the flow, and this downloads the release Logisim was tested with (about 600 MB, checked against the
+SHA-256 that GitHub publishes for it) and unpacks it as `%USERPROFILE%\gowin` (2.1 GB), where Logisim finds it by
+itself. It needs no administrator rights:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File support\gowin\setup_windows.ps1
+```
+
+The board then needs one driver change, once, as the Cmod A7 does ([windows.md](../openxc7/windows.md)): in
+[Zadig](https://zadig.akeo.ie), under **Options → List All Devices**, give **USB Serial Converter A** (Interface 0,
+the JTAG that loads the FPGA) the **WinUSB** driver. Leave **USB Serial Converter B** alone: it is the COM port for a
+circuit's TTY and Keyboard.
+
 ## 2. From a circuit to the board
 
 The steps are those of the Cmod A7 (section 2 of [the openXC7 guide](../openxc7/README.md)), with these differences:
@@ -35,7 +49,8 @@ The steps are those of the Cmod A7 (section 2 of [the openXC7 guide](../openxc7/
   1024 kHz in the list gives 1.04 MHz (27 MHz / 26); that is the setting for a processor.
 - The console shows nextpnr's `Max frequency for clock …`. nextpnr checks every path against one cycle of the 27 MHz
   clock, but a circuit's registers change at most every fourth cycle, on their clock's tick, so a FAIL is a warning
-  here and does not stop the build. The A4 BEAG reports between 26 and 46 MHz, depending on placement, and works at 26.
+  here and does not stop the build. The A4 BEAG reports between 14 and 46 MHz, depending on placement and the
+  toolchain's version, and works at 14.
 - The Gowin flow reads Verilog: Logisim switches the HDL type to Verilog when it builds for this board.
 - A flip-flop whose Preset is wired and whose Reset is not starts at 1, not 0: a Gowin flip-flop starts at the value
   of its asynchronous set or reset. From its first clock or reset on, it behaves as in Logisim. With Preset and Reset
