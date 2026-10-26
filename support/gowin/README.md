@@ -40,7 +40,9 @@ The steps are those of the Cmod A7 (section 2 of [the openXC7 guide](../openxc7/
 - A flip-flop whose Preset is wired and whose Reset is not starts at 1, not 0: a Gowin flip-flop starts at the value
   of its asynchronous set or reset. From its first clock or reset on, it behaves as in Logisim. With Preset and Reset
   both wired, it is built from two flip-flops and a latch, and starts at 0 as in Logisim.
-- **Write to flash** keeps the circuit after power-off. It replaces the demo that Sipeed ships in the flash.
+- **Write to flash** keeps the circuit after power-off. It replaces the demo that Sipeed ships in the flash; to keep
+  a copy, save the flash first with `openFPGALoader -b tangnano20k --dump-flash --file-size 8388608 demo.bin` (about
+  a minute), and put it back later with `openFPGALoader -b tangnano20k -f demo.bin` (about two minutes).
 - The tool path is **Preferences → Software → Gowin** (default `~/gowin/bin/`).
 
 The serial port for a TTY and a Keyboard is the second port of the board's USB-C (115200 baud): on macOS
