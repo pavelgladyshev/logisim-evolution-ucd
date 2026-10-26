@@ -156,8 +156,25 @@ public class GowinDownload implements VendorDownload {
         return null;
       }
     }
-    final var process = new ProcessBuilder(command.get());
+    return toolProcess(command.get());
+  }
+
+  /**
+   * A tool run in the sandbox. On Windows the toolchain is OSS CAD Suite, whose programs find their DLLs in the
+   * lib folder beside bin rather than next to themselves, because its environment.bat puts both on the PATH;
+   * Logisim starts them directly, so it does the same.
+   */
+  private ProcessBuilder toolProcess(List<String> command) {
+    final var process = new ProcessBuilder(command);
     process.directory(new File(sandboxPath));
+    if (System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("windows")) {
+      final var bin = new File(vendor.getToolPath()).getAbsoluteFile();
+      final var lib = new File(bin.getParentFile(), "lib");
+      if (lib.isDirectory()) {
+        final var path = process.environment().getOrDefault("PATH", "");
+        process.environment().put("PATH", bin + File.pathSeparator + lib + File.pathSeparator + path);
+      }
+    }
     return process;
   }
 
@@ -184,9 +201,7 @@ public class GowinDownload implements VendorDownload {
     for (final var option : boardOptions()) command.add(option);
     if (writeToFlash) command.add("-f");
     command.add(BIT_FILE);
-    final var process = new ProcessBuilder(command.get());
-    process.directory(new File(sandboxPath));
-    return process;
+    return toolProcess(command.get());
   }
 
   @Override
