@@ -15,7 +15,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Completes the board map of a circuit automatically and saves the result as a new file:
@@ -24,7 +26,8 @@ import java.util.List;
  *
  * Existing (saved) maps are kept. TTY -> "UART_TX" and Keyboard -> "UART_RX"; other 1-bit inputs go to the
  * buttons and other outputs to the LEDs, then everything goes to the PortIo pins; what is left becomes
- * constant 0 (inputs) or open (outputs). Exit code 2 when the DRC fails.
+ * constant 0 (inputs) or open (outputs). An FPGA pin is used once, even where the board offers it twice (an
+ * LED that is also a header pin). Exit code 2 when the DRC fails.
  */
 public class AutoMap extends DownloadBase {
 
@@ -58,6 +61,7 @@ public class AutoMap extends DownloadBase {
   }
 
   private List<FpgaIoInformationContainer> resources;
+  private final Set<String> taken = new HashSet<>();   // FPGA pins in use
 
   /** A free pin of a board resource of one of the given types (label filter: null = any but the UART). */
   private boolean mapTo(MapComponent comp, int pin, String label, IoComponentTypes... types) {
@@ -68,8 +72,11 @@ public class AutoMap extends DownloadBase {
         // the UART only for the TTY/Keyboard; not the Cmod's analog inputs (resistor dividers on the board)
         if (label == null ? (name.startsWith("UART_") || name.startsWith("AIN")) : !label.equals(name)) continue;
         for (var p = 0; p < res.getNrOfPins(); p++) {
-          if (res.isPinMapped(p)) continue;
-          if (comp.tryMap(pin, res, p)) return true;
+          if (res.isPinMapped(p) || taken.contains(res.getPinLocation(p))) continue;
+          if (comp.tryMap(pin, res, p)) {
+            taken.add(res.getPinLocation(p));
+            return true;
+          }
         }
       }
     }
@@ -80,6 +87,11 @@ public class AutoMap extends DownloadBase {
     resources = myMappableResources.getIoComponentInformation().getComponents();
     final var keys = new ArrayList<>(myMappableResources.getMappableResources().keySet());
     keys.sort((a, b) -> String.join("/", a).compareTo(String.join("/", b)));
+    for (final var comp : myMappableResources.getMappableResources().values()) {
+      for (var pin = 0; pin < comp.getNrOfPins(); pin++) {
+        if (comp.isBoardMapped(pin)) taken.add(comp.getPinLocation(pin));
+      }
+    }
     var toBoard = 0;
     var toConstant = 0;
     for (final var key : keys) {

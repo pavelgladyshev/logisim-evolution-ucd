@@ -37,7 +37,9 @@ import com.cburch.logisim.std.io.SevenSegmentScanningGenericHdlGenerator;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 
 public abstract class DownloadBase {
 
@@ -127,6 +129,29 @@ public abstract class DownloadBase {
             S.get("FpgaIncompleteMap"),
             OptionPane.YES_NO_OPTION);
     return confirm == OptionPane.YES_OPTION;
+  }
+
+  /**
+   * Whether every FPGA pin carries one mapped signal at most. A board can offer a pin twice, as an LED and as the
+   * header pin the LED is on, and the map lets a circuit take both; the tools would refuse the design only at place
+   * and route, naming their own cells rather than the board's.
+   */
+  protected boolean mapDesignCheckPinsUsedOnce() {
+    final var users = new HashMap<String, String>();
+    var once = true;
+    for (final var map : myMappableResources.getMappableResources().values()) {
+      for (var pin = 0; pin < map.getNrOfPins(); pin++) {
+        if (!map.isBoardMapped(pin) || map.isInternalMapped(pin)) continue;
+        final var location = map.getPinLocation(pin);
+        final var user = S.get("FPGAPinUser", map.getFpgaInfo(pin).getDisplayString(), map.getDisplayString(pin));
+        final var other = users.putIfAbsent(location.trim().toUpperCase(Locale.ROOT), user);
+        if (other != null) {
+          Reporter.report.addFatalError(S.get("FPGAPinMappedTwice", location, other, user));
+          once = false;
+        }
+      }
+    }
+    return once;
   }
 
   protected boolean performDrc(String circuitName, String HDLType) {

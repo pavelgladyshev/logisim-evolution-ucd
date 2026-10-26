@@ -457,6 +457,7 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
       Reporter.report.addError(S.get("FPGAMapNotComplete", myBoardInformation.getBoardName()));
       return false;
     }
+    if (!mapDesignCheckPinsUsedOnce()) return false;
     /* Stage 3 HDL generation */
     if (useGui) {
       progressBar.setValue(3);
