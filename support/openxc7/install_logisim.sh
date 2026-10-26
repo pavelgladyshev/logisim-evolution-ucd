@@ -17,10 +17,19 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 FORCE=no
 if [ "${1:-}" = --force ]; then FORCE=yes; shift; fi
 JAR="${1:-}"
-if [ -z "$JAR" ]; then
-  for candidate in "$HERE"/logisim-evolution*.jar "$HERE"/../../build/libs/logisim-evolution-*-all.jar; do
-    [ -f "$candidate" ] && JAR="$candidate" && break
+
+newest() {   # the most recently modified of the files given
+  local file found=""
+  for file in "$@"; do
+    [ -f "$file" ] && { [ -z "$found" ] || [ "$file" -nt "$found" ]; } && found="$file"
   done
+  printf '%s' "$found"
+}
+
+if [ -z "$JAR" ]; then
+  # the newest, as a checkout can still hold the jar of an earlier version under an earlier name
+  JAR="$(newest "$HERE"/logisim-evolution*.jar)"
+  [ -n "$JAR" ] || JAR="$(newest "$HERE"/../../build/libs/logisim-evolution-*-all.jar)"
 fi
 [ -n "$JAR" ] && [ -f "$JAR" ] || { echo "no Logisim jar found; give its path: $0 <jar>" >&2; exit 1; }
 

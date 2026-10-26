@@ -23,14 +23,16 @@ public class VendorSoftware {
   public static final char VENDOR_VIVADO = 2;
   public static final char VENDOR_OPENFPGA = 3;
   public static final char VENDOR_OPENXC7 = 4;
+  public static final char VENDOR_GOWIN = 5;
   public static final char VENDOR_UNKNOWN = 255;
-  public static final String[] VENDORS = {"Altera", "Xilinx", "Vivado", "openFPGA", "openXC7"};
+  public static final String[] VENDORS = {"Altera", "Xilinx", "Vivado", "openFPGA", "openXC7", "Gowin"};
 
   private static final String XilinxName = "XilinxToolsPath";
   private static final String AlteraName = "AlteraToolsPath";
   private static final String VivadoName = "VivadoToolsPath";
   private static final String OpenFpgaName = "OpenFpgaToolsPath";
   private static final String OpenXc7Name = "OpenXc7ToolsPath";
+  private static final String GowinName = "GowinToolsPath";
   public static final String UNKNOWN = "Unknown";
 
   private final char vendor;
@@ -50,6 +52,7 @@ public class VendorSoftware {
       case VENDOR_VIVADO -> AppPreferences.VivadoToolPath.get();
       case VENDOR_OPENFPGA -> AppPreferences.OpenFpgaToolPath.get();
       case VENDOR_OPENXC7 -> AppPreferences.OpenXc7ToolPath.get();
+      case VENDOR_GOWIN -> AppPreferences.GowinToolPath.get();
       default -> "Unknown";
     };
   }
@@ -78,6 +81,7 @@ public class VendorSoftware {
     result.add(VendorSoftware.VENDORS[2]);
     result.add(VendorSoftware.VENDORS[3]);
     result.add(VendorSoftware.VENDORS[4]);
+    result.add(VendorSoftware.VENDORS[5]);
 
     return result;
   }
@@ -89,6 +93,7 @@ public class VendorSoftware {
       case VENDOR_VIVADO -> VENDORS[2];
       case VENDOR_OPENFPGA -> VENDORS[3];
       case VENDOR_OPENXC7 -> VENDORS[4];
+      case VENDOR_GOWIN -> VENDORS[5];
       default -> "Unknown";
     };
   }
@@ -100,6 +105,7 @@ public class VendorSoftware {
       case VENDOR_VIVADO -> new VendorSoftware(VENDOR_VIVADO, VivadoName, load(VENDOR_VIVADO));
       case VENDOR_OPENFPGA -> new VendorSoftware(VENDOR_OPENFPGA, OpenFpgaName, load(VENDOR_OPENFPGA));
       case VENDOR_OPENXC7 -> new VendorSoftware(VENDOR_OPENXC7, OpenXc7Name, load(VENDOR_OPENXC7));
+      case VENDOR_GOWIN -> new VendorSoftware(VENDOR_GOWIN, GowinName, load(VENDOR_GOWIN));
       default -> null;
     };
   }
@@ -111,6 +117,7 @@ public class VendorSoftware {
       case VENDOR_VIVADO -> AppPreferences.VivadoToolPath.get();
       case VENDOR_OPENFPGA -> AppPreferences.OpenFpgaToolPath.get();
       case VENDOR_OPENXC7 -> AppPreferences.OpenXc7ToolPath.get();
+      case VENDOR_GOWIN -> AppPreferences.GowinToolPath.get();
       default -> null;
     };
   }
@@ -132,6 +139,9 @@ public class VendorSoftware {
         return true;
       case VENDOR_OPENXC7:
         AppPreferences.OpenXc7ToolPath.set(path);
+        return true;
+      case VENDOR_GOWIN:
+        AppPreferences.GowinToolPath.set(path);
         return true;
       default:
         return false;
@@ -180,6 +190,13 @@ public class VendorSoftware {
       progs.add("nextpnr-xilinx");
       progs.add("fasm2frames");
       progs.add("xc7frames2bit");
+      progs.add("openFPGALoader");
+    } else if (vendor == VENDOR_GOWIN) {
+      // One folder (normally ~/gowin/bin) with these programs; nextpnr-himbaechel finds its Gowin chip
+      // databases in share/nextpnr/himbaechel/gowin beside its own installation.
+      progs.add("yosys");
+      progs.add("nextpnr-himbaechel");
+      progs.add("gowin_pack");
       progs.add("openFPGALoader");
     }
 

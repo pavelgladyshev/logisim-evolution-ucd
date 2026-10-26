@@ -12,6 +12,9 @@ The toolchain is:
 - [Project X-Ray](https://github.com/f4pga/prjxray)'s `fasm2frames` and `xc7frames2bit` for the bitstream
 - [openFPGALoader](https://github.com/trabucayre/openFPGALoader) to load the bitstream over USB
 
+The same Logisim also builds for the **Sipeed Tang Nano 20K** with Gowin's open-source flow: see
+[the Tang Nano guide](../gowin/README.md).
+
 ## 1. Installation
 
 The scripts are in `support/openxc7/` of this repository, and at the top of the zip for other computers.

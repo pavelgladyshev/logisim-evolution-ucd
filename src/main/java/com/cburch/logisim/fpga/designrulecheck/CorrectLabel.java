@@ -16,9 +16,13 @@ import com.cburch.logisim.fpga.hdlgenerator.Hdl;
 import com.cburch.logisim.fpga.hdlgenerator.HdlGeneratorFactory;
 import com.cburch.logisim.fpga.hdlgenerator.Vhdl;
 import com.cburch.logisim.gui.generic.OptionPane;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public class CorrectLabel {
   public static String getCorrectLabel(String label) {
@@ -27,6 +31,43 @@ public class CorrectLabel {
     if (NUMBERS.contains(label.substring(0, 1))) result.append("L_");
     result.append(label.replace(" ", "_").replace("-", "_"));
     return result.toString();
+  }
+
+  /**
+   * The HDL module (VHDL entity) name of a circuit: its corrected name, unless that names a primitive in
+   * the cell library Yosys loads for an FPGA family, in which case "_logisim" is appended. A circuit called
+   * ALU, DFF, ROM or MUX2 is valid HDL, but Yosys reads its Gowin, Xilinx or Lattice cell library after the
+   * design, and a module of the same name stops synthesis with "Re-definition of module". The rename is
+   * confined to the generated HDL: labels, annotation and file names in the circuit are untouched.
+   */
+  public static String getHdlModuleName(String circuitName) {
+    final var name = getCorrectLabel(circuitName);
+    return isVendorPrimitive(name) ? name + "_logisim" : name;
+  }
+
+  /** Whether the name is a primitive of an FPGA cell library (case-insensitively, as VHDL compares). */
+  public static boolean isVendorPrimitive(String name) {
+    return vendorPrimitives().contains(name.toUpperCase(Locale.ROOT));
+  }
+
+  private static Set<String> vendorPrimitiveNames;
+
+  private static synchronized Set<String> vendorPrimitives() {
+    if (vendorPrimitiveNames == null) {
+      final var names = new HashSet<String>();
+      try (final var in = CorrectLabel.class.getResourceAsStream("/resources/logisim/fpga/vendorPrimitives.txt")) {
+        if (in != null) {
+          for (final var line : new String(in.readAllBytes(), StandardCharsets.UTF_8).split("\\R")) {
+            final var name = line.trim();
+            if (!name.isEmpty() && !name.startsWith("#")) names.add(name.toUpperCase(Locale.ROOT));
+          }
+        }
+      } catch (IOException e) {
+        // without the list nothing is renamed, which is how it was before
+      }
+      vendorPrimitiveNames = names;
+    }
+    return vendorPrimitiveNames;
   }
 
   public static String hdlLabelKey(String label) {

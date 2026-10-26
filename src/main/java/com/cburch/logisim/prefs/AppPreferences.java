@@ -1040,6 +1040,15 @@ public class AppPreferences {
   public static final PrefMonitor<Boolean> OpenXc7ForXilinx =
       create(new PrefMonitorBoolean("OpenXc7ForXilinx", !defaultOpenXc7ToolPath().isEmpty()));
 
+  /** Gowin open-source tools (Yosys, nextpnr-himbaechel, gowin_pack, openFPGALoader): ~/gowin/bin by default. */
+  public static final PrefMonitor<String> GowinToolPath =
+      create(new PrefMonitorString("GowinToolPath", defaultGowinToolPath()));
+
+  private static String defaultGowinToolPath() {
+    final var bin = new File(System.getProperty("user.home"), "gowin" + File.separator + "bin");
+    return bin.isDirectory() ? bin.getPath() + File.separator : "";
+  }
+
   private static String defaultOpenXc7ToolPath() {
     final var bin = new File(System.getProperty("user.home"), "openxc7" + File.separator + "bin");
     return bin.isDirectory() ? bin.getPath() + File.separator : "";
