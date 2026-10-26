@@ -13,7 +13,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
-JAR="$(ls "$REPO"/build/libs/logisim-evolution-*-all.jar 2>/dev/null | head -n 1)"
+# the newest, as a checkout can still hold the jar of an earlier version under an earlier name
+JAR="$(ls -t "$REPO"/build/libs/logisim-evolution-*-all.jar 2>/dev/null | head -n 1 || true)"
 [ -n "$JAR" ] || { echo "build Logisim first: ./gradlew shadowJar" >&2; exit 1; }
 LANGUAGE=verilog
 if [ "${1:-}" = --vhdl ]; then

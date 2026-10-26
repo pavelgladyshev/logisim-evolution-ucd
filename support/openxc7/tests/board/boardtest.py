@@ -67,7 +67,8 @@ def jdk_commands():
 
 
 JAVA, JAVAC = jdk_commands()
-JAR = sorted((REPO / "build" / "libs").glob("logisim-evolution-*-all.jar"))[0]
+# the newest, as a checkout can still hold the jar of an earlier version under an earlier name
+JAR = max((REPO / "build" / "libs").glob("logisim-evolution-*-all.jar"), key=lambda jar: jar.stat().st_mtime)
 CLASSES = TESTS / "build" / "classes"
 CLASSES.mkdir(parents=True, exist_ok=True)
 subprocess.run([JAVAC, "-nowarn", "-d", str(CLASSES), "-cp", str(JAR), *map(str, TESTS.glob("harness/*/*.java"))],

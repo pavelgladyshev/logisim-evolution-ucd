@@ -29,7 +29,8 @@ args = parser.parse_args()
 jars = sorted((REPO / "build" / "libs").glob("logisim-evolution-*-all.jar"))
 if not jars:
     raise SystemExit("build Logisim first: ./gradlew shadowJar")
-JAR = jars[0]
+# the newest, as a checkout can still hold the jar of an earlier version under an earlier name
+JAR = max(jars, key=lambda jar: jar.stat().st_mtime)
 (OUT / "classes").mkdir(parents=True, exist_ok=True)
 subprocess.run(["javac", "-nowarn", "-d", str(OUT / "classes"), "-cp", str(JAR),
                 *map(str, HERE.glob("harness/*/*.java"))], check=True)
