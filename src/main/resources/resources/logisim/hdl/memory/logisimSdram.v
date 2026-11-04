@@ -6,10 +6,11 @@
 // not 0; while it is 0, the output keeps its value. On the FPGA, a cycle of the RAM's clock is a bus cycle from one
 // tick to the next (T0 = the FPGA clock edge at which tick = 1, Tn = n FPGA clocks later). The RAM reads the word at
 // the address that its inputs give at T1 and then, if the cycle writes, writes there:
-//    T1  the address, data, write and output enables and byte enables are registered (they had a clock to settle),
+//    T1  the address, write and output enables and byte enables are registered (they had a clock to settle),
 //        and the row is opened (ACTIVE)
 //    T2  READ, with auto-precharge unless the cycle writes
-//    T4  the word read (CAS latency 2) goes to the output, if the output is enabled
+//    T4  the word read (CAS latency 2) goes to the output, if the output is enabled; the data to write is
+//        registered (a device can give it from a block RAM, a clock after the tick, as the Block Storage's DMA does)
 //    T5  WRITE of the enabled bytes, with auto-precharge; the bank is idle again at T8
 // So the memory changes before the tick that ends the cycle instead of at it, which nothing can see: the cycle has
 // read already, and the next cycle reads what was written, as in Logisim. A refresh (one every REFRESH clocks, 4096
@@ -181,7 +182,6 @@ module logisimSdram #(
          end
          S_ACTIVE : begin                                // T1
             s_addressReg <= s_address;
-            s_dataInReg <= dataIn;
             s_weReg <= we;
             s_oeReg <= oe;
             s_beReg <= be;
@@ -198,6 +198,7 @@ module logisimSdram #(
          S_LATENCY : s_state <= S_DATA;                  // T3
          S_DATA : begin                                  // T4
             if (s_oeReg) s_dataOut <= sdramDq;
+            s_dataInReg <= dataIn;
             s_state <= s_weReg ? S_WRITE : S_IDLE;
          end
          S_WRITE : begin                                 // T5

@@ -4,9 +4,10 @@
 // the end of a cycle with its output enabled must be what Logisim's RAM gives: the word at the address, with the
 // writes of the cycles before. Each cycle's word must be out within the cycle, and no address may be X.
 //    iverilog -DPERIOD=12 -o tb tb_sdram.v sdram_model.v logisimSdram.v && vvp -n tb
-// With -DGENERATED=<module>, the RAM is the module that Logisim's FPGA flow generates for a RAM of 32 bits with byte
-// enables (in its memory folder; it has logisimSdram in it), whose FPGA memory is SDRAM; add -DBLOCK_RAM when its
-// FPGA memory is block RAM (no SDRAM, and no start-up: the memory starts with 0s).
+// With -DLATE_DATA the data to write comes a clock after the tick, as the Block Storage's DMA gives it (from a
+// block RAM). With -DGENERATED=<module>, the RAM is the module that Logisim's FPGA flow generates for a RAM of 32
+// bits with byte enables (in its memory folder; it has logisimSdram in it), whose FPGA memory is SDRAM; add
+// -DBLOCK_RAM when its FPGA memory is block RAM (no SDRAM, and no start-up: the memory starts with 0s).
 `ifndef PERIOD
  `define PERIOD 12
 `endif
@@ -25,8 +26,14 @@ module tb_sdram;
    always @(posedge clock) tickCount <= tick ? 0 : tickCount + 1;
 
    reg  [ADDR_BITS-1:0] address = 0;
-   reg  [31:0] dataIn = 0;
+   reg  [31:0] dataIn = 0, dataInLate = 0;
    reg         we = 0, oe = 0;
+   always @(posedge clock) dataInLate <= dataIn;
+`ifdef LATE_DATA
+ `define RAM_DATA dataInLate
+`else
+ `define RAM_DATA dataIn
+`endif
    reg  [3:0]  be = 4'hf;
    wire [31:0] dataOut, dq;
    wire        ready, sdClk, cke, csN, rasN, casN, weN;
@@ -37,20 +44,20 @@ module tb_sdram;
 `ifdef GENERATED
  `ifdef BLOCK_RAM
    assign ready = 1'b1;
-   `GENERATED dut (.clock(clock), .tick(tick), .address(address), .dataIn(dataIn), .we(we), .oe(oe),
+   `GENERATED dut (.clock(clock), .tick(tick), .address(address), .dataIn(`RAM_DATA), .we(we), .oe(oe),
       .byteEnable0(be[0]), .byteEnable1(be[1]), .byteEnable2(be[2]), .byteEnable3(be[3]), .dataOut(dataOut));
  `else
    wire [22:0] sdramOut;
    assign {ba, a, dqm, weN, casN, rasN, csN, cke, sdClk} = sdramOut;
    assign ready = dut.sdram.ready;
-   `GENERATED dut (.clock(clock), .tick(tick), .address(address), .dataIn(dataIn), .we(we), .oe(oe),
+   `GENERATED dut (.clock(clock), .tick(tick), .address(address), .dataIn(`RAM_DATA), .we(we), .oe(oe),
       .byteEnable0(be[0]), .byteEnable1(be[1]), .byteEnable2(be[2]), .byteEnable3(be[3]), .dataOut(dataOut),
       .sdramOut(sdramOut), .sdramDq(dq));
   `define CONTROLLER dut.sdram
  `endif
 `else
    logisimSdram #(.ADDR_BITS(ADDR_BITS), .POWER_UP(5402), .REFRESH(378), .T_RFC(3)) dut (
-      .clock(clock), .tick(tick), .address(address), .dataIn(dataIn), .we(we), .oe(oe), .be(be),
+      .clock(clock), .tick(tick), .address(address), .dataIn(`RAM_DATA), .we(we), .oe(oe), .be(be),
       .dataOut(dataOut), .ready(ready), .sdramClk(sdClk), .sdramCke(cke), .sdramCsN(csN), .sdramRasN(rasN),
       .sdramCasN(casN), .sdramWeN(weN), .sdramDqm(dqm), .sdramAddr(a), .sdramBa(ba), .sdramDq(dq));
  `define CONTROLLER dut
