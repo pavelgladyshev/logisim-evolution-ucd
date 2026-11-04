@@ -11,6 +11,7 @@ package com.cburch.logisim.fpga.hdlgenerator;
 
 import static com.cburch.logisim.fpga.Strings.S;
 
+import com.cburch.logisim.data.Attribute;
 import com.cburch.logisim.fpga.designrulecheck.Netlist;
 import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.fpga.file.FileWriter;
@@ -65,6 +66,21 @@ public class Hdl {
 
   public static boolean isNone() {
     return AppPreferences.HdlType.get().equals(HdlGeneratorFactory.NONE);
+  }
+
+  /** A reason for HdlGeneratorFactory.getUnsupportedReasons: set the attribute to this value. */
+  public static <V> String setAttributeReason(Attribute<V> attr, V value) {
+    return S.get("HDL_SetAttribute", attr.getDisplayName(), attr.toDisplayString(value));
+  }
+
+  /** A reason for HdlGeneratorFactory.getUnsupportedReasons: set the attribute to at most max. */
+  public static String atMostReason(Attribute<?> attr, int max) {
+    return S.get("HDL_SetAttributeAtMost", attr.getDisplayName(), Integer.toString(max));
+  }
+
+  /** A reason for HdlGeneratorFactory.getUnsupportedReasons: the component has HDL in Verilog. */
+  public static String verilogOnlyReason() {
+    return S.get("HDL_VerilogOnly");
   }
 
   public static String bracketOpen() {

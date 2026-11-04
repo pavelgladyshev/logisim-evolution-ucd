@@ -27,8 +27,9 @@ import java.util.List;
 /**
  * The RV32IM CPU on an FPGA, in Verilog and with a separate data bus: riscvCpu (resources/logisim/hdl/riscv), a
  * model of the Java CPU that does at each rising edge of its clock what the Java CPU does there, and says how. It
- * needs a TLB of at most 32 entries, and has no instruction cache and no GDB server; and a clock cycle of 24 FPGA
- * clocks at least (Logisim's ticks of 2048 kHz and slower with the Tang Nano 20K's 27 MHz).
+ * needs a TLB of at most 32 entries, and has no instruction cache and no GDB server; and a clock cycle of 23 FPGA
+ * clocks at least (getMinimumFpgaClocksPerCycle: with the Tang Nano 20K's 27 MHz and two ticks a cycle, Logisim's
+ * ticks of 2.25 MHz and slower, such as 2048 kHz).
  */
 public class rv32imHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 
@@ -36,6 +37,13 @@ public class rv32imHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 
   /** FPGA clocks after a tick at which the CPU takes its inputs: when every device has answered. */
   private static final int START = 8;
+
+  /**
+   * The FPGA clocks of riscvCpu's longest step, one for each of its sequencer's steps: a division
+   * (the edge, the interrupts, the instruction, 8 of the division, its result) whose next fetch
+   * faults (the fetch, the handler's fetch).
+   */
+  private static final int LONGEST_STEP = 14;
 
   public static final int MAX_TLB_ENTRIES = 32;
 
@@ -96,10 +104,27 @@ public class rv32imHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 
   @Override
   public boolean isHdlSupportedTarget(AttributeSet attrs) {
-    return Hdl.isVerilog()
-        && DataBus.isSeparate(attrs)
-        && rv32im.tlbEntries(attrs) <= MAX_TLB_ENTRIES
-        && !attrs.getValue(rv32im.ATTR_INSTRUCTION_CACHE)
-        && !attrs.getValue(rv32im.ATTR_GDB_SERVER_RUNNING);
+    return getUnsupportedReasons(attrs).isEmpty();
+  }
+
+  @Override
+  public List<String> getUnsupportedReasons(AttributeSet attrs) {
+    final var reasons = DataBus.unsupportedReasons(attrs);
+    if (rv32im.tlbEntries(attrs) > MAX_TLB_ENTRIES) {
+      reasons.add(Hdl.atMostReason(rv32im.ATTR_TLB_ENTRIES, MAX_TLB_ENTRIES));
+    }
+    if (attrs.getValue(rv32im.ATTR_INSTRUCTION_CACHE)) {
+      reasons.add(Hdl.setAttributeReason(rv32im.ATTR_INSTRUCTION_CACHE, false));
+    }
+    if (attrs.getValue(rv32im.ATTR_GDB_SERVER_RUNNING)) {
+      reasons.add(Hdl.setAttributeReason(rv32im.ATTR_GDB_SERVER_RUNNING, false));
+    }
+    return reasons;
+  }
+
+  /** The inputs at START, then the longest step, and the next tick one FPGA clock after it. */
+  @Override
+  public int getMinimumFpgaClocksPerCycle(AttributeSet attrs) {
+    return START + LONGEST_STEP + 1;
   }
 }

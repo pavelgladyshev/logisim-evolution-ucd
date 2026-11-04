@@ -59,5 +59,22 @@ public interface HdlGeneratorFactory {
 
   boolean isHdlSupportedTarget(AttributeSet attrs);
 
+  /**
+   * Why a component with these attributes has no HDL, as the settings to change, for the FPGA
+   * flow's report (Hdl.setAttributeReason and the like); empty when there is nothing to say.
+   */
+  default List<String> getUnsupportedReasons(AttributeSet attrs) {
+    return List.of();
+  }
+
+  /**
+   * The FPGA clocks that each cycle of the component's clock needs at least, for HDL that does a
+   * cycle's work over several FPGA clocks; 0 for none. The FPGA flow refuses a tick frequency
+   * that gives fewer.
+   */
+  default int getMinimumFpgaClocksPerCycle(AttributeSet attrs) {
+    return 0;
+  }
+
   boolean isOnlyInlined();
 }

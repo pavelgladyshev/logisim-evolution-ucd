@@ -799,6 +799,17 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
   }
 
   @Override
+  public List<String> getUnsupportedReasons(AttributeSet attrs) {
+    // in block RAM, Logisim says no more than that the RAM is not supported
+    return RamSdram.isSdram(attrs) ? RamSdram.unsupportedReasons(attrs) : List.of();
+  }
+
+  @Override
+  public int getMinimumFpgaClocksPerCycle(AttributeSet attrs) {
+    return RamSdram.isSdram(attrs) ? RamSdram.MIN_FPGA_CLOCKS_PER_CYCLE : 0;
+  }
+
+  @Override
   public boolean isHdlSupportedTarget(AttributeSet attrs) {
     if (attrs == null) return false;
     if (RamSdram.isSdram(attrs)) return RamSdram.isSupported(attrs);

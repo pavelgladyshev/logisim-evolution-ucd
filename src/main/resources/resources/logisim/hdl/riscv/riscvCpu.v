@@ -7,9 +7,10 @@
 // FPGA clocks after a tick (when every device has answered: the SDRAM takes 7 at most) the CPU takes the data bus,
 // the interrupt requests and Bus Request, and a sequencer (u) does the step for the next tick, which then only puts
 // the bus cycle that the step set up on the outputs. So the outputs change at the tick, as in Logisim, and a RAM
-// can take them one FPGA clock later. The longest step, a division (four bits of its quotient a clock), takes about
-// 15 clocks: with START 8, a CPU cycle of 24 FPGA clocks at least (Logisim's ticks of 2048 kHz and slower give that
-// with the Tang Nano 20K's 27 MHz: 26 FPGA clocks a cycle).
+// can take them one FPGA clock later. Each of the sequencer's steps takes one clock; the longest step, a division
+// (four bits of its quotient a clock) whose next fetch faults, takes 14: with START 8, a CPU cycle of 23 FPGA clocks
+// at least, which the FPGA flow checks (with the Tang Nano 20K's 27 MHz, Logisim's ticks of 2.25 MHz and slower, such
+// as 2048 kHz: 26 FPGA clocks a cycle).
 //
 // As the Java CPU: a TLB of TLB_ENTRIES entries searched in order, behind a one-entry cache of the last
 // translation, and least recently used replacement (here as ranks, 0 the most recent, which order the entries as

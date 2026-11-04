@@ -21,6 +21,7 @@ import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.fpga.hdlgenerator.HdlGeneratorFactory;
 import com.cburch.logisim.util.StringGetter;
 import java.awt.Color;
+import java.util.List;
 
 /**
  * Represents a category of components that appear in a circuit. This class and <code>Component
@@ -80,6 +81,14 @@ public interface ComponentFactory extends AttributeDefaultProvider {
   boolean hasThreeStateDrivers(AttributeSet attrs);
 
   boolean isHDLSupportedComponent(AttributeSet attrs);
+
+  /**
+   * Why a component with these attributes has no HDL, as the settings to change (its HDL
+   * generator's getUnsupportedReasons); empty when there is nothing to say.
+   */
+  default List<String> getHdlUnsupportedReasons(AttributeSet attrs) {
+    return List.of();
+  }
 
   @Override
   boolean isAllDefaultValues(AttributeSet attrs, LogisimVersion ver);

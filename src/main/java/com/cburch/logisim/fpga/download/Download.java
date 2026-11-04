@@ -435,6 +435,13 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
       Reporter.report.addFatalError(S.get("FPGANameContainsSpaces", name));
       return false;
     }
+    /* the tick frequency, and whether the components get enough FPGA clocks a cycle with it */
+    if (tickFrequency <= 0) tickFrequency = 1;
+    if (tickFrequency > (getSynthesizedFrequency() / 4))
+      tickFrequency = getSynthesizedFrequency() / 4;
+    if (!checkFpgaClocksPerCycle(topLevelSheet, tickFrequency)) {
+      return false;
+    }
     /* Stage 1 Is design map able on Board */
     if (useGui) {
       progressBar.setValue(1);
@@ -477,9 +484,6 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
       progressBar.setValue(3);
       progressBar.setString(S.get("FPGAState1"));
     }
-    if (tickFrequency <= 0) tickFrequency = 1;
-    if (tickFrequency > (getSynthesizedFrequency() / 4))
-      tickFrequency = getSynthesizedFrequency() / 4;
     if (!writeHDL(topLevelSheet, tickFrequency)) {
       return false;
     }

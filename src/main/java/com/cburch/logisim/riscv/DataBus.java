@@ -16,6 +16,9 @@ import com.cburch.logisim.data.AttributeOption;
 import com.cburch.logisim.data.AttributeSet;
 import com.cburch.logisim.data.Attributes;
 import com.cburch.logisim.data.Value;
+import com.cburch.logisim.fpga.hdlgenerator.Hdl;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The data bus option of the RV32IM CPU, Block Storage and Timer.
@@ -39,6 +42,17 @@ public final class DataBus {
 
   public static boolean isSeparate(AttributeSet attrs) {
     return SEPARATE.equals(attrs.getValue(ATTR));
+  }
+
+  /**
+   * Why a riscv component with these attributes has no HDL: its HDL is in Verilog, for a separate
+   * data bus. The CPU adds its own reasons.
+   */
+  public static List<String> unsupportedReasons(AttributeSet attrs) {
+    final var reasons = new ArrayList<String>();
+    if (!Hdl.isVerilog()) reasons.add(Hdl.verilogOnlyReason());
+    if (!isSeparate(attrs)) reasons.add(Hdl.setAttributeReason(ATTR, SEPARATE));
+    return reasons;
   }
 
   /** What a separate-bus output drives for {@code value}: the value itself, or 0 if not defined. */

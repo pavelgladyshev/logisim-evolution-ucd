@@ -13,11 +13,11 @@ import com.cburch.logisim.data.AttributeSet;
 import com.cburch.logisim.fpga.designrulecheck.Netlist;
 import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.fpga.hdlgenerator.AbstractHdlGeneratorFactory;
-import com.cburch.logisim.fpga.hdlgenerator.Hdl;
 import com.cburch.logisim.fpga.hdlgenerator.HdlParameters;
 import com.cburch.logisim.instance.Port;
 import com.cburch.logisim.riscv.DataBus;
 import com.cburch.logisim.util.LineBuffer;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -121,6 +121,11 @@ public class TimerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
   @Override
   public boolean isHdlSupportedTarget(AttributeSet attrs) {
     // the riscv components go onto an FPGA in Verilog, and only on a separate data bus
-    return Hdl.isVerilog() && DataBus.isSeparate(attrs);
+    return getUnsupportedReasons(attrs).isEmpty();
+  }
+
+  @Override
+  public List<String> getUnsupportedReasons(AttributeSet attrs) {
+    return DataBus.unsupportedReasons(attrs);
   }
 }

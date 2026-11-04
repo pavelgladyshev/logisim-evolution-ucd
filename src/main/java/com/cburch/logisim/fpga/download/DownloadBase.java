@@ -11,6 +11,9 @@ package com.cburch.logisim.fpga.download;
 
 import static com.cburch.logisim.fpga.Strings.S;
 
+import com.cburch.logisim.circuit.Circuit;
+import com.cburch.logisim.circuit.SubcircuitFactory;
+import com.cburch.logisim.comp.Component;
 import com.cburch.logisim.fpga.data.BoardInformation;
 import com.cburch.logisim.fpga.data.DriveStrength;
 import com.cburch.logisim.fpga.data.FpgaIoInformationContainer;
@@ -35,11 +38,15 @@ import com.cburch.logisim.proj.Project;
 import com.cburch.logisim.std.memory.RamSdram;
 import com.cburch.logisim.std.io.LedArrayGenericHdlGeneratorFactory;
 import com.cburch.logisim.std.io.SevenSegmentScanningGenericHdlGenerator;
+import com.cburch.logisim.std.wiring.Clock;
 
 import java.io.File;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 
 public abstract class DownloadBase {
@@ -166,6 +173,88 @@ public abstract class DownloadBase {
       drcResult = root.getNetList().designRuleCheckResult(true, sheetNames);
     }
     return drcResult == Netlist.DRC_PASSED;
+  }
+
+  /**
+   * Whether each component whose HDL does a cycle of its clock over several FPGA clocks
+   * (HdlGeneratorFactory.getMinimumFpgaClocksPerCycle, as the RV32IM CPU's) gets enough of them at
+   * this tick frequency; if not, it is reported with the highest tick frequency that would do.
+   * After the DRC, which makes the netlists.
+   */
+  protected boolean checkFpgaClocksPerCycle(String circuitName, double tickFrequency) {
+    final var root = myProject.getLogisimFile().getCircuit(circuitName);
+    if (root == null) return true;
+    // the shortest cycle of a Clock, in ticks
+    var ticksPerCycle = 0;
+    for (final var clock : root.getNetList().getAllClockSources()) {
+      final var attrs = clock.getAttributeSet();
+      final var ticks = attrs.getValue(Clock.ATTR_HIGH) + attrs.getValue(Clock.ATTR_LOW);
+      if (ticksPerCycle == 0 || ticks < ticksPerCycle) ticksPerCycle = ticks;
+    }
+    if (ticksPerCycle == 0) return true;
+    final var fpgaClock = getSynthesizedFrequency();
+    final var cycle = fpgaClocksPerCycle(fpgaClock, tickFrequency, ticksPerCycle);
+    var enough = true;
+    for (final var comp : allComponents(root)) {
+      final var generator = comp.getFactory().getHDLGenerator(comp.getAttributeSet());
+      if (generator == null) continue;
+      final var needed = generator.getMinimumFpgaClocksPerCycle(comp.getAttributeSet());
+      if (needed > cycle) {
+        Reporter.report.addFatalError(
+            S.get(
+                "FPGAClockCycleTooShort",
+                comp.getFactory().getDisplayName(),
+                Integer.toString(needed),
+                frequencyString(fpgaClock),
+                frequencyString(tickFrequency),
+                Long.toString(cycle),
+                frequencyString(highestTickFrequency(fpgaClock, needed, ticksPerCycle))));
+        enough = false;
+      }
+    }
+    return enough;
+  }
+
+  /** The FPGA clocks of a clock cycle of so many ticks, as TickComponentHdlGeneratorFactory ticks. */
+  static long fpgaClocksPerCycle(long fpgaClock, double tickFrequency, int ticksPerCycle) {
+    return Math.max(1, (long) (fpgaClock / tickFrequency)) * ticksPerCycle;
+  }
+
+  /** The highest tick frequency that gives a clock cycle of so many ticks this many FPGA clocks. */
+  static double highestTickFrequency(long fpgaClock, int fpgaClocks, int ticksPerCycle) {
+    final var ticksApart = (fpgaClocks + ticksPerCycle - 1) / ticksPerCycle;
+    return (double) fpgaClock / ticksApart;
+  }
+
+  /** A frequency for a message, rounded down to three decimals at most: 27 MHz, 2.076 MHz. */
+  static String frequencyString(double frequency) {
+    var unit = "Hz";
+    var value = frequency;
+    if (frequency >= 1e6) {
+      unit = "MHz";
+      value = frequency / 1e6;
+    } else if (frequency >= 1e3) {
+      unit = "kHz";
+      value = frequency / 1e3;
+    }
+    final var rounded = BigDecimal.valueOf(value).setScale(3, RoundingMode.FLOOR).stripTrailingZeros();
+    return rounded.toPlainString() + " " + unit;
+  }
+
+  /** The components of the circuit and of its subcircuits, each circuit once. */
+  private static List<Component> allComponents(Circuit root) {
+    final var components = new ArrayList<Component>();
+    final var seen = new HashSet<Circuit>();
+    final var toVisit = new ArrayList<Circuit>(List.of(root));
+    while (!toVisit.isEmpty()) {
+      final var circuit = toVisit.remove(toVisit.size() - 1);
+      if (!seen.add(circuit)) continue;
+      for (final var comp : circuit.getNonWires()) {
+        components.add(comp);
+        if (comp.getFactory() instanceof SubcircuitFactory sub) toVisit.add(sub.getSubcircuit());
+      }
+    }
+    return components;
   }
 
   protected String getProjDir(String selectedCircuit) {

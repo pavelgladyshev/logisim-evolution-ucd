@@ -24,6 +24,7 @@ import com.cburch.logisim.util.IconsUtil;
 import com.cburch.logisim.util.StringGetter;
 import com.cburch.logisim.util.StringUtil;
 import java.awt.Color;
+import java.util.List;
 import javax.swing.Icon;
 
 public abstract class AbstractComponentFactory implements ComponentFactory {
@@ -134,6 +135,11 @@ public abstract class AbstractComponentFactory implements ComponentFactory {
   public boolean isHDLSupportedComponent(AttributeSet attrs) {
     if (myHDLGenerator != null) return myHDLGenerator.isHdlSupportedTarget(attrs);
     return false;
+  }
+
+  @Override
+  public List<String> getHdlUnsupportedReasons(AttributeSet attrs) {
+    return myHDLGenerator == null ? List.of() : myHDLGenerator.getUnsupportedReasons(attrs);
   }
 
   @Override

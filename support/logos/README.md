@@ -197,3 +197,9 @@ its ten test programs pass on the board, 81 tests of 81: the boot and the ten ta
 The session is Logisim's line for line but for one count that depends on when the interrupts come, which the
 commands typed over the serial port change: redir_test's single read() of a pipe got 27 bytes of hello's output
 instead of 26.
+
+For a circuit of one's own, the FPGA flow says what stops it before the pins are mapped. A component that has no HDL
+as it is set up is named with the settings to change (for the CPU with its defaults: set “Data Bus” to “Separate In
+and Out”; set “TLB Entries” to 32 or less), and a tick frequency that gives a component too few FPGA clocks a cycle
+is refused with the highest one that will do: the CPU needs 23 (2.25 MHz on the Tang Nano 20K), a RAM in the SDRAM
+12 (4.5 MHz).

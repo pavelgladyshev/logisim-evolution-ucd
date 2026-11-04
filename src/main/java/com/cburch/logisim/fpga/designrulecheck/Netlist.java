@@ -342,6 +342,21 @@ public class Netlist {
       if (!comp.getFactory().isHDLSupportedComponent(comp.getAttributeSet())) {
         drc.get(5).addMarkComponent(comp);
         drcStatus |= DRC_ERROR;
+        // and, if the component knows, the settings that would give it HDL
+        final var reasons = comp.getFactory().getHdlUnsupportedReasons(comp.getAttributeSet());
+        if (!reasons.isEmpty()) {
+          final var why =
+              new SimpleDrcContainer(
+                  myCircuit,
+                  S.get(
+                      "HDL_UnsupportedBecause",
+                      comp.getFactory().getDisplayName(),
+                      String.join("; ", reasons)),
+                  SimpleDrcContainer.LEVEL_FATAL,
+                  SimpleDrcContainer.MARK_INSTANCE);
+          why.addMarkComponent(comp);
+          drc.add(why);
+        }
       }
       // we check that all components that require a non zero label (annotation) have a label set
       if (comp.getFactory().requiresNonZeroLabel()) {

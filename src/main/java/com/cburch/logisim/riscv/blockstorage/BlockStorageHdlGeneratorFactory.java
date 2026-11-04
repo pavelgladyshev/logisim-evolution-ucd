@@ -121,6 +121,11 @@ public class BlockStorageHdlGeneratorFactory extends AbstractHdlGeneratorFactory
   @Override
   public boolean isHdlSupportedTarget(AttributeSet attrs) {
     // the riscv components go onto an FPGA in Verilog, and only on a separate data bus
-    return Hdl.isVerilog() && DataBus.isSeparate(attrs);
+    return getUnsupportedReasons(attrs).isEmpty();
+  }
+
+  @Override
+  public List<String> getUnsupportedReasons(AttributeSet attrs) {
+    return DataBus.unsupportedReasons(attrs);
   }
 }

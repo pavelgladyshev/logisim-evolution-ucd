@@ -36,6 +36,9 @@ public final class RamSdram {
   public static final int MAX_ADDRESS_BITS = 21;
   public static final int MAX_DATA_BITS = 32;
 
+  /** The FPGA clocks of a cycle of the RAM's clock at least: a bus cycle, delayed by a refresh. */
+  public static final int MIN_FPGA_CLOCKS_PER_CYCLE = 12;
+
   /**
    * The ticks of a design with a RAM in the SDRAM start 2^START_DELAY_BITS FPGA clocks after the FPGA (at 27 MHz,
    * 155 ms): the SDRAM's start-up (200 us) and its clearing (up to 2.2 million clocks for 8 MB) are done by then.
@@ -68,15 +71,35 @@ public final class RamSdram {
    * 50 MHz, which is not known yet when this is asked.)
    */
   static boolean isSupported(AttributeSet attrs) {
-    final var clearPin = attrs.getValue(RamAttributes.CLEAR_PIN);
-    return Hdl.isVerilog()
-        && Mem.USEBYTEENABLES.equals(attrs.getValue(Mem.ENABLES_ATTR))
-        && RamAttributes.BUS_SEP.equals(attrs.getValue(RamAttributes.ATTR_DBUS))
-        && StdAttr.TRIG_RISING.equals(attrs.getValue(StdAttr.TRIGGER))
-        && Boolean.TRUE.equals(attrs.getValue(Mem.ASYNC_READ))
-        && !Boolean.TRUE.equals(clearPin)
-        && attrs.getValue(Mem.ADDR_ATTR).getWidth() <= MAX_ADDRESS_BITS
-        && attrs.getValue(Mem.DATA_ATTR).getWidth() <= MAX_DATA_BITS;
+    return unsupportedReasons(attrs).isEmpty();
+  }
+
+  /** Why the SDRAM's controller cannot be the RAM with these attributes: the settings to change. */
+  static List<String> unsupportedReasons(AttributeSet attrs) {
+    final var reasons = new ArrayList<String>();
+    if (!Hdl.isVerilog()) reasons.add(Hdl.verilogOnlyReason());
+    if (!Mem.USEBYTEENABLES.equals(attrs.getValue(Mem.ENABLES_ATTR))) {
+      reasons.add(Hdl.setAttributeReason(Mem.ENABLES_ATTR, Mem.USEBYTEENABLES));
+    }
+    if (!RamAttributes.BUS_SEP.equals(attrs.getValue(RamAttributes.ATTR_DBUS))) {
+      reasons.add(Hdl.setAttributeReason(RamAttributes.ATTR_DBUS, RamAttributes.BUS_SEP));
+    }
+    if (!StdAttr.TRIG_RISING.equals(attrs.getValue(StdAttr.TRIGGER))) {
+      reasons.add(Hdl.setAttributeReason(StdAttr.TRIGGER, StdAttr.TRIG_RISING));
+    }
+    if (!Boolean.TRUE.equals(attrs.getValue(Mem.ASYNC_READ))) {
+      reasons.add(Hdl.setAttributeReason(Mem.ASYNC_READ, true));
+    }
+    if (Boolean.TRUE.equals(attrs.getValue(RamAttributes.CLEAR_PIN))) {
+      reasons.add(Hdl.setAttributeReason(RamAttributes.CLEAR_PIN, false));
+    }
+    if (attrs.getValue(Mem.ADDR_ATTR).getWidth() > MAX_ADDRESS_BITS) {
+      reasons.add(Hdl.atMostReason(Mem.ADDR_ATTR, MAX_ADDRESS_BITS));
+    }
+    if (attrs.getValue(Mem.DATA_ATTR).getWidth() > MAX_DATA_BITS) {
+      reasons.add(Hdl.atMostReason(Mem.DATA_ATTR, MAX_DATA_BITS));
+    }
+    return reasons;
   }
 
   /** The pins the RAM is mapped with. */
