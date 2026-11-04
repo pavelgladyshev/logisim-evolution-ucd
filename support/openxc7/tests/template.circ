@@ -19,6 +19,7 @@
   <lib desc="#TTL" name="6" />
   <lib desc="#TCL" name="7" />
   <lib desc="#Base" name="8" />
+  <lib desc="#riscv" name="9" />
   <main name="main" />
   <options>
     <a name="gateUndefined" val="ignore" />

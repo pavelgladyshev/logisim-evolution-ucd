@@ -1,0 +1,5 @@
+# name tool attributes (skip = port indices left unconnected; clock = the clock input; rare = 1 in 16 steps)
+# The Timer's registers at addresses the random inputs hit often (0 and 1), and at two with the top bit set
+# Timer ports: 0 address, 1 re, 2 we, 3 data out, 4 irq, 5 reset, 6 clock, 7 data in
+timer01 Timer dataBus=separate mtimecmpaddr=0x0 mtimeaddr=0x1 clock=6 rare=5
+timerhi Timer dataBus=separate mtimecmpaddr=0xffffffff mtimeaddr=0x80000000 clock=6 rare=5

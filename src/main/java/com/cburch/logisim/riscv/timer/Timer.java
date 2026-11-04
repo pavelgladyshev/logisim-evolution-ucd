@@ -47,7 +47,8 @@ public class Timer extends InstanceFactory {
     private static final Value ZERO_32 = Value.createKnown(32, 0);
 
     public Timer() {
-        super(_ID);
+        // on an FPGA (Verilog, separate data bus only) the Timer is TimerHdlGeneratorFactory's module
+        super(_ID, new TimerHdlGeneratorFactory());
         setOffsetBounds(Bounds.create(-40, -50, 90, 100));
         setPorts(ports(false));
 

@@ -343,6 +343,16 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
   }
 
   /**
+   * Whether the component's clock inputs are edge triggered: such a component is clocked by the global clock and
+   * acts at its clock net's tick ("tick"), so that everything on the FPGA is in one clock domain. Otherwise it is
+   * clocked by the net's derived clock itself and its tick is 1. By default, components with a trigger attribute
+   * are; a component without one whose module uses the tick says so by overriding this.
+   */
+  protected boolean isEdgeTriggered(AttributeSet attrs) {
+    return Netlist.isFlipFlop(attrs);
+  }
+
+  /**
    * Returns the parameter values used for one component instance. Subclasses may override this hook
    * when a parameter depends on how the instance is connected, not only on its attributes.
    */
@@ -488,7 +498,7 @@ public class AbstractHdlGeneratorFactory implements HdlGeneratorFactory {
                     "HDLGenerator_GatedClockConnection", compName, nets.getCircuitName()));
             gatedClock = true;
           }
-          if (hasClock && !gatedClock && Netlist.isFlipFlop(attrs)) {
+          if (hasClock && !gatedClock && isEdgeTriggered(attrs)) {
             if (nets.requiresGlobalClockConnection()) {
               result.put(myPorts.getTickName(port), LineBuffer
                   .formatHdl("{{1}}{{<}}{{2}}{{>}}", clockNetName, ClockHdlGeneratorFactory.GLOBAL_CLOCK_INDEX));

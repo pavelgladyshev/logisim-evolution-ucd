@@ -2,9 +2,11 @@
 package com.cburch.logisim.riscv.blockstorage;
 
 import com.cburch.logisim.data.*;
+import com.cburch.logisim.fpga.data.ComponentMapInformationContainer;
 import com.cburch.logisim.instance.*;
 import com.cburch.logisim.riscv.DataBus;
 import com.cburch.logisim.util.GraphicsUtil;
+import com.cburch.logisim.util.StringUtil;
 import static com.cburch.logisim.riscv.Strings.S;
 import static com.cburch.logisim.riscv.cpu.CpuDrawSupport.*;
 import static com.cburch.logisim.riscv.blockstorage.BlockStorageData.HI_Z;
@@ -13,6 +15,8 @@ import static com.cburch.logisim.riscv.blockstorage.BlockStorageData.HI_Z_32;
 import java.awt.*;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BlockStorage extends InstanceFactory {
 
@@ -46,7 +50,9 @@ public class BlockStorage extends InstanceFactory {
 
 
     public BlockStorage() {
-        super(_ID);
+        // On an FPGA (Verilog, separate data bus only) it keeps its blocks on a microSD card, on four mappable
+        // pins: see BlockStorageHdlGeneratorFactory.
+        super(_ID, StringUtil.constantGetter(_ID), new BlockStorageHdlGeneratorFactory(), true, false);
         setOffsetBounds(Bounds.create(-50, -50, 180, 280));
         setPorts(ports(false));
         setAttributes(
@@ -54,13 +60,16 @@ public class BlockStorage extends InstanceFactory {
                         StdAttr.LABEL,
                         StdAttr.LABEL_FONT,
                         FILE_NAME_ATTR,
-                        DataBus.ATTR
+                        DataBus.ATTR,
+                        StdAttr.MAPINFO
                 },
                 new Object[]{
                         "",
                         StdAttr.DEFAULT_LABEL_FONT,
                         "block_storage.bin",
-                        DataBus.BIDIRECTIONAL
+                        DataBus.BIDIRECTIONAL,
+                        new ComponentMapInformationContainer(1, 3, 0, new ArrayList<>(List.of("SD_MISO")),
+                                new ArrayList<>(List.of("SD_SCK", "SD_MOSI", "SD_CS")), null)
                 }
         );
     }
