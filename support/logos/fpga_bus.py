@@ -67,10 +67,11 @@ def find_comp(main, name, loc, label=None):
 
 
 def separate_pins(main):
-    """The data buses of the CPU, Block Storage, Timer and RAM made separate, and the RAM in the SDRAM on the FPGA:
-    only attributes change."""
+    """The data buses of the CPU, Block Storage, Timer and RAM made separate, the RAM in the SDRAM on the FPGA, and
+    the CPU's TLB of 16 entries: only attributes change."""
     for name, loc in [('RV32IM CPU', (220, 590)), ('Block Storage', (830, 1080)), ('Timer', (870, 480))]:
         set_attr(find_comp(main, name, loc), 'dataBus', 'separate')
+    set_attr(find_comp(main, 'RV32IM CPU', (220, 590)), 'tlbEntries', '16')   # what fits an FPGA, also in Logisim
     ram = find_comp(main, 'RAM', (750, 810))
     set_attr(ram, 'databus', 'bibus')
     set_attr(ram, 'fpgaMemory', 'sdram')             # on the FPGA, the RAM is in the board's SDRAM
