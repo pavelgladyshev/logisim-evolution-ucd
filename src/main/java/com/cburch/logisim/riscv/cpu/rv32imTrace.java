@@ -17,7 +17,8 @@ import java.io.OutputStream;
 /**
  * A record of the CPU's clock edges, to check its HDL against: with the Java system property rv32im.trace naming a
  * file, every rising edge of the CPU's clock adds 16 bytes to it, little-endian: what the CPU took at the edge (Data
- * In, 4 bytes, and a byte: bit 0 the timer interrupt, 1 the external interrupt, 2 Bus Request), then what it gives
+ * In as the step took it, 4 bytes, so 0xffffffff when the bus was undefined; and a byte: bit 0 the timer interrupt,
+ * 1 the external interrupt, 2 Bus Request), then what it gives
  * after the edge, as with a separate data bus (Address and Data Out, 4 bytes each, and a byte: bit 0 MemRead,
  * 1 MemWrite, 2-5 the byte enables 0-3, 6 Bus Ack), and 2 bytes of 0. The first record has what the CPU gave before
  * its first edge, with inputs 0. One CPU (the first that ticks) is recorded.

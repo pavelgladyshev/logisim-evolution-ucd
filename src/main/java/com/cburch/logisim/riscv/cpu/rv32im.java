@@ -259,7 +259,8 @@ public class rv32im extends InstanceFactory {
       if (rv32imTrace.on()) {
         final int inFlags = (timerInterrupt == Value.TRUE ? 1 : 0) | (externalInterrupt == Value.TRUE ? 2 : 0)
             | (busRequest == Value.TRUE ? 4 : 0);
-        rv32imTrace.record(cpuState, before, DataBus.known(dataIn).toLongValue(), inFlags, traceOutputs(cpuState));
+        // the word as the step takes it: an undefined one (a read where no device answers) is -1
+        rv32imTrace.record(cpuState, before, dataIn.toLongValue() & 0xFFFFFFFFL, inFlags, traceOutputs(cpuState));
       }
     }
 

@@ -50,6 +50,12 @@ module tb_cpu_replay;
          @(posedge clock); while (!tick) @(posedge clock);       // the edge
          @(negedge clock);
          edge_ = edge_ + 1;
+`ifdef DUMP_FROM
+         if (edge_ >= `DUMP_FROM && edge_ < `DUMP_FROM + 8)
+            $display("edge %0d: pc %h ir %h priv %0d mstatus %h sepc %h stvec %h scause %h satp %h mepc %h mcause %h | out %h, Java %h",
+                     edge_, cpu.pc, cpu.ir, cpu.priv, cpu.mstatus, cpu.sepc, cpu.stvec, cpu.scause, cpu.satp,
+                     cpu.mepc, cpu.mcause, address, eAddr);
+`endif
          check;
          if (edge_ % 100000 == 0) $display("%0d edges", edge_);
          r = $fscanf(f, "%h %h %h %h %h\n", din, fin, eAddr, eData, fout);
