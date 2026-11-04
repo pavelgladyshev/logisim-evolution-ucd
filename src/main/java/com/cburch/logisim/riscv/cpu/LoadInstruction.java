@@ -29,39 +29,24 @@ public class LoadInstruction {
         hartData.getPC().increment();
     }
 
+    /** Whether the funct3 is a load's: lb, lh, lw, lbu or lhu. */
+    public static boolean isValid(rv32imData hartData) {
+        final int func3 = hartData.getIR().func3();
+        return func3 == 0x0 || func3 == 0x1 || func3 == 0x2 || func3 == 0x4 || func3 == 0x5;
+    }
+
+    /** The bytes a (valid) load reads: 1, 2 or 4. */
+    public static int getWidth(rv32imData hartData) {
+        return switch (hartData.getIR().func3()) {
+            case 0x1, 0x5 -> 2;
+            case 0x2 -> 4;
+            default -> 1;
+        };
+    }
+
+    /** The bus cycle of a valid and aligned load, without translation (rv32imData checks both first). */
     public static void performAddressing(rv32imData hartData) {
-
-        //never reach latch step if instruction is invalid
-        InstructionRegister ir = hartData.getIR();
-        if(!(ir.func3() == 0x0 || ir.func3() == 0x1 || ir.func3() == 0x2 || ir.func3() == 0x4 || ir.func3() == 0x5)) {
-            TrapHandler.throwIllegalInstructionException(hartData);
-            return;
-        }
-
-        long address = LoadInstruction.getAddress(hartData);
-        int width = 0;
-        switch (ir.func3()) {
-            case 0x0:  // lh rd, imm(rs1)
-            case 0x4: // lbu (unsigned byte)
-                width = 1;
-                break;
-            case 0x1: // lh (halfword)
-            case 0x5:  // lhu rd, imm(rs1)
-                width = 2;
-                if ((address & 0x1) != 0) {
-                    TrapHandler.throwIllegalInstructionException(hartData);
-                    return;
-                }
-                break;
-            case 0x2:  // lw rd, imm(rs1)
-                width = 4;
-                if ((address & 0x3) != 0) {
-                    TrapHandler.throwIllegalInstructionException(hartData);
-                    return;
-                }
-                break;
-        }
-
+        final int width = getWidth(hartData);
         hartData.setFetching(false);
         hartData.setAddressing(true);
 
@@ -90,36 +75,7 @@ public class LoadInstruction {
      * computing the virtual address from registers. Used when SV32 translation is active.
      */
     public static void performAddressingWithPA(rv32imData hartData, long physicalAddress) {
-        InstructionRegister ir = hartData.getIR();
-        if(!(ir.func3() == 0x0 || ir.func3() == 0x1 || ir.func3() == 0x2 || ir.func3() == 0x4 || ir.func3() == 0x5)) {
-            TrapHandler.throwIllegalInstructionException(hartData);
-            return;
-        }
-
-        // Alignment checks use the virtual address (same low bits as physical for aligned pages)
-        int width = 0;
-        switch (ir.func3()) {
-            case 0x0:
-            case 0x4:
-                width = 1;
-                break;
-            case 0x1:
-            case 0x5:
-                width = 2;
-                if ((physicalAddress & 0x1) != 0) {
-                    TrapHandler.throwIllegalInstructionException(hartData);
-                    return;
-                }
-                break;
-            case 0x2:
-                width = 4;
-                if ((physicalAddress & 0x3) != 0) {
-                    TrapHandler.throwIllegalInstructionException(hartData);
-                    return;
-                }
-                break;
-        }
-
+        final int width = getWidth(hartData);
         hartData.setFetching(false);
         hartData.setAddressing(true);
 

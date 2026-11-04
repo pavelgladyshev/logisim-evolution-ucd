@@ -19,9 +19,10 @@ public class IntegerRegisters {
         return x[index];
     }
 
+    /** A register holds 32 bits: kept sign-extended, so that every instruction sees the same value. */
     public void set(int index, long value) {
         if(index != 0) {
-            x[index] = value;
+            x[index] = (int) value;
         }
     }
 

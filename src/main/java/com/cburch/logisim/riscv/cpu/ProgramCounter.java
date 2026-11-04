@@ -15,8 +15,9 @@ public class ProgramCounter {
         return value;
     }
 
+    /** The pc holds 32 bits (a branch past 0 or 2^32, or an mepc from a sign-extended register, wraps). */
     public void set(long value) {
-        this.value = value;
+        this.value = value & 0xffffffffL;
     }
 
 }

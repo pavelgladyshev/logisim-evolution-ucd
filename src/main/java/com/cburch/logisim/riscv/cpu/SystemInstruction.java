@@ -36,11 +36,13 @@ public class SystemInstruction {
         }
 
         switch (funct3) {
-            case 0x0: { // ecall/ebreak/_ret
+            case 0x0: { // ecall/ebreak/_ret, wfi and sfence.vma: each with its whole encoding
                 MSTATUS_CSR mstatus = ((MSTATUS_CSR) MMCSR.getCSR(hartData, MSTATUS));
-                if (imm_I == 0) {
+                final long instruction = ir.get() & 0xFFFFFFFFL;
+                final PRIVILEGE_MODE mode = hartData.getCurrentPrivilegeMode();
+                if (instruction == 0x00000073L) {
                     // ecall — use actual current privilege mode, not MSTATUS.MPP
-                    switch(hartData.getCurrentPrivilegeMode()){
+                    switch(mode){
                         case USER:
                             TrapHandler.handle(hartData, MCAUSE_CSR.TRAP_CAUSE.ENVIRONMENT_CALL_FROM_U_MODE);
                             break;
@@ -51,14 +53,11 @@ public class SystemInstruction {
                             TrapHandler.handle(hartData, MCAUSE_CSR.TRAP_CAUSE.ENVIRONMENT_CALL_FROM_M_MODE);
                             break;
                     }
-                } else if (imm_I == 1) {
+                } else if (instruction == 0x00100073L) {
                     //ebreak
                     TrapHandler.handle(hartData, MCAUSE_CSR.TRAP_CAUSE.BREAKPOINT);
-                } else if (rs1 == 0 && rd == 0 && csr == 0x2) {
-                    // uret
-                    // PC = uepc
-                } else if (rs1 == 0 && rd == 0 && csr == 0x102) {
-                    // sret — return from S-mode trap
+                } else if (instruction == 0x10200073L && mode != PRIVILEGE_MODE.USER) {
+                    // sret — return from S-mode trap (in S- or M-mode; there is no mstatus.TSR)
                     hartData.getPC().set(SCSR.getValue(hartData, SCSR.SEPC));
                     // Restore SIE from SPIE
                     mstatus.SIE.set(mstatus.SPIE.get());
@@ -68,23 +67,10 @@ public class SystemInstruction {
                     hartData.setCurrentPrivilegeMode(prevMode);
                     // Set SPP to User (least privileged)
                     mstatus.SPP.set(0);
-                } else if (ir.func7() == 0x09) {
-                    // sfence.vma rs1, rs2
-                    TranslationLookasideBuffer tlb = hartData.getTlb();
-                    int rs2Val = ir.rs2();
-                    if (rs1 == 0 && rs2Val == 0) {
-                        tlb.invalidate();
-                    } else if (rs1 != 0 && rs2Val == 0) {
-                        tlb.invalidateAddress(hartData.getX(rs1));
-                    } else if (rs1 == 0) {
-                        tlb.invalidateASID((int) hartData.getX(rs2Val));
-                    } else {
-                        tlb.invalidateAddressAndASID(hartData.getX(rs1), (int) hartData.getX(rs2Val));
-                    }
-                    hartData.getInstructionCache().invalidate();
-                    hartData.getPC().increment();
-                } else if (rs1 == 0 && rd == 0 && csr == 0x302) {
-                    // mret — return from M-mode trap
+                    // as mret: MPRV cleared when the new mode is not M
+                    mstatus.MPRV.set(0);
+                } else if (instruction == 0x30200073L && mode == PRIVILEGE_MODE.MACHINE) {
+                    // mret — return from M-mode trap (in M-mode only)
                     hartData.getPC().set(MMCSR.getValue(hartData, MEPC));
                     // Restore MIE from MPIE
                     mstatus.MIE.set(mstatus.MPIE.get());
@@ -99,7 +85,27 @@ public class SystemInstruction {
                     if (restoredMode != PRIVILEGE_MODE.MACHINE) {
                         mstatus.MPRV.set(0);
                     }
+                } else if (instruction == 0x10500073L) {
+                    // wfi — may go on at once (an interrupt is what it waits for, and the CPU takes it next)
+                    hartData.getPC().increment();
+                } else if ((instruction & 0xFE007FFFL) == 0x12000073L && mode != PRIVILEGE_MODE.USER) {
+                    // sfence.vma rs1, rs2 (in S- or M-mode; there is no mstatus.TVM): rs2's ASID is its 9 low bits
+                    TranslationLookasideBuffer tlb = hartData.getTlb();
+                    int rs2Val = ir.rs2();
+                    final int asid = (int) (hartData.getX(rs2Val) & 0x1FF);
+                    if (rs1 == 0 && rs2Val == 0) {
+                        tlb.invalidate();
+                    } else if (rs1 != 0 && rs2Val == 0) {
+                        tlb.invalidateAddress(hartData.getX(rs1));
+                    } else if (rs1 == 0) {
+                        tlb.invalidateASID(asid);
+                    } else {
+                        tlb.invalidateAddressAndASID(hartData.getX(rs1), asid);
+                    }
+                    hartData.getInstructionCache().invalidate();
+                    hartData.getPC().increment();
                 } else {
+                    // any other, uret among them (no N extension), and mret, sret or sfence.vma in too low a mode
                     illegalInstructionExceptionTriggered = true;
                 }
                 break;

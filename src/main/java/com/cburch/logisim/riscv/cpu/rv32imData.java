@@ -254,13 +254,21 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     return old == Value.FALSE && value == Value.TRUE;
   }
 
-  /** reset CPU state to initial values */
+  /**
+   * The Reset pin, as the RISC-V privileged spec's Reset says: M-mode, the pc at the reset vector, mstatus.MIE and
+   * MPRV 0, and mcause 0 (a reset whose cause is not told apart); the rest of the hart's state is unspecified and
+   * keeps its value. The TLB, the instruction cache and the page table walk start again.
+   */
   public void reset(long pcInit, int port, boolean startGDBServer) {
     pc.set(pcInit);
     cache.invalidate();
     tlb.invalidate();
     ptw.reset();
     currentPrivilegeMode = PRIVILEGE_MODE.MACHINE;  // CPU starts in M-mode
+    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+    mstatus.MIE.set(0);
+    mstatus.MPRV.set(0);
+    MMCSR.getCSR(this, MMCSR.MCAUSE).write(0);
 
     // Reset debugger-related state
     synchronized (this) {
@@ -352,31 +360,16 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     mip.MTIP.set(timerInterruptRequest);
     mip.MEIP.set(externalInterruptRequest);
 
-    // Check for pending interrupts (priority: MEI > MSI > MTI > SEI > SSI > STI)
-    if (isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT, 0x800, 0x800)) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT);
-      fetchNextInstruction();
-      return;
-    }
-    if (isMachineInterruptPending(MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT, 0x80, 0x80)) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT);
-      fetchNextInstruction();
-      return;
-    }
-    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_EXTERNAL_INTERRUPT, 0x200, 0x200)) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_EXTERNAL_INTERRUPT);
-      fetchNextInstruction();
-      return;
-    }
-    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_SOFTWARE_INTERRUPT, 0x2, 0x2)) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_SOFTWARE_INTERRUPT);
-      fetchNextInstruction();
-      return;
-    }
-    if (isSupervisorInterruptPending(MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT, 0x20, 0x20)) {
-      TrapHandler.handle(this, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT);
-      fetchNextInstruction();
-      return;
+    // Take a pending interrupt, between instructions only: a load or store between its address and its data
+    // (addressing) completes first, as the interrupt would make it run again after the trap, after its store or
+    // read had reached the bus (a character twice on a TTY, or a counter's update lost)
+    if (!addressing) {
+      final MCAUSE_CSR.TRAP_CAUSE interrupt = pendingInterrupt();
+      if (interrupt != null) {
+        TrapHandler.handle(this, interrupt);
+        fetchNextInstruction();
+        return;
+      }
     }
 
     if (fetching) {
@@ -426,6 +419,17 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         break;
       case 0x03:  // load instruction (I-type)
         if (!addressing) {
+          // in this order: an illegal funct3, a misaligned address (before the translation, as the RISC-V spec
+          // allows), then the translation's page faults
+          if (!LoadInstruction.isValid(this)) {
+            TrapHandler.throwIllegalInstructionException(this);
+            fetchNextInstruction();
+            break;
+          }
+          if (isMisaligned(LoadInstruction.getAddress(this), LoadInstruction.getWidth(this))) {
+            raiseException(MCAUSE_CSR.TRAP_CAUSE.LOAD_ADDRESS_MISALIGNED, LoadInstruction.getAddress(this));
+            break;
+          }
           if (isTranslationEnabledForLoadStore()) {
             long va = LoadInstruction.getAddress(this);
             tlb.translate(va, getCurrentASID());
@@ -456,6 +460,16 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         break;
       case 0x23:  // storing instruction (S-type)
         if (!addressing) {
+          // as a load: an illegal funct3, a misaligned address, then the translation's page faults
+          if (!StoreInstruction.isValid(this)) {
+            TrapHandler.throwIllegalInstructionException(this);
+            fetchNextInstruction();
+            break;
+          }
+          if (isMisaligned(StoreInstruction.getAddress(this), StoreInstruction.getWidth(this))) {
+            raiseException(MCAUSE_CSR.TRAP_CAUSE.STORE_ADDRESS_MISALIGNED, StoreInstruction.getAddress(this));
+            break;
+          }
           if (isTranslationEnabledForLoadStore()) {
             long va = StoreInstruction.getAddress(this);
             tlb.translate(va, getCurrentASID());
@@ -496,8 +510,14 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         fetchNextInstruction();
         break;
       case 0x67:  // Jump And Link Reg (I-Type)
+        if (ir.func3() != 0) {
+          TrapHandler.throwIllegalInstructionException(this);
+          fetchNextInstruction();
+          break;
+        }
+        final long target = (getX(ir.rs1()) + ir.imm_I()) & 0xfffffffeL;   // before rd changes: rd may be rs1
         JumpAndLink.link(this); //jalr rd,rs1,imm_I
-        pc.set((getX(ir.rs1()) + ir.imm_I()) & 0xfffffffeL);
+        pc.set(target);
         fetchNextInstruction();
         break;
       case 0x37:  // Load Upper Immediate (U-type)
@@ -514,8 +534,18 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         SystemInstruction.execute(this);
         fetchNextInstruction();
         break;
+      case 0x0F:  // FENCE, FENCE.I (MISC-MEM): one hart in order, so nothing to wait for; FENCE.I empties the cache
+        if (ir.func3() == 0x0 || ir.func3() == 0x1) {
+          if (ir.func3() == 0x1) cache.invalidate();
+          pc.increment();
+        } else {
+          TrapHandler.throwIllegalInstructionException(this);
+        }
+        fetchNextInstruction();
+        break;
       default:  // Unknown instruction
         TrapHandler.throwIllegalInstructionException(this);
+        fetchNextInstruction();
     }
 
     // After updating PC, check for breakpoint again
@@ -528,6 +558,50 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
   public void stop() {
     cpuState = CPUState.STOPPED;
+  }
+
+  /** The interrupts in the order of the RISC-V privileged spec: MEI, MSI, MTI, SEI, SSI, STI. */
+  private static final MCAUSE_CSR.TRAP_CAUSE[] INTERRUPTS = {
+    MCAUSE_CSR.TRAP_CAUSE.MACHINE_EXTERNAL_INTERRUPT, MCAUSE_CSR.TRAP_CAUSE.MACHINE_SOFTWARE_INTERRUPT,
+    MCAUSE_CSR.TRAP_CAUSE.MACHINE_TIMER_INTERRUPT, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_EXTERNAL_INTERRUPT,
+    MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_SOFTWARE_INTERRUPT, MCAUSE_CSR.TRAP_CAUSE.SUPERVISOR_TIMER_INTERRUPT};
+
+  /**
+   * The interrupt to take now, or null, as the RISC-V privileged spec says (Machine Interrupt Registers): interrupt
+   * i is pending when its bits in mip and mie are 1. If mideleg does not delegate it, it traps to M-mode, when the
+   * hart is in M-mode with mstatus.MIE 1 or in a lower mode; if it does, it traps to S-mode, when the hart is in
+   * S-mode with mstatus.SIE 1 or in U-mode. Interrupts for M-mode come before those for S-mode, each in the order
+   * MEI, MSI, MTI, SEI, SSI, STI.
+   */
+  public MCAUSE_CSR.TRAP_CAUSE pendingInterrupt() {
+    final long pending = MMCSR.getCSR(this, MIP).read() & MMCSR.getCSR(this, MIE).read();
+    if (pending == 0) return null;
+    final long delegated = MMCSR.getCSR(this, MMCSR.MIDELEG).read();
+    final MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+    final boolean machine = currentPrivilegeMode != PRIVILEGE_MODE.MACHINE || mstatus.MIE.get() == 1;
+    final boolean supervisor = currentPrivilegeMode == PRIVILEGE_MODE.USER
+        || (currentPrivilegeMode == PRIVILEGE_MODE.SUPERVISOR && mstatus.SIE.get() == 1);
+    for (final var cause : INTERRUPTS) {
+      final int code = cause.getExceptionCode();
+      if (machine && ((pending >> code) & 1) == 1 && ((delegated >> code) & 1) == 0) return cause;
+    }
+    for (final var cause : INTERRUPTS) {
+      final int code = cause.getExceptionCode();
+      if (supervisor && ((pending >> code) & 1) == 1 && ((delegated >> code) & 1) == 1) return cause;
+    }
+    return null;
+  }
+
+  /** Whether an access of width bytes (1, 2 or 4) at this address is misaligned. */
+  private static boolean isMisaligned(long address, int width) {
+    return (address & (width - 1)) != 0;
+  }
+
+  /** An exception whose mtval (or stval) is an address, such as a misaligned load's; the handler's fetch follows. */
+  public void raiseException(MCAUSE_CSR.TRAP_CAUSE cause, long address) {
+    pendingVirtualAddress = address & 0xFFFFFFFFL;
+    TrapHandler.handle(this, cause);
+    fetchNextInstruction();
   }
 
   /**

@@ -114,6 +114,8 @@ public class TrapHandler {
             case INSTRUCTION_PAGE_FAULT:
             case LOAD_PAGE_FAULT:
             case STORE_PAGE_FAULT:
+            case LOAD_ADDRESS_MISALIGNED:
+            case STORE_ADDRESS_MISALIGNED:
                 tval.write(hartData.getPendingVirtualAddress());
                 break;
             default:
