@@ -11,6 +11,7 @@ package com.cburch.logisim.riscv.cpu;
 
 import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.*;
+import com.cburch.logisim.riscv.DataBus;
 import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
@@ -33,6 +34,7 @@ public class rv32im extends InstanceFactory {
   public static final String _ID = "RV32IM CPU";
 
   static final Value HiZ32 = Value.createUnknown(BitWidth.create(32));
+  static final Value ZERO32 = Value.createKnown(32, 0);
 
   // Cached byte enable patterns to avoid array allocation on every cycle
   private static final Value[] BE_NONE = {Value.FALSE, Value.FALSE, Value.FALSE, Value.FALSE};
@@ -58,6 +60,7 @@ public class rv32im extends InstanceFactory {
   public static final int BE1 = 11;
   public static final int BE2 = 12;
   public static final int BE3 = 13;
+  public static final int DATA_IN = 14;   // with a separate data bus only: DATA is then Data Out
 
 
   public static final Attribute<Long> ATTR_RESET_ADDR =
@@ -99,12 +102,30 @@ public class rv32im extends InstanceFactory {
   public rv32im() {
     super(_ID);
     setOffsetBounds(Bounds.create(-60, -20, 180, 675));
+    setPorts(ports(false));
 
-    Port[] ps = new Port[14];
+    // Add attributes
+    setAttributes(
+            new Attribute[] {
+                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_INSTRUCTION_CACHE, ATTR_GDB_SERVER, DataBus.ATTR, StdAttr.LABEL, StdAttr.LABEL_FONT
+            },
+            new Object[] {Long.valueOf(0), false, 3333, false, false, new GDBServer(), DataBus.BIDIRECTIONAL, "", StdAttr.DEFAULT_LABEL_FONT});
+  }
+
+  private static Port[] ports(boolean separateDataBus) {
+    Port[] ps = new Port[separateDataBus ? 15 : 14];
 
     ps[CLOCK] = new Port(-60, -10, Port.INPUT, 1);
     ps[RESET] = new Port(-60, 60, Port.INPUT, 1);
-    ps[DATA] = new Port(120, 30, Port.INOUT, 32);
+    if (separateDataBus) {
+      ps[DATA] = new Port(120, 30, Port.OUTPUT, 32);
+      ps[DATA].setToolTip(S.getter("rv32imDataOut"));
+      ps[DATA_IN] = new Port(-60, 30, Port.INPUT, 32);
+      ps[DATA_IN].setToolTip(S.getter("rv32imDataIn"));
+    } else {
+      ps[DATA] = new Port(120, 30, Port.INOUT, 32);
+      ps[DATA].setToolTip(S.getter("rv32imDataBus"));
+    }
     ps[ADDRESS] = new Port(120, 0, Port.OUTPUT, 32);
     ps[MEMREAD] = new Port(120, 60, Port.OUTPUT, 1);
     ps[MEMWRITE] = new Port(120, 90, Port.OUTPUT, 1);
@@ -121,7 +142,6 @@ public class rv32im extends InstanceFactory {
 
     ps[CLOCK].setToolTip(S.getter("rv32imClock"));
     ps[RESET].setToolTip(S.getter("rv32imReset"));
-    ps[DATA].setToolTip(S.getter("rv32imDataBus"));
     ps[ADDRESS].setToolTip(S.getter("rv32imAddress"));
     ps[MEMREAD].setToolTip(S.getter("rv32imMemRead"));
     ps[MEMWRITE].setToolTip(S.getter("rv32imMemWrite"));
@@ -134,19 +154,13 @@ public class rv32im extends InstanceFactory {
     ps[BE2].setToolTip(S.getter("rv32imByteEnable2"));
     ps[BE3].setToolTip(S.getter("rv32imByteEnable3"));
 
-
-    setPorts(ps);
-
-    // Add attributes
-    setAttributes(
-            new Attribute[] {
-                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_INSTRUCTION_CACHE, ATTR_GDB_SERVER, StdAttr.LABEL, StdAttr.LABEL_FONT
-            },
-            new Object[] {Long.valueOf(0), false, 3333, false, false, new GDBServer(), "", StdAttr.DEFAULT_LABEL_FONT});
+    return ps;
   }
 
   @Override
   protected void configureNewInstance(Instance instance) {
+    instance.addAttributeListener();
+    instance.setPorts(ports(DataBus.isSeparate(instance.getAttributeSet())));
     final var bds = instance.getBounds();
     instance.setTextField(
             StdAttr.LABEL,
@@ -158,12 +172,20 @@ public class rv32im extends InstanceFactory {
   }
 
   @Override
+  protected void instanceAttributeChanged(Instance instance, Attribute<?> attr) {
+    if (attr == DataBus.ATTR) {
+      instance.setPorts(ports(DataBus.isSeparate(instance.getAttributeSet())));
+    }
+  }
+
+  @Override
   public void paintInstance(InstancePainter painter) {
     painter.drawBounds();
     painter.drawLabel();
     painter.drawClock(0, Direction.EAST); // draw a triangle on port 0
 
-    for (int i = 1; i < 14; i++) {
+    final var separate = DataBus.isSeparate(painter.getAttributeSet());
+    for (int i = 1; i < (separate ? 15 : 14); i++) {
       painter.drawPort(i);
     }
 
@@ -180,7 +202,8 @@ public class rv32im extends InstanceFactory {
       Font font = new Font("SansSerif", Font.BOLD, 20);
       GraphicsUtil.drawText(graphics, font,"RISC-V RV32IM", posX+80, posY-127,0,0, Color.black, Color.WHITE);
       drawHexReg(graphics, posX, posY - 40, false, (int) state.getPC().get(), "PC", true);
-      drawHexReg(graphics, posX, posY-80, false,  (int) painter.getPortValue(DATA).toLongValue(), "Data", true);
+      final var dataPort = separate && state.getMemWrite() != Value.TRUE ? DATA_IN : DATA;
+      drawHexReg(graphics, posX, posY-80, false,  (int) painter.getPortValue(dataPort).toLongValue(), "Data", true);
       drawHexReg(graphics, posX+80, posY-80, false, (int) state.getAddress().toLongValue(), "Addr", true);
       drawRegisters(graphics, posX, posY, false, state, painter.getAttributeValue(ATTR_HEX_REGS));
       drawCpuState(graphics, posX+80, posY-40, false, "CPU state", state.getCpuState());
@@ -195,7 +218,7 @@ public class rv32im extends InstanceFactory {
 
     Value clock = state.getPortValue(CLOCK);
     Value reset = state.getPortValue(RESET);
-    Value dataIn = state.getPortValue(DATA);
+    Value dataIn = state.getPortValue(DataBus.isSeparate(state.getAttributeSet()) ? DATA_IN : DATA);
     Value timerInterrupt = state.getPortValue(TIMER_INTERRUPT_REQUEST);
     Value externalInterrupt = state.getPortValue(EXTERNAL_INTERRUPT_REQUEST);
     Value busRequest = state.getPortValue(BUS_REQUEST);
@@ -242,25 +265,29 @@ public class rv32im extends InstanceFactory {
 
 
   private void updateOutputSignals(InstanceState state, rv32imData cpu) {
+    // A separate data bus has no floating outputs: where the bidirectional one lets go, it drives 0
+    final var separate = DataBus.isSeparate(state.getAttributeSet());
+    final var free32 = separate ? ZERO32 : HiZ32;
+    final var free = separate ? Value.FALSE : HiZ;
     if (cpu.isBusGranted()) {
-      state.setPort(ADDRESS, HiZ32, 1);
-      state.setPort(MEMREAD, HiZ, 1);
-      state.setPort(MEMWRITE, HiZ, 1);
-      state.setPort(DATA, HiZ32, 1);
-      state.setPort(BE0, HiZ, 1);
-      state.setPort(BE1, HiZ, 1);
-      state.setPort(BE2, HiZ, 1);
-      state.setPort(BE3, HiZ, 1);
+      state.setPort(ADDRESS, free32, 1);
+      state.setPort(MEMREAD, free, 1);
+      state.setPort(MEMWRITE, free, 1);
+      state.setPort(DATA, free32, 1);
+      state.setPort(BE0, free, 1);
+      state.setPort(BE1, free, 1);
+      state.setPort(BE2, free, 1);
+      state.setPort(BE3, free, 1);
       state.setPort(BUS_ACK, Value.TRUE, 1);
     } else {
-      state.setPort(ADDRESS, cpu.getAddress(), 1);
-      state.setPort(MEMREAD, cpu.getMemRead(), 1);
-      state.setPort(MEMWRITE, cpu.getMemWrite(), 1);
+      state.setPort(ADDRESS, separate ? DataBus.known(cpu.getAddress()) : cpu.getAddress(), 1);
+      state.setPort(MEMREAD, separate ? DataBus.known(cpu.getMemRead()) : cpu.getMemRead(), 1);
+      state.setPort(MEMWRITE, separate ? DataBus.known(cpu.getMemWrite()) : cpu.getMemWrite(), 1);
 
       if (cpu.getMemWrite() == Value.TRUE) {
-        state.setPort(DATA, cpu.getOutputData(), 1);
+        state.setPort(DATA, separate ? DataBus.known(cpu.getOutputData()) : cpu.getOutputData(), 1);
       } else {
-        state.setPort(DATA, HiZ32, 1);
+        state.setPort(DATA, free32, 1);
       }
 
       Value[] byteEnable = calculateByteEnables(cpu);

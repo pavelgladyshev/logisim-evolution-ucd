@@ -2,6 +2,7 @@ package com.cburch.logisim.riscv.timer;
 
 import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.*;
+import com.cburch.logisim.riscv.DataBus;
 import com.cburch.logisim.util.GraphicsUtil;
 
 import java.awt.*;
@@ -26,6 +27,7 @@ public class Timer extends InstanceFactory {
     public static final int INTERRUPT_OUT = 4;
     public static final int RESET = 5;
     public static final int CLOCK = 6;
+    public static final int DATA_IN = 7;   // with a separate data bus only: DATA is then Data Out
 
     public static final long RISCV_MTIMECMP_ADDR_DEFAULT = (0x2000000 + 0x4000);
 
@@ -42,12 +44,20 @@ public class Timer extends InstanceFactory {
 
 
     private static final Value HI_Z_32 = Value.createUnknown(BitWidth.create(32));
+    private static final Value ZERO_32 = Value.createKnown(32, 0);
 
     public Timer() {
         super(_ID);
         setOffsetBounds(Bounds.create(-40, -50, 90, 100));
+        setPorts(ports(false));
 
-        Port[] ports = new Port[7];
+        setAttributes(
+                new Attribute[] {RISCV_MTIMECMP_ADDR, RISCV_MTIME_ADDR, ATTR_HEX_REGS, DataBus.ATTR},
+                new Object[] {Long.valueOf(RISCV_MTIMECMP_ADDR_DEFAULT), Long.valueOf(RISCV_MTIME_ADDR_DEFAULT), false, DataBus.BIDIRECTIONAL});
+    }
+
+    private static Port[] ports(boolean separateDataBus) {
+        Port[] ports = new Port[separateDataBus ? 8 : 7];
         ports[ADDRESS] = new Port(-40, -10, Port.INPUT, 32);
         ports[ADDRESS].setToolTip(S.getter("timerAddress"));
 
@@ -57,8 +67,15 @@ public class Timer extends InstanceFactory {
         ports[WRITE_ENABLE] = new Port(-40, 10, Port.INPUT, 1);
         ports[WRITE_ENABLE].setToolTip(S.getter("timerWriteEnable"));
 
-        ports[DATA] = new Port(50, 0, Port.INOUT, 32);
-        ports[DATA].setToolTip(S.getter("timerData"));
+        if (separateDataBus) {
+            ports[DATA] = new Port(50, 0, Port.OUTPUT, 32);
+            ports[DATA].setToolTip(S.getter("timerDataOut"));
+            ports[DATA_IN] = new Port(40, 50, Port.INPUT, 32);   // bottom edge, right of Clock
+            ports[DATA_IN].setToolTip(S.getter("timerDataIn"));
+        } else {
+            ports[DATA] = new Port(50, 0, Port.INOUT, 32);
+            ports[DATA].setToolTip(S.getter("timerData"));
+        }
 
         ports[INTERRUPT_OUT] = new Port(50, 20, Port.OUTPUT, 1);
         ports[INTERRUPT_OUT].setToolTip(S.getter("timerInterruptRequestOut"));
@@ -69,11 +86,20 @@ public class Timer extends InstanceFactory {
         ports[CLOCK] = new Port(10, 50, Port.INPUT, 1);
         ports[CLOCK].setToolTip(S.getter("timerClock"));
 
-        setPorts(ports);
+        return ports;
+    }
 
-        setAttributes(
-                new Attribute[] {RISCV_MTIMECMP_ADDR, RISCV_MTIME_ADDR, ATTR_HEX_REGS},
-                new Object[] {Long.valueOf(RISCV_MTIMECMP_ADDR_DEFAULT), Long.valueOf(RISCV_MTIME_ADDR_DEFAULT), false});
+    @Override
+    protected void configureNewInstance(Instance instance) {
+        instance.addAttributeListener();
+        instance.setPorts(ports(DataBus.isSeparate(instance.getAttributeSet())));
+    }
+
+    @Override
+    protected void instanceAttributeChanged(Instance instance, Attribute<?> attr) {
+        if (attr == DataBus.ATTR) {
+            instance.setPorts(ports(DataBus.isSeparate(instance.getAttributeSet())));
+        }
     }
 
     @Override
@@ -126,10 +152,13 @@ public class Timer extends InstanceFactory {
         long address = state.getPortValue(ADDRESS).toLongValue();
         long mtimecmpAddr = state.getAttributeValue(RISCV_MTIMECMP_ADDR);
         long mtimeAddr = state.getAttributeValue(RISCV_MTIME_ADDR);
+        // A separate data bus has no floating output: where the bidirectional one lets go, it drives 0
+        final var separate = DataBus.isSeparate(state.getAttributeSet());
+        final var free = separate ? ZERO_32 : HI_Z_32;
 
         // Handle register write on clock edge
         if (state.getPortValue(WRITE_ENABLE) == Value.TRUE && clockTriggered) {
-            long dataValue = state.getPortValue(DATA).toLongValue() & 0xFFFFFFFFL;
+            long dataValue = state.getPortValue(separate ? DATA_IN : DATA).toLongValue() & 0xFFFFFFFFL;
             if (address == mtimecmpAddr) {
                 regs.setCounterComparator(dataValue);
             } else if (address == mtimeAddr) {
@@ -144,10 +173,10 @@ public class Timer extends InstanceFactory {
             } else if (address == mtimeAddr) {
                 state.setPort(DATA, Value.createKnown(32, regs.getCounter()), 9);
             } else {
-                state.setPort(DATA, HI_Z_32, 9);
+                state.setPort(DATA, free, 9);
             }
         } else {
-            state.setPort(DATA, HI_Z_32, 9);
+            state.setPort(DATA, free, 9);
         }
 
         // Increment counter on clock edge

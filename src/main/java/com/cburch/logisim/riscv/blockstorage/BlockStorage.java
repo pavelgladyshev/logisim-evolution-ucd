@@ -3,6 +3,7 @@ package com.cburch.logisim.riscv.blockstorage;
 
 import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.*;
+import com.cburch.logisim.riscv.DataBus;
 import com.cburch.logisim.util.GraphicsUtil;
 import static com.cburch.logisim.riscv.Strings.S;
 import static com.cburch.logisim.riscv.cpu.CpuDrawSupport.*;
@@ -16,6 +17,7 @@ import java.io.IOException;
 public class BlockStorage extends InstanceFactory {
 
     public static final String _ID = "Block Storage";
+    private static final Value ZERO_32 = Value.createKnown(32, 0);
 
     // Cached Font objects to avoid creating new ones on every paint
     private static final Font TITLE_FONT = new Font("SansSerif", Font.BOLD, 20);
@@ -38,26 +40,60 @@ public class BlockStorage extends InstanceFactory {
     public static final int BUS_REQUEST = 12;
     public static final int BUS_ACK = 13;
     public static final int DMA_ADDR = 14;
+    // With a separate data bus only: DATA is then Data Out, and BE0-BE3 are outputs
+    public static final int DATA_IN = 15;      // register writes
+    public static final int MEM_DATA_IN = 16;  // words that DMA reads from memory
 
 
     public BlockStorage() {
         super(_ID);
         setOffsetBounds(Bounds.create(-50, -50, 180, 280));
+        setPorts(ports(false));
+        setAttributes(
+                new Attribute[]{
+                        StdAttr.LABEL,
+                        StdAttr.LABEL_FONT,
+                        FILE_NAME_ATTR,
+                        DataBus.ATTR
+                },
+                new Object[]{
+                        "",
+                        StdAttr.DEFAULT_LABEL_FONT,
+                        "block_storage.bin",
+                        DataBus.BIDIRECTIONAL
+                }
+        );
+    }
 
-        Port[] ports = new Port[15];
+    private static Port[] ports(boolean separateDataBus) {
+        Port[] ports = new Port[separateDataBus ? 17 : 15];
         ports[ADDR]  = new Port(-50,   0, Port.INPUT,  3);
         ports[READ_ENABLE]  = new Port(-50,  20, Port.INPUT,   1);
         ports[WRITE_ENABLE] = new Port(-50,  40, Port.INPUT,   1);
-        ports[BE0]   = new Port(-50, 120, Port.INOUT,   1);
-        ports[BE1]   = new Port(-50, 110, Port.INOUT,   1);
-        ports[BE2]   = new Port(-50, 100, Port.INOUT,   1);
-        ports[BE3]   = new Port(-50,  90, Port.INOUT,   1);
+        if (separateDataBus) {
+            // with the other outputs of the DMA, below Bus Request
+            ports[BE0]   = new Port(130, 210, Port.OUTPUT,  1);
+            ports[BE1]   = new Port(130, 200, Port.OUTPUT,  1);
+            ports[BE2]   = new Port(130, 190, Port.OUTPUT,  1);
+            ports[BE3]   = new Port(130, 180, Port.OUTPUT,  1);
+        } else {
+            ports[BE0]   = new Port(-50, 120, Port.INOUT,   1);
+            ports[BE1]   = new Port(-50, 110, Port.INOUT,   1);
+            ports[BE2]   = new Port(-50, 100, Port.INOUT,   1);
+            ports[BE3]   = new Port(-50,  90, Port.INOUT,   1);
+        }
         ports[RESET] = new Port(-50, 140, Port.INPUT,   1);
         ports[BUS_REQUEST] = new Port(130, 160, Port.OUTPUT, 1);
         ports[BUS_ACK] = new Port(-50, 180, Port.INPUT, 1);
         ports[CLOCK] = new Port(-50, 200, Port.INPUT,   1);
 
-        ports[DATA]  = new Port( 130,   0, Port.INOUT,  32);
+        if (separateDataBus) {
+            ports[DATA]  = new Port( 130,   0, Port.OUTPUT, 32);
+            ports[DATA_IN] = new Port(-50, 60, Port.INPUT, 32);
+            ports[MEM_DATA_IN] = new Port(130, 20, Port.INPUT, 32);
+        } else {
+            ports[DATA]  = new Port( 130,   0, Port.INOUT,  32);
+        }
         ports[MEM_READ] = new Port(130, 100, Port.OUTPUT, 1);
         ports[MEM_WRITE] = new Port(130, 120, Port.OUTPUT, 1);
         ports[DMA_ADDR] = new Port(130, 140, Port.OUTPUT, 32);
@@ -66,7 +102,13 @@ public class BlockStorage extends InstanceFactory {
 
         // tooltips
         ports[ADDR].setToolTip(    S.getter("Address"));
-        ports[DATA].setToolTip(    S.getter("Data Bus"));
+        if (separateDataBus) {
+            ports[DATA].setToolTip(S.getter("Data Out"));
+            ports[DATA_IN].setToolTip(S.getter("Data In"));
+            ports[MEM_DATA_IN].setToolTip(S.getter("Memory Data In"));
+        } else {
+            ports[DATA].setToolTip(S.getter("Data Bus"));
+        }
         ports[READ_ENABLE].setToolTip(    S.getter("Load: if 1 load from memory to data bus"));
         ports[WRITE_ENABLE].setToolTip(   S.getter("Store: if 1 store from data bus to memory"));
         ports[BE0].setToolTip(     S.getter("Byte Enable 0"));
@@ -84,23 +126,13 @@ public class BlockStorage extends InstanceFactory {
         ports[BUS_ACK].setToolTip(S.getter("Bus Acknowledgement In"));
         ports[DMA_ADDR].setToolTip(S.getter("DMA Memory Address"));
 
-        setPorts(ports);
-        setAttributes(
-                new Attribute[]{
-                        StdAttr.LABEL,
-                        StdAttr.LABEL_FONT,
-                        FILE_NAME_ATTR
-                },
-                new Object[]{
-                        "",
-                        StdAttr.DEFAULT_LABEL_FONT,
-                        "block_storage.bin"
-                }
-        );
+        return ports;
     }
 
     @Override
     protected void configureNewInstance(Instance instance) {
+        instance.addAttributeListener();
+        instance.setPorts(ports(DataBus.isSeparate(instance.getAttributeSet())));
         Bounds b = instance.getBounds();
         instance.setTextField(
                 StdAttr.LABEL, StdAttr.LABEL_FONT,
@@ -115,6 +147,8 @@ public class BlockStorage extends InstanceFactory {
 
             //instance.setData(null);
             instance.fireInvalidated();
+        } else if (attr == DataBus.ATTR) {
+            instance.setPorts(ports(DataBus.isSeparate(instance.getAttributeSet())));
         }
     }
 
@@ -122,7 +156,8 @@ public class BlockStorage extends InstanceFactory {
     public void paintInstance(InstancePainter painter) {
         painter.drawBounds();
         painter.drawLabel();
-        for (int i = 0; i < 14; i++) painter.drawPort(i);
+        final int portCount = DataBus.isSeparate(painter.getAttributeSet()) ? 17 : 15;
+        for (int i = 0; i < portCount; i++) painter.drawPort(i);
 
         Graphics2D graphics = (Graphics2D) painter.getGraphics();
         Bounds bds = painter.getBounds();
@@ -299,10 +334,11 @@ public class BlockStorage extends InstanceFactory {
         } else if (!data.getFilePath().equals(fileName)) {
             data.setFilePath(fileName);
         }
+        final var separate = DataBus.isSeparate(state.getAttributeSet());
         Value reset = state.getPortValue(RESET);
         if (reset == Value.TRUE) {
             data.reset();
-            updateControlSignals(state, data);
+            updateControlSignals(state, data, separate);
             return;
         }
 
@@ -312,10 +348,10 @@ public class BlockStorage extends InstanceFactory {
 
 
         long address = state.getPortValue(ADDR).toLongValue();
-        handleRegisterRead(state, data, address);
+        handleRegisterRead(state, data, address, separate);
         Value memData;
         if (clockRisingEdge) {
-            handleRegisterWrite(state, data, address);
+            handleRegisterWrite(state, data, address, separate);
 
             switch (data.dmaState) {
                 case IDLE:
@@ -335,35 +371,37 @@ public class BlockStorage extends InstanceFactory {
 
                 case READING:
                     memData = data.getCurrentDmaWord();
-                    state.setPort(DATA, memData, 1);
+                    state.setPort(DATA, separate ? DataBus.known(memData) : memData, 1);
                     if (data.advanceDma()) {
                         data.finishTransfer();
                     }
                     break;
 
                 case WRITING:
-                    memData = state.getPortValue(DATA);
+                    memData = state.getPortValue(separate ? MEM_DATA_IN : DATA);
                     data.writeNextDmaWord(memData);
                     break;
             }
         }
 
-        updateControlSignals(state, data);
+        updateControlSignals(state, data, separate);
     }
 
-    private void updateControlSignals(InstanceState state, BlockStorageData data) {
+    private void updateControlSignals(InstanceState state, BlockStorageData data, boolean separate) {
+        // A separate data bus has no floating outputs: where the bidirectional one lets go, it drives 0
+        final Value free = separate ? Value.FALSE : HI_Z;
 
         switch (data.dmaState) {
             case IDLE:
-                state.setPort(BE0, HI_Z, 1);
-                state.setPort(BE1, HI_Z, 1);
-                state.setPort(BE2, HI_Z, 1);
-                state.setPort(BE3, HI_Z, 1);
+                state.setPort(BE0, free, 1);
+                state.setPort(BE1, free, 1);
+                state.setPort(BE2, free, 1);
+                state.setPort(BE3, free, 1);
                 //state.setPort(DATA, HI_Z_32, 1);
-                state.setPort(BUS_REQUEST, HI_Z, 1);
-                state.setPort(MEM_READ, HI_Z, 1);
-                state.setPort(MEM_WRITE, HI_Z, 1);
-                state.setPort(DMA_ADDR, HI_Z_32, 1);
+                state.setPort(BUS_REQUEST, free, 1);
+                state.setPort(MEM_READ, free, 1);
+                state.setPort(MEM_WRITE, free, 1);
+                state.setPort(DMA_ADDR, separate ? ZERO_32 : HI_Z_32, 1);
                 break;
 
             case BUS_REQUEST_READING:
@@ -376,7 +414,8 @@ public class BlockStorage extends InstanceFactory {
                 state.setPort(BE1, Value.TRUE, 1);
                 state.setPort(BE2, Value.TRUE, 1);
                 state.setPort(BE3, Value.TRUE, 1);
-                state.setPort(DATA, data.getCurrentDmaWord(), 1);
+                final Value word = data.getCurrentDmaWord();
+                state.setPort(DATA, separate ? DataBus.known(word) : word, 1);
                 state.setPort(MEM_WRITE, Value.TRUE, 1);
                 state.setPort(MEM_READ, Value.FALSE, 1);
                 state.setPort(DMA_ADDR, Value.createKnown(32, data.getDmaMemoryAddress()), 1);
@@ -396,9 +435,9 @@ public class BlockStorage extends InstanceFactory {
 
 
 
-    private void handleRegisterWrite(InstanceState state, BlockStorageData data, long address) {
+    private void handleRegisterWrite(InstanceState state, BlockStorageData data, long address, boolean separate) {
         int regOffset = ((int) (address & 0xFF)) << 2;
-        Value dataBus = state.getPortValue(DATA);
+        Value dataBus = state.getPortValue(separate ? DATA_IN : DATA);
         Value writeEnable = state.getPortValue(WRITE_ENABLE);
         Value readEnable = state.getPortValue(READ_ENABLE);
 
@@ -407,17 +446,15 @@ public class BlockStorage extends InstanceFactory {
         }
     }
 
-    private void handleRegisterRead(InstanceState state, BlockStorageData data, long address) {
+    private void handleRegisterRead(InstanceState state, BlockStorageData data, long address, boolean separate) {
         int regOffset = ((int) (address & 0xFF)) << 2;
-        Value dataBus = state.getPortValue(DATA);
-        Value writeEnable = state.getPortValue(WRITE_ENABLE);
         Value readEnable = state.getPortValue(READ_ENABLE);
 
         if (readEnable == Value.TRUE) {
             Value regValue = data.readRegister(regOffset);
-            state.setPort(DATA, regValue, 1);
+            state.setPort(DATA, separate ? DataBus.known(regValue) : regValue, 1);
         } else {
-            state.setPort(DATA, HI_Z_32, 1);
+            state.setPort(DATA, separate ? ZERO_32 : HI_Z_32, 1);
         }
     }
 }
