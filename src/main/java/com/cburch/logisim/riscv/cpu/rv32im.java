@@ -253,31 +253,52 @@ public class rv32im extends InstanceFactory {
 
     boolean clockRisingEdge = cpuState.updateClock(clock) && clock == Value.TRUE;
 
-
     if (clockRisingEdge) {
-      if (cpuState.isBusGranted() && busRequest != Value.TRUE) {
-        cpuState.setBusGranted(false);
-        updateOutputSignals(state, cpuState);
-        return;
+      final long[] before = rv32imTrace.on() ? traceOutputs(cpuState) : null;
+      clockEdge(cpuState, dataIn, timerInterrupt, externalInterrupt, busRequest);
+      if (rv32imTrace.on()) {
+        final int inFlags = (timerInterrupt == Value.TRUE ? 1 : 0) | (externalInterrupt == Value.TRUE ? 2 : 0)
+            | (busRequest == Value.TRUE ? 4 : 0);
+        rv32imTrace.record(cpuState, before, DataBus.known(dataIn).toLongValue(), inFlags, traceOutputs(cpuState));
       }
-
-      if (!cpuState.isBusGranted() && busRequest == Value.TRUE) {
-        cpuState.setBusGranted(true);
-      }
-
-      if (cpuState.isBusGranted()) {
-        updateOutputSignals(state, cpuState);
-        return;
-      }
-
-      long timerIrq = timerInterrupt == Value.TRUE ? 1 : 0;
-      long externalIrq = externalInterrupt == Value.TRUE ? 1 : 0;
-      long waitRequest = busRequest == Value.TRUE ? 1 : 0;
-      long dataValue = dataIn.toLongValue();
-      cpuState.update(dataValue, timerIrq, externalIrq, waitRequest);
     }
 
     updateOutputSignals(state, cpuState);
+  }
+
+  /**
+   * A rising edge of the clock: the CPU grants the bus at an edge with Bus Request and releases it at the first edge
+   * without, and does nothing else at those edges; at the others it executes a step (rv32imData.update).
+   */
+  private static void clockEdge(rv32imData cpuState, Value dataIn, Value timerInterrupt, Value externalInterrupt,
+      Value busRequest) {
+    if (cpuState.isBusGranted() && busRequest != Value.TRUE) {
+      cpuState.setBusGranted(false);
+      return;
+    }
+    if (!cpuState.isBusGranted() && busRequest == Value.TRUE) {
+      cpuState.setBusGranted(true);
+    }
+    if (cpuState.isBusGranted()) return;
+    long timerIrq = timerInterrupt == Value.TRUE ? 1 : 0;
+    long externalIrq = externalInterrupt == Value.TRUE ? 1 : 0;
+    long waitRequest = busRequest == Value.TRUE ? 1 : 0;
+    long dataValue = dataIn.toLongValue();
+    cpuState.update(dataValue, timerIrq, externalIrq, waitRequest);
+  }
+
+  /** What the CPU gives, as with a separate data bus, for rv32imTrace: address, data out and flags. */
+  private long[] traceOutputs(rv32imData cpu) {
+    if (cpu.isBusGranted()) return new long[] {0, 0, 1L << 6};
+    final var memRead = cpu.getMemRead() == Value.TRUE;
+    final var memWrite = cpu.getMemWrite() == Value.TRUE;
+    var flags = (memRead ? 1 : 0) | (memWrite ? 2 : 0);
+    final Value[] byteEnable = calculateByteEnables(cpu);
+    for (var i = 0; i < 4; i++) {
+      if (byteEnable[i] == Value.TRUE) flags |= 4 << i;
+    }
+    return new long[] {DataBus.known(cpu.getAddress()).toLongValue(),
+        memWrite ? DataBus.known(cpu.getOutputData()).toLongValue() : 0, flags};
   }
 
 
