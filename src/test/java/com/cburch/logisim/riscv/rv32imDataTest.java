@@ -20,6 +20,16 @@ public class rv32imDataTest {
         assertRegistersEqual(cpu, expected);
     }
 
+    @Test
+    void tlbEntries_areTheCpusAttribute() {
+        out.println("rv32imData test: the TLB has 128 entries unless the CPU says otherwise");
+        rv32imData cpu = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING, null);
+        assertEquals(128, cpu.getTlb().getSize());
+        rv32imData small = new rv32imData(Value.FALSE, 0x400000, 1234, false, false, rv32imData.CPUState.RUNNING,
+            null, 16);
+        assertEquals(16, small.getTlb().getSize());
+    }
+
     public static void assertRegistersEqual(rv32imData tested, long[] expected) {
         for (int i = 0; i < expected.length; i++) {
             assertEquals(expected[i], (tested.getX(i)), "Register x" + i + " did not match expected value!");

@@ -13,6 +13,7 @@ import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.*;
 import com.cburch.logisim.riscv.DataBus;
 import com.cburch.logisim.util.GraphicsUtil;
+import com.cburch.logisim.util.StringUtil;
 
 import java.awt.*;
 import static com.cburch.logisim.riscv.cpu.CpuDrawSupport.*;
@@ -78,6 +79,22 @@ public class rv32im extends InstanceFactory {
   public static final Attribute<Boolean> ATTR_INSTRUCTION_CACHE =
           Attributes.forBoolean("instructionCache", S.getter("rv32imInstructionCache"));
 
+  /** The TLB's entries: 128 by default; an FPGA takes fewer (TranslationLookasideBuffer). */
+  public static final AttributeOption[] TLB_ENTRIES = {
+          new AttributeOption(16, StringUtil.constantGetter("16")),
+          new AttributeOption(32, StringUtil.constantGetter("32")),
+          new AttributeOption(64, StringUtil.constantGetter("64")),
+          new AttributeOption(128, StringUtil.constantGetter("128"))};
+
+  public static final Attribute<AttributeOption> ATTR_TLB_ENTRIES =
+          Attributes.forOption("tlbEntries", S.getter("rv32imTlbEntries"), TLB_ENTRIES);
+
+  /** The number of TLB entries of a CPU with these attributes. */
+  public static int tlbEntries(AttributeSet attrs) {
+    final var option = attrs.getValue(ATTR_TLB_ENTRIES);
+    return option == null ? TranslationLookasideBuffer.TLB_SIZE : (Integer) option.getValue();
+  }
+
   protected static class GDBServerAttribute extends Attribute<GDBServer> {
     @Override
     public GDBServer parse(String value) {
@@ -107,9 +124,9 @@ public class rv32im extends InstanceFactory {
     // Add attributes
     setAttributes(
             new Attribute[] {
-                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_INSTRUCTION_CACHE, ATTR_GDB_SERVER, DataBus.ATTR, StdAttr.LABEL, StdAttr.LABEL_FONT
+                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_INSTRUCTION_CACHE, ATTR_TLB_ENTRIES, ATTR_GDB_SERVER, DataBus.ATTR, StdAttr.LABEL, StdAttr.LABEL_FONT
             },
-            new Object[] {Long.valueOf(0), false, 3333, false, false, new GDBServer(), DataBus.BIDIRECTIONAL, "", StdAttr.DEFAULT_LABEL_FONT});
+            new Object[] {Long.valueOf(0), false, 3333, false, false, TLB_ENTRIES[3], new GDBServer(), DataBus.BIDIRECTIONAL, "", StdAttr.DEFAULT_LABEL_FONT});
   }
 
   private static Port[] ports(boolean separateDataBus) {

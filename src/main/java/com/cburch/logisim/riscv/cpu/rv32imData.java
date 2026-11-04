@@ -92,14 +92,20 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   private PRIVILEGE_MODE currentPrivilegeMode = PRIVILEGE_MODE.MACHINE;
 
   /** SV32 virtual memory */
-  private final TranslationLookasideBuffer tlb = new TranslationLookasideBuffer();
+  private final TranslationLookasideBuffer tlb;
   private PageTableWalker ptw;
   private long pendingVirtualAddress;
   private TranslationLookasideBuffer.AccessType pendingAccessType;
   private long translatedPhysicalAddress;
 
   public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, boolean instructionCacheEnabled, CPUState initialCpuState, GDBServer gdbServerAttr) {
+    this(lastClock, resetAddress, port, startGDBServer, instructionCacheEnabled, initialCpuState, gdbServerAttr,
+        TranslationLookasideBuffer.TLB_SIZE);
+  }
+
+  public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, boolean instructionCacheEnabled, CPUState initialCpuState, GDBServer gdbServerAttr, int tlbEntries) {
     this.instructionCacheEnabled = instructionCacheEnabled;
+    this.tlb = new TranslationLookasideBuffer(tlbEntries);
 
     // initial values for registers
     this.lastClock = lastClock;
@@ -217,7 +223,8 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
                 state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING),
                 state.getAttributeValue(rv32im.ATTR_INSTRUCTION_CACHE),
                 state.getAttributeValue(rv32im.ATTR_GDB_SERVER_RUNNING) ? CPUState.STOPPED : CPUState.RUNNING,
-                gdbServer);
+                gdbServer,
+                rv32im.tlbEntries(state.getAttributeSet()));
         state.setData(ret);
       }
       return ret;
