@@ -27,8 +27,8 @@ import java.util.List;
 /**
  * The RV32IM CPU on an FPGA, in Verilog and with a separate data bus: riscvCpu (resources/logisim/hdl/riscv), a
  * model of the Java CPU that does at each rising edge of its clock what the Java CPU does there, and says how. It
- * needs a TLB of at most 32 entries, and has no instruction cache and no GDB server; and a clock cycle of 48 FPGA
- * clocks at least (Logisim's ticks of 1024 kHz and slower with the Tang Nano 20K's 27 MHz).
+ * needs a TLB of at most 32 entries, and has no instruction cache and no GDB server; and a clock cycle of 24 FPGA
+ * clocks at least (Logisim's ticks of 2048 kHz and slower with the Tang Nano 20K's 27 MHz).
  */
 public class rv32imHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 

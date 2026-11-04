@@ -7,8 +7,9 @@
 // FPGA clocks after a tick (when every device has answered: the SDRAM takes 7 at most) the CPU takes the data bus,
 // the interrupt requests and Bus Request, and a sequencer (u) does the step for the next tick, which then only puts
 // the bus cycle that the step set up on the outputs. So the outputs change at the tick, as in Logisim, and a RAM
-// can take them one FPGA clock later. The longest step, a division, takes about 36 clocks: with START 8, a tick
-// every 48 FPGA clocks at least (Logisim's 1024 kHz with the Tang Nano 20K's 27 MHz gives 52 for a CPU cycle).
+// can take them one FPGA clock later. The longest step, a division (four bits of its quotient a clock), takes about
+// 15 clocks: with START 8, a CPU cycle of 24 FPGA clocks at least (Logisim's ticks of 2048 kHz and slower give that
+// with the Tang Nano 20K's 27 MHz: 26 FPGA clocks a cycle).
 //
 // As the Java CPU: a TLB of TLB_ENTRIES entries searched in order, behind a one-entry cache of the last
 // translation, and least recently used replacement (here as ranks, 0 the most recent, which order the entries as
@@ -331,6 +332,27 @@ module riscvCpu #(
          default: branchTaken = rs1v >= rs2v;
       endcase
 
+   // four steps of the restoring division: four bits of the quotient
+   reg [31:0] divQuoNext, divRemNext;
+   reg [32:0] divShifted;
+   reg [33:0] divDifference;
+   integer k;
+   always @(*) begin
+      divQuoNext = divQuo;
+      divRemNext = divRem;
+      for (k = 0; k < 4; k = k + 1) begin
+         divShifted = {divRemNext, divQuoNext[31]};
+         divDifference = {1'b0, divShifted} - {2'b00, divDiv};
+         if (!divDifference[33]) begin
+            divRemNext = divDifference[31:0];
+            divQuoNext = {divQuoNext[30:0], 1'b1};
+         end else begin
+            divRemNext = divShifted[31:0];
+            divQuoNext = {divQuoNext[30:0], 1'b0};
+         end
+      end
+   end
+
    // ----------------------------------------------------------------------------------------------- CSRs
    wire        csrWillWrite = (f3 == 3'd2 || f3 == 3'd3 || f3 == 3'd6 || f3 == 3'd7) ? rs1 != 5'd0 : 1'b1;
    wire        csrDenied = priv < csrAddr[9:8] || (csrWillWrite && csrAddr[11:10] == 2'b11);
@@ -571,18 +593,11 @@ module riscvCpu #(
                u <= U_FETCH;
             end
          U_DIV : begin
-               // a bit of the quotient each clock
-               if (divCount == 6'd0) u <= U_DIVW;
-               else begin
-                  if ({divRem, divQuo[31]} >= {1'b0, divDiv}) begin
-                     divRem <= {divRem[30:0], divQuo[31]} - divDiv;
-                     divQuo <= {divQuo[30:0], 1'b1};
-                  end else begin
-                     divRem <= {divRem[30:0], divQuo[31]};
-                     divQuo <= {divQuo[30:0], 1'b0};
-                  end
-                  divCount <= divCount - 6'd1;
-               end
+               // four bits of the quotient each clock, eight clocks
+               divQuo <= divQuoNext;
+               divRem <= divRemNext;
+               divCount <= divCount - 6'd4;
+               if (divCount == 6'd4) u <= U_DIVW;
             end
          U_DIVW : begin
                if (rd != 0) x[rd] <= f3[1] ? (divNegR ? -divRem : divRem) : (divNegQ ? -divQuo : divQuo);

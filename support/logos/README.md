@@ -153,10 +153,11 @@ It does what the Java CPU does at each of the 405504 edges of LogOS's boot (the 
 SV32, user programs, page table walks, interrupts, the Block Storage's DMA), at each edge of the boot and one of
 LogOS's ten test programs, for each of them (31.2 million edges in all, stress_test's 11.2 million among them), and
 at each of 196608 edges of random instruction words, interrupt requests and bus requests (illegal instructions and
-their traps, every kind of instruction, random CSRs). On the GW2AR-18 it takes 8438 LUTs, 1944 flip-flops, 6 block RAMs and a multiplier, and
-runs at 50 MHz. The check, in `tests/cpu`: the Java CPU records its edges (with the Java system property
-`rv32im.trace`, for example `JAVA_TOOL_OPTIONS=-Drv32im.trace=boot.trace logos_session.py jar dir`), and
-`tb_cpu_replay.v` plays the record to riscvCpu and compares its outputs:
+their traps, every kind of instruction, random CSRs). On the GW2AR-18 it takes 7189 LUTs, 886 ALUs (carry chains),
+1942 flip-flops, 6 block RAMs and a multiplier, and runs at up to 59 MHz. The check, in `tests/cpu`: the Java CPU
+records its edges (with the Java system property `rv32im.trace`, for example
+`JAVA_TOOL_OPTIONS=-Drv32im.trace=boot.trace logos_session.py jar dir`), and `tb_cpu_replay.v` plays the record to
+riscvCpu and compares its outputs:
 
 ```bash
 iverilog -DBINARY -DTRACE='"boot.trace"' -o /tmp/tb support/logos/tests/cpu/tb_cpu_replay.v \
@@ -169,5 +170,5 @@ step before the tick: 8 FPGA clocks after a tick, when every device has answered
 takes the data bus, the interrupt requests and Bus Request, and a sequencer does, over a few FPGA clocks, what the
 Java CPU does at the next edge (a page table walk's step, an interrupt, the instruction, the next fetch and its
 translation, a fault and the handler's fetch); at the tick the bus cycle it set up goes on the outputs. A division
-takes 36 clocks: so a CPU cycle needs 48 FPGA clocks, which Logisim's ticks of 1024 kHz and slower give with the
-Tang Nano 20K's 27 MHz.
+takes 8 clocks (four bits of its quotient a clock) and its step about 15: so a CPU cycle needs 24 FPGA clocks,
+which Logisim's ticks of 2048 kHz and slower give with the Tang Nano 20K's 27 MHz (26 FPGA clocks a cycle).
