@@ -10,7 +10,7 @@ microSD card in the board's TF slot, and the TTY and Keyboard on the board's USB
 | 2. computer.circ with a multiplexed bus instead of a shared one | done, in Logisim |
 | 3. HDL for the Timer, and for the Block Storage on an SD card | done, on the board |
 | 4. HDL for the RAM in the SDRAM | done, on the board |
-| 5. HDL for the CPU: a Verilog model of the Java one, tick for tick | the Java CPU made ready; the Verilog to do |
+| 5. HDL for the CPU: a Verilog model of the Java one, tick for tick | done, in simulation: LogOS's boot edge for edge |
 | 6. LogOS on the board | to do |
 
 ## 1. A separate data bus
@@ -147,10 +147,26 @@ Two things came first.
   ran the store again after the handler, so LogOS's test programs printed doubled and lost characters
   ("Results: 0 passed" for 10). Now the sessions with 16 and 128 TLB entries are the same, and clean.
 
-The plan for the Verilog. At a tick the CPU takes the word on the bus and sets up its next bus cycle, which the RAM
-takes one FPGA clock later; so what the Java CPU does at a tick (the instruction, its registers, the ALU, the next
-address and its translation by the TLB) is done in the FPGA clock of the tick, from the bus word of the clock
-before, which is the same word. What takes longer, a division or a CSR in block RAM (every CSR address exists, as in
-the Java CPU), only writes a register, which the next instruction reads a CPU cycle later: the division needs about
-34 FPGA clocks, which a CPU cycle has from Logisim's 1024 kHz tick down. The check: the Java CPU's inputs and outputs
-at each tick, recorded in Logisim while LogOS runs its test programs, played to the Verilog.
+**The Verilog**, `riscvCpu` in `src/main/resources/resources/logisim/hdl/riscv`, generated for the CPU when its data
+bus is separate (rv32imHdlGeneratorFactory: Verilog, at most 32 TLB entries, no instruction cache, no GDB server).
+It does what the Java CPU does at each of the 405504 edges of LogOS's boot (the bootloader, the kernel in S-mode with
+SV32, user programs, page table walks, interrupts, the Block Storage's DMA), and at each of 196608 edges of random
+instruction words, interrupt requests and bus requests (illegal instructions and their traps, every kind of
+instruction, random CSRs). On the GW2AR-18 it takes 8438 LUTs, 1944 flip-flops, 6 block RAMs and a multiplier, and
+runs at 50 MHz. The check, in `tests/cpu`: the Java CPU records its edges (with the Java system property
+`rv32im.trace`, for example `JAVA_TOOL_OPTIONS=-Drv32im.trace=boot.trace logos_session.py jar dir`), and
+`tb_cpu_replay.v` plays the record to riscvCpu and compares its outputs:
+
+```bash
+iverilog -DBINARY -DTRACE='"boot.trace"' -o /tmp/tb support/logos/tests/cpu/tb_cpu_replay.v \
+  src/main/resources/resources/logisim/hdl/riscv/riscvCpu.v && vvp -n /tmp/tb | tail -1
+```
+
+How it works. The Java CPU, at a rising edge of its clock, takes the word on its data bus, does a step and sets up
+its next bus cycle, all at once, and a RAM takes that bus cycle one FPGA clock after the tick. So riscvCpu does the
+step before the tick: 8 FPGA clocks after a tick, when every device has answered (the SDRAM takes 7 at most), it
+takes the data bus, the interrupt requests and Bus Request, and a sequencer does, over a few FPGA clocks, what the
+Java CPU does at the next edge (a page table walk's step, an interrupt, the instruction, the next fetch and its
+translation, a fault and the handler's fetch); at the tick the bus cycle it set up goes on the outputs. A division
+takes 36 clocks: so a CPU cycle needs 48 FPGA clocks, which Logisim's ticks of 1024 kHz and slower give with the
+Tang Nano 20K's 27 MHz.
