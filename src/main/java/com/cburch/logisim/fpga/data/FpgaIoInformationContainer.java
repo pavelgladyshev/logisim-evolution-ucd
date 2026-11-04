@@ -67,10 +67,11 @@ public class FpgaIoInformationContainer implements Cloneable {
     public int pinId;
   }
 
+  /** The types that the board editor can define (an SDRAM is only in board files). */
   public static List<String> getComponentTypes() {
     final var result = new LinkedList<String>();
     for (final var comp : IoComponentTypes.KNOWN_COMPONENT_SET) {
-      result.add(comp.toString());
+      if (comp != IoComponentTypes.Sdram) result.add(comp.toString());
     }
     return result;
   }

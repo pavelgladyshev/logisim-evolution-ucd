@@ -20,6 +20,7 @@ public class TickComponentHdlGeneratorFactory extends AbstractHdlGeneratorFactor
 
   private final long fpgaClockFrequency;
   private final double tickFrequency;
+  private final int startDelayBits;
   private static final String RELOAD_VALUE_STRING = "reloadValue";
   private static final Integer RELOAD_VALUE_ID = -1;
   private static final String NR_OF_COUNTER_BITS_STRING = "nrOfBits";
@@ -32,9 +33,19 @@ public class TickComponentHdlGeneratorFactory extends AbstractHdlGeneratorFactor
 
 
   public TickComponentHdlGeneratorFactory(long fpga_clock_frequency, double tick_frequency) {
+    this(fpga_clock_frequency, tick_frequency, 0);
+  }
+
+  /**
+   * A tick generator whose first tick comes 2^startDelayBits FPGA clocks after the FPGA starts (in Verilog; 0: no
+   * delay), for designs with something that needs that time to start before the circuit does, such as a RAM in an
+   * SDRAM (RamSdram).
+   */
+  public TickComponentHdlGeneratorFactory(long fpga_clock_frequency, double tick_frequency, int startDelayBits) {
     super(HDL_DIRECTORY);
     fpgaClockFrequency = fpga_clock_frequency;
     tickFrequency = tick_frequency;
+    this.startDelayBits = Hdl.isVerilog() ? startDelayBits : 0;
     final var reloadValueAcc = ((double) fpgaClockFrequency) / tickFrequency;
     var reloadValue = (long) reloadValueAcc;
     var nrOfBits = 0;
@@ -52,6 +63,7 @@ public class TickComponentHdlGeneratorFactory extends AbstractHdlGeneratorFactor
         .addWire("s_countNext", NR_OF_COUNTER_BITS_ID)
         .addRegister("s_tickReg", 1)
         .addRegister("s_countReg", NR_OF_COUNTER_BITS_ID);
+    if (this.startDelayBits > 0) myWires.addRegister("s_startReg", this.startDelayBits + 1);
     myPorts
          .add(Port.INPUT, "FPGAClock", 1, SynthesizedClockHdlGeneratorFactory.SYNTHESIZED_CLOCK)
          .add(Port.OUTPUT, "FPGATick", 1, FPGA_TICK);
@@ -73,7 +85,11 @@ public class TickComponentHdlGeneratorFactory extends AbstractHdlGeneratorFactor
             .add("")
             .addRemarkBlock("Here the output is defined")
             .add(
-                TheNetlist.requiresGlobalClockConnection()
+                startDelayBits > 0
+                    // the ticks start when s_startReg has counted to 2^startDelayBits
+                    ? LineBuffer.formatHdl("assign FPGATick = {{1}}s_startReg[{{2}}];",
+                        TheNetlist.requiresGlobalClockConnection() ? "" : "s_tickReg & ", startDelayBits)
+                    : TheNetlist.requiresGlobalClockConnection()
                     // a one-bit constant in whichever language: '1' alone is std_logic and Yosys
                     // rejects it as Verilog, which only shows up once some component asks for the
                     // global clock
@@ -103,6 +119,13 @@ public class TickComponentHdlGeneratorFactory extends AbstractHdlGeneratorFactor
                  s_tickReg  = 1'b0;
               end
               """).empty();
+      if (startDelayBits > 0) {
+        contents.add("""
+            initial s_startReg = 0;
+            always @(posedge FPGAClock)
+               if (s_startReg[{{1}}] == 1'b0) s_startReg <= s_startReg + 1;
+            """, startDelayBits).empty();
+      }
     }
     contents.addRemarkBlock("Here the flipflops are defined");
     if (Hdl.isVhdl()) {

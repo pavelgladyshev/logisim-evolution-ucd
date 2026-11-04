@@ -48,7 +48,11 @@ def set_attr(c, name, val):
         if a.get('name') == name:
             a.set('val', val)
             return
-    ET.SubElement(c, 'a', {'name': name, 'val': val})
+    children = list(c)
+    new = ET.SubElement(c, 'a', {'name': name, 'val': val})
+    if children:                                  # on a line of its own, as the others
+        new.tail = children[-1].tail
+        children[-1].tail = c.text
 
 
 def main_circuit(tree):
@@ -63,10 +67,13 @@ def find_comp(main, name, loc, label=None):
 
 
 def separate_pins(main):
-    """The data buses of the CPU, Block Storage, Timer and RAM made separate: only attributes change."""
+    """The data buses of the CPU, Block Storage, Timer and RAM made separate, and the RAM in the SDRAM on the FPGA:
+    only attributes change."""
     for name, loc in [('RV32IM CPU', (220, 590)), ('Block Storage', (830, 1080)), ('Timer', (870, 480))]:
         set_attr(find_comp(main, name, loc), 'dataBus', 'separate')
-    set_attr(find_comp(main, 'RAM', (750, 810)), 'databus', 'bibus')
+    ram = find_comp(main, 'RAM', (750, 810))
+    set_attr(ram, 'databus', 'bibus')
+    set_attr(ram, 'fpgaMemory', 'sdram')             # on the FPGA, the RAM is in the board's SDRAM
 
 
 def net_dump(jar, classes, circ):

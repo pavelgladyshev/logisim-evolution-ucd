@@ -11,12 +11,22 @@ package com.cburch.logisim.std.memory;
 
 import com.cburch.logisim.data.AttributeSet;
 import com.cburch.logisim.fpga.designrulecheck.Netlist;
+import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.fpga.hdlgenerator.AbstractHdlGeneratorFactory;
 import com.cburch.logisim.fpga.hdlgenerator.Hdl;
 import com.cburch.logisim.fpga.hdlgenerator.HdlPorts;
 import com.cburch.logisim.instance.Port;
 import com.cburch.logisim.instance.StdAttr;
 import com.cburch.logisim.util.LineBuffer;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 
@@ -26,6 +36,10 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
   private static final int RestArrayId = -2;
   private static final String MemArrayStr = "memoryArray";
   private static final int MemArrayId = -3;
+  // a RAM in the SDRAM (RamSdram): the controller, and its ports to the SDRAM's pins
+  private static final String SDRAM_MODULE = "/resources/logisim/hdl/memory/logisimSdram.v";
+  private static final String SDRAM_OUT = "sdramOut";
+  private static final String SDRAM_DQ = "sdramDq";
 
   public RamHdlGeneratorFactory() {
     super();
@@ -142,9 +156,32 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
         .add(Port.CLOCK, HdlPorts.getClockName(1), 1, RamAppearance.getClkIndex(0, attrs));
   }
 
+  private void getGenerationTimeWiresPortsSdram(AttributeSet attrs) {
+    final var nrOfBits = attrs.getValue(Mem.DATA_ATTR).getWidth();
+    final var nrBePorts = RamAppearance.getNrBEPorts(attrs);
+    myWires
+        .addWire("s_byteEnables", 4)
+        .addWire("s_dataOut", 32);
+    for (var idx = 0; idx < nrBePorts; idx++) {
+      myPorts.add(Port.INPUT, String.format("byteEnable%d", idx), 1, RamAppearance.getBEIndex(idx, attrs));
+    }
+    myPorts
+        // as in the simulation, an unconnected output enable enables the output
+        .add(Port.INPUT, "oe", 1, RamAppearance.getOEIndex(0, attrs), false)
+        .add(Port.INPUT, "address", attrs.getValue(Mem.ADDR_ATTR).getWidth(), RamAppearance.getAddrIndex(0, attrs))
+        .add(Port.INPUT, "dataIn", nrOfBits, RamAppearance.getDataInIndex(0, attrs))
+        .add(Port.INPUT, "we", 1, RamAppearance.getWEIndex(0, attrs))
+        .add(Port.OUTPUT, "dataOut", nrOfBits, RamAppearance.getDataOutIndex(0, attrs))
+        .add(Port.CLOCK, HdlPorts.getClockName(1), 1, RamAppearance.getClkIndex(0, attrs))
+        .add(Port.OUTPUT, SDRAM_OUT, RamSdram.OUTPUTS.size(), "open")
+        .add(Port.INOUT, SDRAM_DQ, RamSdram.INOUTS.size(), "open");
+  }
+
   @Override
   public void getGenerationTimeWiresPorts(Netlist theNetlist, AttributeSet attrs) {
-    if (attrs.getValue(Mem.ENABLES_ATTR).equals(Mem.USELINEENABLES)) {
+    if (RamSdram.isSdram(attrs)) {
+      getGenerationTimeWiresPortsSdram(attrs);
+    } else if (attrs.getValue(Mem.ENABLES_ATTR).equals(Mem.USELINEENABLES)) {
       getGenerationTimeWiresPortsLineEnables(theNetlist, attrs);
     } else {
       getGenerationTimeWiresPortsByteEnables(theNetlist, attrs);
@@ -673,8 +710,54 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     return contents.empty();
   }
 
+  private LineBuffer getModuleFunctionalitySdram(AttributeSet attrs) {
+    final double clock = Hdl.getFpgaClockFrequency();
+    final var nrOfBits = attrs.getValue(Mem.DATA_ATTR).getWidth();
+    final var nrBePorts = RamAppearance.getNrBEPorts(attrs);
+    final var byteEnables = new StringBuilder();
+    if (nrBePorts == 0) {
+      byteEnables.append("4'b1111");
+    } else {
+      byteEnables.append("{");
+      if (nrBePorts < 4) byteEnables.append(4 - nrBePorts).append("'b0, ");
+      for (var idx = nrBePorts - 1; idx >= 0; idx--) {
+        byteEnables.append("byteEnable").append(idx).append(idx > 0 ? ", " : "}");
+      }
+    }
+    return LineBuffer.getHdlBuffer()
+        .pair("clock", HdlPorts.getClockName(1))
+        .pair("tick", HdlPorts.getTickName(1))
+        .pair("addressBits", attrs.getValue(Mem.ADDR_ATTR).getWidth())
+        // 200 us before the start-up, a refresh every 14 us (4096 in 64 ms, and the time a bus cycle takes),
+        // and 80 ns for one
+        .pair("powerUp", (long) Math.ceil(clock * 200e-6) + 2)
+        .pair("refresh", (long) Math.floor(clock * 14e-6))
+        .pair("rfc", (long) Math.max(2, Math.ceil(clock * 80e-9)))
+        .pair("byteEnables", byteEnables.toString())
+        .pair("dataIn", nrOfBits < 32 ? String.format("{%d'b0, dataIn}", 32 - nrOfBits) : "dataIn")
+        .pair("dataOut", nrOfBits < 32 ? String.format("s_dataOut[%d:0]", nrOfBits - 1) : "s_dataOut")
+        .pair("out", SDRAM_OUT)
+        .pair("dq", SDRAM_DQ)
+        .addRemarkBlock("The RAM is in the SDRAM: logisimSdram (below) says how")
+        .add("""
+            assign s_byteEnables = {{byteEnables}};
+            assign dataOut = {{dataOut}};
+
+            logisimSdram #(.ADDR_BITS({{addressBits}}), .POWER_UP({{powerUp}}), .REFRESH({{refresh}}), .T_RFC({{rfc}}))
+               sdram (.clock({{clock}}), .tick({{tick}}), .address(address), .dataIn({{dataIn}}), .we(we), .oe(oe),
+                      .be(s_byteEnables), .dataOut(s_dataOut), .ready(),
+                      .sdramClk({{out}}[0]), .sdramCke({{out}}[1]), .sdramCsN({{out}}[2]), .sdramRasN({{out}}[3]),
+                      .sdramCasN({{out}}[4]), .sdramWeN({{out}}[5]), .sdramDqm({{out}}[9:6]),
+                      .sdramAddr({{out}}[20:10]), .sdramBa({{out}}[22:21]), .sdramDq({{dq}}));
+            """)
+        .empty();
+  }
+
   @Override
   public LineBuffer getModuleFunctionality(Netlist theNetlist, AttributeSet attrs) {
+    if (RamSdram.isSdram(attrs)) {
+      return getModuleFunctionalitySdram(attrs);
+    }
     if (attrs.getValue(Mem.ENABLES_ATTR).equals(Mem.USELINEENABLES)) {
       return getModuleFunctionalityLineEnables(theNetlist, attrs);
     } else {
@@ -683,8 +766,42 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
   }
   
   @Override
+  public Map<String, String> getPortMap(Netlist nets, Object mapInfo) {
+    final var map = super.getPortMap(nets, mapInfo);
+    if (!(mapInfo instanceof netlistComponent componentInfo)
+        || !RamSdram.isSdram(componentInfo.getComponent().getAttributeSet())) {
+      return map;
+    }
+    // the SDRAM's pins, to which the RAM is mapped
+    final var result = new TreeMap<String, String>(map);
+    final var outputs = componentInfo.getLocalBubbleOutputStartId();
+    final var inouts = componentInfo.getLocalBubbleInOutStartId();
+    result.put(SDRAM_OUT, LineBuffer.formatHdl("{{1}}{{<}}{{2}}{{3}}{{4}}{{>}}", LOCAL_OUTPUT_BUBBLE_BUS_NAME,
+        outputs + RamSdram.OUTPUTS.size() - 1, Hdl.vectorLoopId(), outputs));
+    result.put(SDRAM_DQ, LineBuffer.formatHdl("{{1}}{{<}}{{2}}{{3}}{{4}}{{>}}", LOCAL_INOUT_BUBBLE_BUS_NAME,
+        inouts + RamSdram.INOUTS.size() - 1, Hdl.vectorLoopId(), inouts));
+    return result;
+  }
+
+  @Override
+  public List<String> getArchitecture(Netlist theNetlist, AttributeSet attrs, String componentName) {
+    final var contents = super.getArchitecture(theNetlist, attrs, componentName);
+    if (!RamSdram.isSdram(attrs)) return contents;
+    final var result = new ArrayList<>(contents);
+    result.add("");
+    try (final var in = RamHdlGeneratorFactory.class.getResourceAsStream(SDRAM_MODULE);
+         final var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+      reader.lines().forEach(result::add);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+    return result;
+  }
+
+  @Override
   public boolean isHdlSupportedTarget(AttributeSet attrs) {
     if (attrs == null) return false;
+    if (RamSdram.isSdram(attrs)) return RamSdram.isSupported(attrs);
     if (RamAttributes.hasControlledOutput(attrs)) return false;
     Object busVal = attrs.getValue(RamAttributes.ATTR_DBUS);
     final var separate = busVal != null && busVal.equals(RamAttributes.BUS_SEP);

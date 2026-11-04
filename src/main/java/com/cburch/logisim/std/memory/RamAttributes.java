@@ -17,6 +17,7 @@ import com.cburch.logisim.data.AttributeOption;
 import com.cburch.logisim.data.AttributeSet;
 import com.cburch.logisim.data.Attributes;
 import com.cburch.logisim.data.BitWidth;
+import com.cburch.logisim.fpga.data.ComponentMapInformationContainer;
 import com.cburch.logisim.instance.StdAttr;
 import com.cburch.logisim.prefs.AppPreferences;
 import java.awt.Font;
@@ -55,7 +56,16 @@ public class RamAttributes extends AbstractAttributeSet {
           new AttributeOption[] {BUS_WITH_BYTEENABLES, BUS_WITHOUT_BYTE_ENABLES});
   static final Attribute<Boolean> CLEAR_PIN =
       Attributes.forBoolean("clearpin", S.getter("RamClearPin"));
-  private final ArrayList<Attribute<?>> myAttributes = new ArrayList<>();
+  // where the RAM goes on an FPGA: its block RAM, or the board's SDRAM (RamSdram), to whose pins it is then mapped
+  static final AttributeOption FPGA_BLOCK_RAM =
+      new AttributeOption("blockram", S.getter("ramFpgaBlockRam"));
+  static final AttributeOption FPGA_SDRAM =
+      new AttributeOption("sdram", S.getter("ramFpgaSdram"));
+  static final Attribute<AttributeOption> ATTR_FPGA_MEMORY =
+      Attributes.forOption(
+          "fpgaMemory", S.getter("ramFpgaMemory"), new AttributeOption[] {FPGA_BLOCK_RAM, FPGA_SDRAM});
+  // not final: a clone gets its own list (AbstractAttributeSet clones field by field)
+  private ArrayList<Attribute<?>> myAttributes = new ArrayList<>();
 
   private BitWidth addrBits = BitWidth.create(8);
   private BitWidth dataBits = BitWidth.create(8);
@@ -73,6 +83,8 @@ public class RamAttributes extends AbstractAttributeSet {
   private Boolean allowMisaligned = false;
   private AttributeOption typeOfEnables = Mem.USEBYTEENABLES;
   private AttributeOption ramType = VOLATILE;
+  private AttributeOption fpgaMemory = FPGA_BLOCK_RAM;
+  private ComponentMapInformationContainer sdramMap = null;
 
   RamAttributes() {
     updateAttributes();
@@ -110,6 +122,8 @@ public class RamAttributes extends AbstractAttributeSet {
         } else changes |= myAttributes.contains(ATTR_ByteEnables);
       } else changes |= myAttributes.contains(Mem.ASYNC_READ);
       newList.add(ATTR_DBUS);
+      newList.add(ATTR_FPGA_MEMORY);
+      if (fpgaMemory.equals(FPGA_SDRAM)) newList.add(StdAttr.MAPINFO);
       changes |= myAttributes.contains(Mem.LINE_ATTR);
       changes |= myAttributes.contains(Mem.ALLOW_MISALIGNED);
     } else {
@@ -124,6 +138,7 @@ public class RamAttributes extends AbstractAttributeSet {
     newList.add(StdAttr.LABEL_FONT);
     newList.add(StdAttr.LABEL_VISIBILITY);
     newList.add(StdAttr.APPEARANCE);
+    changes |= !newList.equals(myAttributes);
     if (changes) {
       myAttributes.clear();
       myAttributes.addAll(newList);
@@ -148,6 +163,9 @@ public class RamAttributes extends AbstractAttributeSet {
     d.allowMisaligned = allowMisaligned;
     d.typeOfEnables = typeOfEnables;
     d.ramType = ramType;
+    d.fpgaMemory = fpgaMemory;
+    d.sdramMap = (sdramMap == null) ? null : sdramMap.clone();
+    d.myAttributes = new ArrayList<>(myAttributes);
   }
 
   @Override
@@ -205,6 +223,14 @@ public class RamAttributes extends AbstractAttributeSet {
     }
     if (attr == Mem.ENABLES_ATTR) {
       return (V) typeOfEnables;
+    }
+    if (attr == ATTR_FPGA_MEMORY) {
+      return (V) fpgaMemory;
+    }
+    if (attr == StdAttr.MAPINFO) {
+      if (!fpgaMemory.equals(FPGA_SDRAM)) return null;
+      if (sdramMap == null) sdramMap = RamSdram.newMapInfo();
+      return (V) sdramMap;
     }
     return null;
   }
@@ -308,6 +334,15 @@ public class RamAttributes extends AbstractAttributeSet {
       final var option = (AttributeOption) value;
       if (appearance.equals(option)) return;
       appearance = option;
+      fireAttributeValueChanged(attr, value, null);
+    } else if (attr == ATTR_FPGA_MEMORY) {
+      final var option = (AttributeOption) value;
+      if (fpgaMemory.equals(option)) return;
+      fpgaMemory = option;
+      if (updateAttributes()) fireAttributeListChanged();
+      fireAttributeValueChanged(attr, value, null);
+    } else if (attr == StdAttr.MAPINFO) {
+      sdramMap = (ComponentMapInformationContainer) value;
       fireAttributeValueChanged(attr, value, null);
     }
   }

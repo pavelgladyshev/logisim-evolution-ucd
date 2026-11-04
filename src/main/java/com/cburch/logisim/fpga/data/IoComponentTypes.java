@@ -32,6 +32,7 @@ import static com.cburch.logisim.fpga.Strings.S;
 
 import com.cburch.logisim.std.io.DipSwitch;
 import com.cburch.logisim.std.io.ReptarLocalBus;
+import com.cburch.logisim.std.memory.RamSdram;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -50,6 +51,7 @@ public enum IoComponentTypes {
   LedArray,
   PortIo,
   LocalBus,
+  Sdram,
   Bus,
   Open,
   Constant,
@@ -86,6 +88,7 @@ public enum IoComponentTypes {
     return switch (comp) {
       case PortIo -> 8;
       case LocalBus -> 16;
+      case Sdram -> RamSdram.INOUTS.size();
       case Pin -> 1;
       default -> 0;
     };
@@ -107,6 +110,7 @@ public enum IoComponentTypes {
       case SevenSegmentNoDp -> 7;
       case RgbLed -> 3;
       case LocalBus -> 2;
+      case Sdram -> RamSdram.OUTPUTS.size();
       case LedArray -> 16;
       case SevenSegmentScanning -> 9;
       default -> 0;
@@ -173,6 +177,8 @@ public enum IoComponentTypes {
         return com.cburch.logisim.std.io.RgbLed.getLabel(id);
       case LocalBus:
         return ReptarLocalBus.getOutputLabel(id);
+      case Sdram:
+        return (id >= 0 && id < RamSdram.OUTPUTS.size()) ? RamSdram.OUTPUTS.get(id) : S.get("FpgaIoPins", id);
       case LedArray:
         if (nrOfRows != 0 && nrOfColumns != 0 && id >= 0 && id < nrPins) {
           final var row = id / nrOfColumns;
@@ -185,6 +191,7 @@ public enum IoComponentTypes {
   }
 
   public static String getIoLabel(int nrPins, int id, IoComponentTypes comp) {
+    if (comp == IoComponentTypes.Sdram && id >= 0 && id < RamSdram.INOUTS.size()) return RamSdram.INOUTS.get(id);
     return comp == IoComponentTypes.LocalBus
        ? ReptarLocalBus.getIoLabel(id)
        : (nrPins > 1) ? S.get("FpgaIoPins", id) : S.get("FpgaIoPin");
@@ -616,8 +623,9 @@ public enum IoComponentTypes {
     }
   }
 
+  // the Sdram (the SDRAM of a board, for a RAM whose FPGA memory is SDRAM) is in board files only
   public static final Set<IoComponentTypes> KNOWN_COMPONENT_SET =
-      EnumSet.range(IoComponentTypes.Led, IoComponentTypes.LocalBus);
+      EnumSet.range(IoComponentTypes.Led, IoComponentTypes.Sdram);
 
   public static final Set<IoComponentTypes> SIMPLE_INPUT_SET =
       EnumSet.range(IoComponentTypes.Led, IoComponentTypes.LocalBus);

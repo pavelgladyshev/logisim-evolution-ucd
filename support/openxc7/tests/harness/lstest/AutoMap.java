@@ -11,6 +11,8 @@ import com.cburch.logisim.prefs.AppPreferences;
 import com.cburch.logisim.proj.Project;
 import com.cburch.logisim.std.io.Keyboard;
 import com.cburch.logisim.std.io.Tty;
+import com.cburch.logisim.std.memory.Ram;
+import com.cburch.logisim.std.memory.RamSdram;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
@@ -24,7 +26,8 @@ import java.util.Set;
  *
  *   AutoMap <in.circ> <top circuit> <board> <out.circ>
  *
- * Existing (saved) maps are kept. TTY -> "UART_TX" and Keyboard -> "UART_RX"; other 1-bit inputs go to the
+ * Existing (saved) maps are kept. TTY -> "UART_TX" and Keyboard -> "UART_RX"; a RAM whose FPGA memory is SDRAM
+ * -> the board's SDRAM, pin for pin; other 1-bit inputs go to the
  * buttons and other outputs to the LEDs, then everything goes to the PortIo pins; what is left becomes
  * constant 0 (inputs) or open (outputs). An FPGA pin is used once, even where the board offers it twice (an
  * LED that is also a header pin). Exit code 2 when the DRC fails.
@@ -83,6 +86,18 @@ public class AutoMap extends DownloadBase {
     return false;
   }
 
+  /** Pin pin of a RAM in the SDRAM on the same pin of the board's SDRAM (whose pins are in the same order). */
+  private boolean mapToSdram(MapComponent comp, int pin) {
+    for (final var res : resources) {
+      if (res.getType() != IoComponentTypes.Sdram || res.isPinMapped(pin)) continue;
+      if (comp.tryMap(pin, res, pin)) {
+        taken.add(res.getPinLocation(pin));
+        return true;
+      }
+    }
+    return false;
+  }
+
   private void complete() {
     resources = myMappableResources.getIoComponentInformation().getComponents();
     final var keys = new ArrayList<>(myMappableResources.getMappableResources().keySet());
@@ -104,7 +119,9 @@ public class AutoMap extends DownloadBase {
           continue;
         }
         var done = false;
-        if (factory instanceof Tty && comp.isOutput(pin)) {
+        if (factory instanceof Ram && RamSdram.isSdram(comp.getAttributeSet())) {
+          done = mapToSdram(comp, pin);
+        } else if (factory instanceof Tty && comp.isOutput(pin)) {
           done = mapTo(comp, pin, "UART_TX", IoComponentTypes.Led);
         } else if (factory instanceof Keyboard && comp.isInput(pin)) {
           done = mapTo(comp, pin, "UART_RX", IoComponentTypes.Button);

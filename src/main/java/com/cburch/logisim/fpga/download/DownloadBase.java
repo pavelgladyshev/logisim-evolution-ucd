@@ -32,6 +32,7 @@ import com.cburch.logisim.fpga.settings.VendorSoftware;
 import com.cburch.logisim.gui.generic.OptionPane;
 import com.cburch.logisim.prefs.AppPreferences;
 import com.cburch.logisim.proj.Project;
+import com.cburch.logisim.std.memory.RamSdram;
 import com.cburch.logisim.std.io.LedArrayGenericHdlGeneratorFactory;
 import com.cburch.logisim.std.io.SevenSegmentScanningGenericHdlGenerator;
 
@@ -249,10 +250,12 @@ public abstract class DownloadBase {
         return false;
       }
 
+      // a RAM in the SDRAM starts it, and clears it, before the first tick
       final var ticker =
           new TickComponentHdlGeneratorFactory(
               getSynthesizedFrequency(),
-              frequency /* , boardFreq.isSelected() */);
+              frequency,
+              RamSdram.isUsed(myMappableResources) ? RamSdram.START_DELAY_BITS : 0);
       if (!Hdl.writeEntity(
           projectDir + ticker.getRelativeDirectory(),
           ticker.getEntity(
