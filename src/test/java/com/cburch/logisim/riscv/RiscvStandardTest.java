@@ -184,6 +184,19 @@ public class RiscvStandardTest {
   }
 
   @Test
+  void sstatusSieAndSip_writeTheirMachineRegisters() {
+    cpu.setX(5, (1L << 1) | (1L << 18));   // SIE, SUM
+    cpu.update(0x1002a073, 0, 0, 0);       // csrs sstatus, x5
+    assertEquals((1L << 1) | (1L << 18), csr(MMCSR.MSTATUS) & ((1L << 1) | (1L << 18)));
+    cpu.setX(5, 1L << 5);                  // STIE
+    cpu.update(0x1042a073, 0, 0, 0);       // csrs sie, x5
+    assertEquals(1L << 5, csr(MMCSR.MIE) & (1L << 5));
+    cpu.setX(5, 1L << 1);                  // SSIP
+    cpu.update(0x1442a073, 0, 0, 0);       // csrs sip, x5
+    assertEquals(1L << 1, csr(MMCSR.MIP) & (1L << 1));
+  }
+
+  @Test
   void undelegatedSupervisorInterrupt_trapsToMachineMode() {
     cpu.setCSR(MMCSR.MSTATUS.getAddress(), 1L << 3);   // MIE
     cpu.setCSR(MMCSR.MIE.getAddress(), 1L << 1);       // SSIE

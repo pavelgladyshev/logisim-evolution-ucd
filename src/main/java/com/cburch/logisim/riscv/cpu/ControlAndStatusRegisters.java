@@ -86,7 +86,8 @@ public class ControlAndStatusRegisters {
      * Write a CSR value. Access control must be validated by checkAccess() before calling this.
      */
     public void write(rv32imData hartData, int csr, long value) {
-        if (get(csr) instanceof CSR_RW) get(csr).write(value);
+        // every CSR: the views (sstatus, sie, sip) write their M-mode registers, a read-only CSR_R ignores it
+        get(csr).write(value);
     }
 
     public CSR get(int csr) {
