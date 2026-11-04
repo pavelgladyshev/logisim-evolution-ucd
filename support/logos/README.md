@@ -2,7 +2,7 @@
 
 The aim is to run [LogOS](https://github.com/pavelgladyshev/logos) on a Sipeed Tang Nano 20K: its computer.circ,
 built by Logisim's FPGA flow, with the RV32IM CPU, the RAM in the board's 8 MB SDRAM, the Block Storage on a
-microSD card in the board's TF slot, and the TTY and Keyboard on the board's USB serial port. Work in progress:
+microSD card in the board's TF slot, and the TTY and Keyboard on the board's USB serial port. The steps:
 
 | Step | State |
 | --- | --- |
@@ -11,7 +11,7 @@ microSD card in the board's TF slot, and the TTY and Keyboard on the board's USB
 | 3. HDL for the Timer, and for the Block Storage on an SD card | done, on the board |
 | 4. HDL for the RAM in the SDRAM | done, on the board |
 | 5. HDL for the CPU: a Verilog model of the Java one, tick for tick | done, in simulation: LogOS edge for edge |
-| 6. LogOS on the board | to do |
+| 6. LogOS on the board | done: its 81 tests pass, with Logisim's ticks of 2048 kHz |
 
 ## 1. A separate data bus
 
@@ -172,3 +172,28 @@ Java CPU does at the next edge (a page table walk's step, an interrupt, the inst
 translation, a fault and the handler's fetch); at the tick the bus cycle it set up goes on the outputs. A division
 takes 8 clocks (four bits of its quotient a clock) and its step about 15: so a CPU cycle needs 24 FPGA clocks,
 which Logisim's ticks of 2048 kHz and slower give with the Tang Nano 20K's 27 MHz (26 FPGA clocks a cycle).
+
+## 6. LogOS on the board
+
+LogOS's computer.circ from its `fpga` branch (step 2's, with the CPU's TLB of 16 entries and the RAM in the SDRAM),
+mapped to the Tang Nano 20K: the TTY on the board's serial TX and the Keyboard on its RX (the USB serial port, 115200
+baud), the RAM on the SDRAM and the Block Storage on the TF slot. Logisim's FPGA flow builds it for ticks of 2048
+kHz (`--test-fpga computer_mapped.circ main SIPEED_TANG_NANO_20K HDLONLY 2048000`, then the scripts it writes):
+10956 LUTs and 1276 ALUs of the GW2AR-18's 20736, 2985 flip-flops and 8 block RAMs, up to 45 MHz.
+
+The microSD card has LogOS's disk image from its block 0: `block_storage.bin` of LogOS's `make fs-image`, written
+raw over whatever the card had, on a Mac for example as below (disk6 being the card in `diskutil list external`).
+`board_session.py bitstream.fs [command ...]` then loads the bitstream into the FPGA, types the commands at LogOS's
+shell over the serial port, each after a prompt, and prints the session.
+
+```bash
+diskutil unmountDisk /dev/disk6
+sudo dd if=block_storage.bin of=/dev/rdisk6 bs=512
+diskutil eject /dev/disk6
+```
+
+Checked on 4 November 2026: LogOS starts its shell 0.8 seconds after the bitstream is loaded (14 in Logisim), and
+its ten test programs pass on the board, 81 tests of 81: the boot and the ten take 72 seconds (1143 in Logisim).
+The session is Logisim's line for line but for one count that depends on when the interrupts come, which the
+commands typed over the serial port change: redir_test's single read() of a pipe got 27 bytes of hello's output
+instead of 26.
