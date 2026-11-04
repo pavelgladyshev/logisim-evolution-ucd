@@ -117,7 +117,7 @@ public class rv32im extends InstanceFactory {
 
 
   public rv32im() {
-    super(_ID);
+    super(_ID, new rv32imHdlGeneratorFactory());
     setOffsetBounds(Bounds.create(-60, -20, 180, 675));
     setPorts(ports(false));
 
