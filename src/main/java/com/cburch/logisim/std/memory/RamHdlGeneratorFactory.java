@@ -84,7 +84,6 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     final var nrOfBits = attrs.getValue(Mem.DATA_ATTR).getWidth();
     final var be = attrs.getValue(RamAttributes.ATTR_ByteEnables);
     final var byteEnables = be != null && be.equals(RamAttributes.BUS_WITH_BYTEENABLES);
-    final var byteEnableOffset = RamAppearance.getBEIndex(0, attrs);
     final var nrBePorts = RamAppearance.getNrBEPorts(attrs);
     final var nrOfaddressLines = attrs.getValue(Mem.ADDR_ATTR).getWidth();
     final var ramEntries = (1 << nrOfaddressLines);
@@ -106,8 +105,8 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
         myWires
             .addWire(String.format("s_byteEnable%d", idx), 1)
             .addWire(String.format("s_we%d", idx), 1);
-        myPorts
-            .add(Port.INPUT, String.format("byteEnable%d", idx), 1, byteEnableOffset + nrBePorts - idx - 1);
+        // byte idx's enable is the pin BE<idx>, as in the simulation
+        myPorts.add(Port.INPUT, String.format("byteEnable%d", idx), 1, RamAppearance.getBEIndex(idx, attrs));
       }
       // as in the simulation, an unconnected output enable enables the output
       myPorts.add(Port.INPUT, "oe", 1, RamAppearance.getOEIndex(0, attrs), false);
@@ -167,7 +166,7 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       if (byteEnables) {
         for (var i = 0; i < RamAppearance.getNrBEPorts(attrs); i++) {
           contents
-              .add("s_byteEnable{{1}} <= s_byteEnableReg({{1}}) {{and}} s_tickDelayLine(2) {{and}} s_oeReg;", i)
+              .add("s_byteEnable{{1}} <= s_tickDelayLine(2) {{and}} s_oeReg;", i)
               .add("s_we{{1}}         <= s_byteEnableReg({{1}}) {{and}} s_tickDelayLine({{2}}) {{and}} s_weReg;", i, writeTick);
         }
       } else {
@@ -184,9 +183,11 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
                  {{if}} (rising_edge({{clock}})) {{then}}
               """);
       if (!syncRead) {
+        // an asynchronous read reads at the address and with the output enable of the next cycle
         contents.add("""
                           {{if}} (s_tickDelayLine(0) = '1') {{then}}
                              s_readAddressReg  <= address;
+                             s_oeReg           <= oe;
                           {{end}} {{if}};
                     """);
       }
@@ -200,8 +201,12 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       }
       contents.add("""
                              s_weReg           <= we;
+                   """);
+      if (syncRead) {
+        contents.add("""
                              s_oeReg           <= oe;
                    """);
+      }
       if (byteEnables) {
         for (var i = 0; i < RamAppearance.getNrBEPorts(attrs); i++)
           contents.add("         s_byteEnableReg({{1}}) <= byteEnable{{1}};", i);
@@ -303,7 +308,7 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       if (byteEnables) {
         for (var i = 0; i < RamAppearance.getNrBEPorts(attrs); i++) {
           contents
-              .add("assign s_byteEnable{{1}} = s_byteEnableReg[{{1}}] & s_tickDelayLine[2] & s_oeReg;", i)
+              .add("assign s_byteEnable{{1}} = s_tickDelayLine[2] & s_oeReg;", i)
               .add("assign s_we{{1}}         = s_byteEnableReg[{{1}}] & s_tickDelayLine[{{2}}] & s_weReg;", i, writeTick);
         }
       } else {
@@ -319,7 +324,9 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
               begin
               """);
       if (!syncRead) {
+        // an asynchronous read reads at the address and with the output enable of the next cycle
         contents.add("  s_readAddressReg <= (s_tickDelayLine[0] == 1'b1) ? address : s_readAddressReg;");
+        contents.add("  s_oeReg          <= (s_tickDelayLine[0] == 1'b1) ? oe : s_oeReg;");
       }
       contents.add("""
                      if ({{tick}} == 1'b1)
@@ -332,8 +339,12 @@ public class RamHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
       }
       contents.add("""
                           s_weReg           <= we;
+                   """);
+      if (syncRead) {
+        contents.add("""
                           s_oeReg           <= oe;
                    """);
+      }
       if (byteEnables) {
         for (var i = 0; i < RamAppearance.getNrBEPorts(attrs); i++)
           contents.add("       s_byteEnableReg[{{1}}] <= byteEnable{{1}};", i);

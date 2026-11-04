@@ -21,3 +21,6 @@ cnt8ud Counter width=8 max=0xc8 clock=2 rare=3 skip=6
 ramasync RAM addrWidth=3 dataWidth=8 databus=bibus asyncread=true clock=ram
 ram16be RAM addrWidth=4 dataWidth=16 databus=bibus enables=byte clock=ram
 ramraw RAM addrWidth=4 dataWidth=8 databus=bibus readbehav=raw clock=ram
+ram32be RAM addrWidth=4 dataWidth=32 databus=bibus byteenables=byteEnables clock=ram
+ram32beasync RAM addrWidth=4 dataWidth=32 databus=bibus asyncread=true byteenables=byteEnables clock=ram
+ram12be RAM addrWidth=3 dataWidth=12 databus=bibus byteenables=byteEnables clock=ram
