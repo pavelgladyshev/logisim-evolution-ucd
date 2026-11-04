@@ -3,6 +3,7 @@
 // each tick the CPU gets the inputs that the Java CPU took at that edge, and after it its outputs must be the Java
 // CPU's. It stops at the 10th difference, or at the end of the record.
 //    iverilog -DTRACE='"boot.hex"' -o tb tb_cpu_replay.v riscvCpu.v && vvp -n tb
+// With -DBINARY, TRACE is the record itself, rv32imTrace's 16 bytes an edge.
 `ifndef PERIOD
  `define PERIOD 64
 `endif
@@ -26,6 +27,25 @@ module tb_cpu_replay;
    integer f, r, edge_ = 0, errors = 0;
    reg [31:0] din, eAddr, eData;
    reg [7:0]  fin, fout;
+   reg [127:0] record;
+   // the next record: 5 when there is one, as $fscanf's count
+   task next;
+      begin
+`ifdef BINARY
+         r = $fread(record, f);
+         if (r == 16) begin
+            din   = {record[103:96], record[111:104], record[119:112], record[127:120]};
+            fin   = record[95:88];
+            eAddr = {record[63:56], record[71:64], record[79:72], record[87:80]};
+            eData = {record[31:24], record[39:32], record[47:40], record[55:48]};
+            fout  = record[23:16];
+            r = 5;
+         end else r = 0;
+`else
+         r = $fscanf(f, "%h %h %h %h %h\n", din, fin, eAddr, eData, fout);
+`endif
+      end
+   endtask
    task check;
       begin
          if (address !== eAddr || dataOut !== eData || memRead !== fout[0] || memWrite !== fout[1]
@@ -40,11 +60,15 @@ module tb_cpu_replay;
    endtask
 
    initial begin
+`ifdef BINARY
+      f = $fopen(`TRACE, "rb");
+`else
       f = $fopen(`TRACE, "r");
+`endif
       // what the CPU gives before its first edge
-      r = $fscanf(f, "%h %h %h %h %h\n", din, fin, eAddr, eData, fout);
+      next;
       #4 check;
-      r = $fscanf(f, "%h %h %h %h %h\n", din, fin, eAddr, eData, fout);
+      next;
       while (r == 5) begin
          dataIn = din; timerIrq = fin[0]; extIrq = fin[1]; busReq = fin[2];
          @(posedge clock); while (!tick) @(posedge clock);       // the edge
@@ -57,8 +81,8 @@ module tb_cpu_replay;
                      cpu.mepc, cpu.mcause, address, eAddr);
 `endif
          check;
-         if (edge_ % 100000 == 0) $display("%0d edges", edge_);
-         r = $fscanf(f, "%h %h %h %h %h\n", din, fin, eAddr, eData, fout);
+         if (edge_ % 1000000 == 0) $display("%0d edges", edge_);
+         next;
       end
       $display("%0d edges, %0d differences", edge_, errors);
       $finish;
