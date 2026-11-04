@@ -10,7 +10,7 @@ microSD card in the board's TF slot, and the TTY and Keyboard on the board's USB
 | 2. computer.circ with a multiplexed bus instead of a shared one | done, in Logisim |
 | 3. HDL for the Timer, and for the Block Storage on an SD card | done, on the board |
 | 4. HDL for the RAM in the SDRAM | done, on the board |
-| 5. HDL for the CPU: a Verilog model of the Java one, tick for tick | done, in simulation: LogOS's boot edge for edge |
+| 5. HDL for the CPU: a Verilog model of the Java one, tick for tick | done, in simulation: LogOS edge for edge |
 | 6. LogOS on the board | to do |
 
 ## 1. A separate data bus
@@ -150,9 +150,10 @@ Two things came first.
 **The Verilog**, `riscvCpu` in `src/main/resources/resources/logisim/hdl/riscv`, generated for the CPU when its data
 bus is separate (rv32imHdlGeneratorFactory: Verilog, at most 32 TLB entries, no instruction cache, no GDB server).
 It does what the Java CPU does at each of the 405504 edges of LogOS's boot (the bootloader, the kernel in S-mode with
-SV32, user programs, page table walks, interrupts, the Block Storage's DMA), and at each of 196608 edges of random
-instruction words, interrupt requests and bus requests (illegal instructions and their traps, every kind of
-instruction, random CSRs). On the GW2AR-18 it takes 8438 LUTs, 1944 flip-flops, 6 block RAMs and a multiplier, and
+SV32, user programs, page table walks, interrupts, the Block Storage's DMA), at each edge of the boot and one of
+LogOS's ten test programs, for each of them (31.2 million edges in all, stress_test's 11.2 million among them), and
+at each of 196608 edges of random instruction words, interrupt requests and bus requests (illegal instructions and
+their traps, every kind of instruction, random CSRs). On the GW2AR-18 it takes 8438 LUTs, 1944 flip-flops, 6 block RAMs and a multiplier, and
 runs at 50 MHz. The check, in `tests/cpu`: the Java CPU records its edges (with the Java system property
 `rv32im.trace`, for example `JAVA_TOOL_OPTIONS=-Drv32im.trace=boot.trace logos_session.py jar dir`), and
 `tb_cpu_replay.v` plays the record to riscvCpu and compares its outputs:
