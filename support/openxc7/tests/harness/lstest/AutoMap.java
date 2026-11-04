@@ -10,6 +10,7 @@ import com.cburch.logisim.fpga.file.BoardReaderClass;
 import com.cburch.logisim.prefs.AppPreferences;
 import com.cburch.logisim.proj.Project;
 import com.cburch.logisim.std.io.Keyboard;
+import com.cburch.logisim.riscv.blockstorage.BlockStorage;
 import com.cburch.logisim.std.io.Tty;
 import com.cburch.logisim.std.memory.Ram;
 import com.cburch.logisim.std.memory.RamSdram;
@@ -27,7 +28,8 @@ import java.util.Set;
  *   AutoMap <in.circ> <top circuit> <board> <out.circ>
  *
  * Existing (saved) maps are kept. TTY -> "UART_TX" and Keyboard -> "UART_RX"; a RAM whose FPGA memory is SDRAM
- * -> the board's SDRAM, pin for pin; other 1-bit inputs go to the
+ * -> the board's SDRAM, pin for pin; a Block Storage's SD card -> the pins labelled TF_D0, TF_CLK, TF_CMD and TF_D3
+ * (the Tang Nano 20K's TF slot); other 1-bit inputs go to the
  * buttons and other outputs to the LEDs, then everything goes to the PortIo pins; what is left becomes
  * constant 0 (inputs) or open (outputs). An FPGA pin is used once, even where the board offers it twice (an
  * LED that is also a header pin). Exit code 2 when the DRC fails.
@@ -86,6 +88,9 @@ public class AutoMap extends DownloadBase {
     return false;
   }
 
+  /** The TF slot's pins for a Block Storage's SD_MISO, SD_SCK, SD_MOSI and SD_CS (its pins 0 to 3). */
+  private static final String[] TF_PINS = {"TF_D0", "TF_CLK", "TF_CMD", "TF_D3"};
+
   /** Pin pin of a RAM in the SDRAM on the same pin of the board's SDRAM (whose pins are in the same order). */
   private boolean mapToSdram(MapComponent comp, int pin) {
     for (final var res : resources) {
@@ -121,6 +126,8 @@ public class AutoMap extends DownloadBase {
         var done = false;
         if (factory instanceof Ram && RamSdram.isSdram(comp.getAttributeSet())) {
           done = mapToSdram(comp, pin);
+        } else if (factory instanceof BlockStorage && pin < TF_PINS.length) {
+          done = mapTo(comp, pin, TF_PINS[pin], IoComponentTypes.PortIo);
         } else if (factory instanceof Tty && comp.isOutput(pin)) {
           done = mapTo(comp, pin, "UART_TX", IoComponentTypes.Led);
         } else if (factory instanceof Keyboard && comp.isInput(pin)) {
