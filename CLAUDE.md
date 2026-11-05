@@ -77,8 +77,9 @@ Logisim-evolution is a Java 21 Swing application for digital logic circuit desig
 This fork includes a custom RISC-V RV32IM processor implementation with SV32 virtual memory:
 
 - **`com.cburch.logisim.riscv.cpu`** - Core processor
-  - `rv32im.java` - Component factory (14 ports: clock, reset, data bus, address bus, mem read/write, timer/external interrupt
-    inputs, byte enables, bus request/ack)
+  - `rv32im.java` - Component factory (15 ports: clock, reset, data in, data out, address bus, mem read/write, timer/external
+    interrupt inputs, byte enables, bus request/ack; each port labelled on the component). TLB Entries attribute: 16 or 32
+    (default)
   - `rv32imData.java` - Complete CPU state (registers, CSRs, TLB, cache, privilege mode, GDB server integration). Key methods:
     `isTranslationEnabled()` (fetch), `isTranslationEnabledForLoadStore()` (MPRV-aware), `getEffectivePrivilegeForLoadStore()`,
     `checkTlbPermissions()` (fetch), `checkTlbPermissionsForLoadStore()` (MPRV-aware)

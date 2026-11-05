@@ -13,19 +13,18 @@ import com.cburch.logisim.data.AttributeSet;
 import com.cburch.logisim.fpga.designrulecheck.Netlist;
 import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.fpga.hdlgenerator.AbstractHdlGeneratorFactory;
+import com.cburch.logisim.fpga.hdlgenerator.Hdl;
 import com.cburch.logisim.fpga.hdlgenerator.HdlParameters;
 import com.cburch.logisim.instance.Port;
-import com.cburch.logisim.riscv.DataBus;
 import com.cburch.logisim.util.LineBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * The Timer on an FPGA, in Verilog and with a separate data bus only, doing at each tick what the component does
- * at a rising clock edge: a write to mtimecmp or mtime, then mtime counting on (31 bits), then the interrupt
- * request set when mtime reaches mtimecmp. Its registers are read without a clock, on Data Out; Reset holds mtime
- * at 0 and mtimecmp at 0xffffffff.
+ * The Timer on an FPGA, in Verilog, doing at each tick what the component does at a rising clock edge: a write to
+ * mtimecmp or mtime, then mtime counting on (31 bits), then the interrupt request set when mtime reaches mtimecmp.
+ * Its registers are read without a clock, on Data Out; Reset holds mtime at 0 and mtimecmp at 0xffffffff.
  */
 public class TimerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 
@@ -55,7 +54,7 @@ public class TimerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
         .add(Port.INPUT, "we", 1, Timer.WRITE_ENABLE, true)
         .add(Port.INPUT, "dataIn", 32, Timer.DATA_IN, true)
         .add(Port.INPUT, "reset", 1, Timer.RESET, true)
-        .add(Port.OUTPUT, "dataOut", 32, Timer.DATA)
+        .add(Port.OUTPUT, "dataOut", 32, Timer.DATA_OUT)
         .add(Port.OUTPUT, "irq", 1, Timer.INTERRUPT_OUT);
   }
 
@@ -120,12 +119,12 @@ public class TimerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 
   @Override
   public boolean isHdlSupportedTarget(AttributeSet attrs) {
-    // the riscv components go onto an FPGA in Verilog, and only on a separate data bus
+    // the riscv components go onto an FPGA in Verilog
     return getUnsupportedReasons(attrs).isEmpty();
   }
 
   @Override
   public List<String> getUnsupportedReasons(AttributeSet attrs) {
-    return DataBus.unsupportedReasons(attrs);
+    return Hdl.isVerilog() ? List.of() : List.of(Hdl.verilogOnlyReason());
   }
 }

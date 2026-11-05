@@ -18,9 +18,11 @@ microSD card in the board's TF slot, and the TTY and Keyboard on the board's USB
 An FPGA cannot build a bus that several components drive in turn, as computer.circ's data bus is: the CPU,
 the RAM, the Block Storage, the Timer and three Controlled Buffers all drive it, and the CPU and the Block
 Storage's DMA share the address, MemRead, MemWrite and byte-enable lines too. So the RV32IM CPU, the Block
-Storage and the Timer have an attribute **Data Bus**: *Bidirectional* (the default, as before) or *Separate In
-and Out*. With a separate bus a component reads its data on a Data In pin and writes it on a Data Out pin, where
-the INOUT pin was, and its outputs drive 0 where the bidirectional ones float:
+Storage and the Timer read their data on a Data In pin and write it on a Data Out pin, where the INOUT pin was,
+and their outputs drive 0 where the shared ones float. At first that was an attribute, **Data Bus** (*Bidirectional*,
+the default, or *Separate In and Out*); now the separate pins are the only ones, each with its label beside it, and
+a circuit made for the INOUT pins, as LogOS 3.0's computer.circ is, is to be rewired (`fpga_bus.py` does it for
+computer.circ):
 
 - **RV32IM CPU**: Data In on the left (with the other inputs). While it has granted the bus to a DMA device
   (BusAck = 1), Address, MemRead, MemWrite, Data Out and the byte enables are 0.
@@ -53,8 +55,9 @@ The script checks its result with Logisim (no net may have two outputs on it), u
 Checked on 4 November 2026 with `logos_session.py`, which boots LogOS without Logisim's window and types at its
 shell: LogOS 3.0's ten test programs (fs_test, pipe_test, redir_test, fd_test, proc_test, link_test, shm_test,
 sem_test, stress_test, script_test) pass, 81 of 81, in the new circuit as in the old one, the two sessions are
-identical and so are the disk images afterwards. The old circuit gives the same session with Logisim 5.0.3 and
-with this version, whose CPU, Block Storage and Timer are bidirectional by default.
+identical and so are the disk images afterwards. The old circuit gave the same session with Logisim 5.0.3 and
+with this version as it was then, when the CPU, Block Storage and Timer were bidirectional by default; now that
+their pins are separate only, the old circuit no longer runs in this version, and the new one does.
 
 ## 3. HDL for the Timer and the Block Storage
 
@@ -135,10 +138,11 @@ places with the SDRAM's pins where they belong.
 The Verilog is to do, tick for tick, what the Java CPU does, so that the two can be checked against each other.
 Two things came first.
 
-- **TLB Entries**, an attribute of the CPU: 16, 32, 64 or 128 (the default, as before). An FPGA has room for 16, and
-  `fpga_bus.py` gives computer.circ's CPU 16, in Logisim too, so that both hit and miss the same: with fewer than
-  128, the TLB searches its entries in order, as hardware does. With 16, LogOS's ten test programs have 10398 TLB
-  misses instead of 5172, and take about as long.
+- **TLB Entries**, an attribute of the CPU: 16, or 32 by default (at first also 64 and 128, the default as before:
+  Logisim has no use for more than the HDL's 32). An FPGA has room for 16, and `fpga_bus.py` gives computer.circ's
+  CPU 16, in Logisim too, so that both hit and miss the same: with 16 or 32 entries, the TLB searches them in order,
+  as hardware does. With 16, LogOS's ten test programs have 10398 TLB misses instead of 5172 with 128, and take
+  about as long.
 - **The RISC-V specs**, where the Java CPU differed from them (commit 0c1d1cee3): registers of 32 bits (they kept
   Java longs, so that some comparisons and divisions went wrong), misaligned loads and stores as address misaligned
   exceptions, traps that go on with the handler, interrupts between instructions only and with their delegation,
@@ -147,8 +151,8 @@ Two things came first.
   ran the store again after the handler, so LogOS's test programs printed doubled and lost characters
   ("Results: 0 passed" for 10). Now the sessions with 16 and 128 TLB entries are the same, and clean.
 
-**The Verilog**, `riscvCpu` in `src/main/resources/resources/logisim/hdl/riscv`, generated for the CPU when its data
-bus is separate (rv32imHdlGeneratorFactory: Verilog, at most 32 TLB entries, no instruction cache, no GDB server).
+**The Verilog**, `riscvCpu` in `src/main/resources/resources/logisim/hdl/riscv`, generated for the CPU
+(rv32imHdlGeneratorFactory: Verilog, no instruction cache, no GDB server).
 It does what the Java CPU does at each of the 405504 edges of LogOS's boot (the bootloader, the kernel in S-mode with
 SV32, user programs, page table walks, interrupts, the Block Storage's DMA), at each edge of the boot and one of
 LogOS's ten test programs, for each of them (31.2 million edges in all, stress_test's 11.2 million among them), and
@@ -199,7 +203,7 @@ commands typed over the serial port change: redir_test's single read() of a pipe
 instead of 26.
 
 For a circuit of one's own, the FPGA flow says what stops it before the pins are mapped. A component that has no HDL
-as it is set up is named with the settings to change (for the CPU with its defaults: set “Data Bus” to “Separate In
-and Out”; set “TLB Entries” to 32 or less), and a tick frequency that gives a component too few FPGA clocks a cycle
+as it is set up is named with the settings to change (for a CPU with its instruction cache on: set “Instruction
+Cache?” to “false”), and a tick frequency that gives a component too few FPGA clocks a cycle
 is refused with the highest one that will do: the CPU needs 23 (2.25 MHz on the Tang Nano 20K), a RAM in the SDRAM
 12 (4.5 MHz).

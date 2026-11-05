@@ -15,7 +15,6 @@ import com.cburch.logisim.fpga.designrulecheck.netlistComponent;
 import com.cburch.logisim.fpga.hdlgenerator.AbstractHdlGeneratorFactory;
 import com.cburch.logisim.fpga.hdlgenerator.Hdl;
 import com.cburch.logisim.instance.Port;
-import com.cburch.logisim.riscv.DataBus;
 import com.cburch.logisim.util.LineBuffer;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -28,10 +27,10 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * The Block Storage on an FPGA, in Verilog and with a separate data bus only: its registers and DMA as the component
- * has them, and a microSD card in SPI mode, on the four mappable pins SD_MISO, SD_SCK, SD_MOSI and SD_CS (on the
- * Tang Nano 20K: TF_D0, TF_CLK, TF_CMD and TF_D3), where the component has its image file. The module that does it,
- * riscvSdBlockStorage, is shipped with Logisim (resources/logisim/hdl/riscv) and says how it works.
+ * The Block Storage on an FPGA, in Verilog: its registers and DMA as the component has them, and a microSD card in
+ * SPI mode, on the four mappable pins SD_MISO, SD_SCK, SD_MOSI and SD_CS (on the Tang Nano 20K: TF_D0, TF_CLK,
+ * TF_CMD and TF_D3), where the component has its image file. The module that does it, riscvSdBlockStorage, is
+ * shipped with Logisim (resources/logisim/hdl/riscv) and says how it works.
  */
 public class BlockStorageHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 
@@ -49,7 +48,7 @@ public class BlockStorageHdlGeneratorFactory extends AbstractHdlGeneratorFactory
         .add(Port.INPUT, "reset", 1, BlockStorage.RESET, true)
         .add(Port.INPUT, "busAck", 1, BlockStorage.BUS_ACK, true)
         .add(Port.INPUT, "memDataIn", 32, BlockStorage.MEM_DATA_IN, true)
-        .add(Port.OUTPUT, "dataOut", 32, BlockStorage.DATA)
+        .add(Port.OUTPUT, "dataOut", 32, BlockStorage.DATA_OUT)
         .add(Port.OUTPUT, "busReq", 1, BlockStorage.BUS_REQUEST)
         .add(Port.OUTPUT, "memRead", 1, BlockStorage.MEM_READ)
         .add(Port.OUTPUT, "memWrite", 1, BlockStorage.MEM_WRITE)
@@ -120,12 +119,12 @@ public class BlockStorageHdlGeneratorFactory extends AbstractHdlGeneratorFactory
 
   @Override
   public boolean isHdlSupportedTarget(AttributeSet attrs) {
-    // the riscv components go onto an FPGA in Verilog, and only on a separate data bus
+    // the riscv components go onto an FPGA in Verilog
     return getUnsupportedReasons(attrs).isEmpty();
   }
 
   @Override
   public List<String> getUnsupportedReasons(AttributeSet attrs) {
-    return DataBus.unsupportedReasons(attrs);
+    return Hdl.isVerilog() ? List.of() : List.of(Hdl.verilogOnlyReason());
   }
 }

@@ -5,8 +5,8 @@
 
 The input is the computer.circ of LogOS 3.0 (branch v3.0-glendalough, circuit of 26 Mar 2026). What changes, in
 that circuit's coordinates (everything but the CPU then moves 150 to the right, to make room for its tunnels):
-- The CPU, Block Storage and Timer get a separate data bus (attribute "Data Bus": Separate In and Out), and the
-  RAM separate data in (D) and out.
+- The CPU, Block Storage and Timer are wired to their separate Data In and Data Out pins (where their INOUT pin
+  was, Data Out), and the RAM gets separate data in (D) and out.
 - The Controlled Buffers, the Pull Resistors and the two AND gates that only enabled buffers go.
 - Every pin of the old shared nets gets a tunnel of its own: the CPU's bus outputs (CPUAddress, CPUData,
   CPUMemRead, CPUMemWrite, CPUBE) and the Block Storage's DMA outputs (DMAAddress, BSData, DMAMemRead,
@@ -67,10 +67,8 @@ def find_comp(main, name, loc, label=None):
 
 
 def separate_pins(main):
-    """The data buses of the CPU, Block Storage, Timer and RAM made separate, the RAM in the SDRAM on the FPGA, and
-    the CPU's TLB of 16 entries: only attributes change."""
-    for name, loc in [('RV32IM CPU', (220, 590)), ('Block Storage', (830, 1080)), ('Timer', (870, 480))]:
-        set_attr(find_comp(main, name, loc), 'dataBus', 'separate')
+    """The RAM's data bus made separate (the CPU, Block Storage and Timer have no other), the RAM in the SDRAM on
+    the FPGA, and the CPU's TLB of 16 entries: only attributes change."""
     set_attr(find_comp(main, 'RV32IM CPU', (220, 590)), 'tlbEntries', '16')   # what fits an FPGA, also in Logisim
     ram = find_comp(main, 'RAM', (750, 810))
     set_attr(ram, 'databus', 'bibus')

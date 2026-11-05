@@ -37,42 +37,39 @@ class RiscvHdlSupportTest {
         .toList();
   }
 
-  /** The CPU as computer.circ has it for the FPGA. */
-  private static AttributeSet fpgaCpu() {
+  @Test
+  void theDefaultCpuHasNothingToChange() {
+    assertEquals(List.of(), settings(CPU, CPU.createAttributeSet()));
+  }
+
+  @Test
+  void bothTlbSizesGoOntoTheFpga() {
+    for (final var entries : rv32im.TLB_ENTRIES) {
+      final var attrs = CPU.createAttributeSet();
+      attrs.setValue(rv32im.ATTR_TLB_ENTRIES, entries);
+      assertEquals(List.of(), settings(CPU, attrs), entries.toString());
+    }
+  }
+
+  @Test
+  void theInstructionCacheAndTheGdbServerAreToBeOff() {
     final var attrs = CPU.createAttributeSet();
-    attrs.setValue(DataBus.ATTR, DataBus.SEPARATE);
-    attrs.setValue(rv32im.ATTR_TLB_ENTRIES, rv32im.TLB_ENTRIES[0]);
-    return attrs;
-  }
-
-  @Test
-  void theDefaultCpuSaysWhichTwoSettingsToChange() {
-    final var settings = settings(CPU, CPU.createAttributeSet());
-    assertEquals(2, settings.size(), settings.toString());
-    assertTrue(settings.get(0).contains(DataBus.ATTR.getDisplayName()), settings.get(0));
-    assertTrue(settings.get(0).contains(DataBus.SEPARATE.toDisplayString()), settings.get(0));
-    assertTrue(settings.get(1).contains(rv32im.ATTR_TLB_ENTRIES.getDisplayName()), settings.get(1));
-    assertTrue(settings.get(1).contains("32"), settings.get(1));
-  }
-
-  @Test
-  void computerCircsCpuHasNothingToChange() {
-    assertEquals(List.of(), settings(CPU, fpgaCpu()));
-  }
-
-  @Test
-  void theInstructionCacheIsToBeOff() {
-    final var attrs = fpgaCpu();
     attrs.setValue(rv32im.ATTR_INSTRUCTION_CACHE, true);
+    attrs.setValue(rv32im.ATTR_GDB_SERVER_RUNNING, true);
     final var settings = settings(CPU, attrs);
-    assertEquals(1, settings.size(), settings.toString());
-    assertTrue(settings.get(0).contains(rv32im.ATTR_INSTRUCTION_CACHE.getDisplayName()));
+    assertEquals(2, settings.size(), settings.toString());
+    assertTrue(
+        settings.get(0).contains(rv32im.ATTR_INSTRUCTION_CACHE.getDisplayName()), settings.get(0));
+    assertTrue(
+        settings.get(1).contains(rv32im.ATTR_GDB_SERVER_RUNNING.getDisplayName()), settings.get(1));
   }
 
   @Test
   void supportedJustWhenThereIsNoReason() {
     final var generator = new rv32imHdlGeneratorFactory();
-    for (final var attrs : List.of(CPU.createAttributeSet(), fpgaCpu())) {
+    final var cached = CPU.createAttributeSet();
+    cached.setValue(rv32im.ATTR_INSTRUCTION_CACHE, true);
+    for (final var attrs : List.of(CPU.createAttributeSet(), cached)) {
       assertEquals(
           generator.getUnsupportedReasons(attrs).isEmpty(), generator.isHdlSupportedTarget(attrs));
     }
@@ -81,18 +78,14 @@ class RiscvHdlSupportTest {
   @Test
   void theCpuNeeds23FpgaClocksACycle() {
     // its inputs 8 clocks after the tick, a division whose next fetch faults, and the tick
-    assertEquals(23, new rv32imHdlGeneratorFactory().getMinimumFpgaClocksPerCycle(fpgaCpu()));
+    assertEquals(
+        23, new rv32imHdlGeneratorFactory().getMinimumFpgaClocksPerCycle(CPU.createAttributeSet()));
   }
 
   @Test
-  void theBlockStorageAndTheTimerNeedASeparateDataBus() {
+  void theBlockStorageAndTheTimerHaveNothingToChange() {
     for (final var factory : List.of(new BlockStorage(), new Timer())) {
-      final var attrs = factory.createAttributeSet();
-      final var settings = settings(factory, attrs);
-      assertEquals(1, settings.size(), factory.getName() + ": " + settings);
-      assertTrue(settings.get(0).contains(DataBus.ATTR.getDisplayName()), settings.get(0));
-      attrs.setValue(DataBus.ATTR, DataBus.SEPARATE);
-      assertEquals(List.of(), settings(factory, attrs), factory.getName());
+      assertEquals(List.of(), settings(factory, factory.createAttributeSet()), factory.getName());
     }
   }
 }

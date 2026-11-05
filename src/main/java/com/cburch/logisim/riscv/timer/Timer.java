@@ -23,11 +23,11 @@ public class Timer extends InstanceFactory {
     public static final int ADDRESS = 0;
     public static final int READ_ENABLE = 1;
     public static final int WRITE_ENABLE = 2;
-    public static final int DATA = 3;
+    public static final int DATA_OUT = 3;
     public static final int INTERRUPT_OUT = 4;
     public static final int RESET = 5;
     public static final int CLOCK = 6;
-    public static final int DATA_IN = 7;   // with a separate data bus only: DATA is then Data Out
+    public static final int DATA_IN = 7;
 
     public static final long RISCV_MTIMECMP_ADDR_DEFAULT = (0x2000000 + 0x4000);
 
@@ -43,22 +43,27 @@ public class Timer extends InstanceFactory {
             Attributes.forBoolean("hexRegisters", S.getter("timerHexRegisters"));
 
 
-    private static final Value HI_Z_32 = Value.createUnknown(BitWidth.create(32));
     private static final Value ZERO_32 = Value.createKnown(32, 0);
 
+    // The Timer's box: its title and registers at the top, above its ports, which have their labels beside them
+    private static final int TOP = -116;
+    private static final Font TITLE_FONT = new Font("SansSerif", Font.BOLD, 15);
+    private static final Font PORT_FONT = new Font("SansSerif", Font.PLAIN, 10);
+
     public Timer() {
-        // on an FPGA (Verilog, separate data bus only) the Timer is TimerHdlGeneratorFactory's module
+        // on an FPGA (Verilog) the Timer is TimerHdlGeneratorFactory's module
         super(_ID, new TimerHdlGeneratorFactory());
-        setOffsetBounds(Bounds.create(-40, -50, 90, 100));
-        setPorts(ports(false));
+        setOffsetBounds(Bounds.create(-40, TOP, 90, 50 - TOP));
+        setPorts(ports());
 
         setAttributes(
-                new Attribute[] {RISCV_MTIMECMP_ADDR, RISCV_MTIME_ADDR, ATTR_HEX_REGS, DataBus.ATTR},
-                new Object[] {Long.valueOf(RISCV_MTIMECMP_ADDR_DEFAULT), Long.valueOf(RISCV_MTIME_ADDR_DEFAULT), false, DataBus.BIDIRECTIONAL});
+                new Attribute[] {RISCV_MTIMECMP_ADDR, RISCV_MTIME_ADDR, ATTR_HEX_REGS},
+                new Object[] {Long.valueOf(RISCV_MTIMECMP_ADDR_DEFAULT), Long.valueOf(RISCV_MTIME_ADDR_DEFAULT), false});
     }
 
-    private static Port[] ports(boolean separateDataBus) {
-        Port[] ports = new Port[separateDataBus ? 8 : 7];
+    /** The Timer reads on Data In and writes on Data Out, which is 0 while it is not read (DataBus). */
+    private static Port[] ports() {
+        Port[] ports = new Port[8];
         ports[ADDRESS] = new Port(-40, -10, Port.INPUT, 32);
         ports[ADDRESS].setToolTip(S.getter("timerAddress"));
 
@@ -68,15 +73,11 @@ public class Timer extends InstanceFactory {
         ports[WRITE_ENABLE] = new Port(-40, 10, Port.INPUT, 1);
         ports[WRITE_ENABLE].setToolTip(S.getter("timerWriteEnable"));
 
-        if (separateDataBus) {
-            ports[DATA] = new Port(50, 0, Port.OUTPUT, 32);
-            ports[DATA].setToolTip(S.getter("timerDataOut"));
-            ports[DATA_IN] = new Port(40, 50, Port.INPUT, 32);   // bottom edge, right of Clock
-            ports[DATA_IN].setToolTip(S.getter("timerDataIn"));
-        } else {
-            ports[DATA] = new Port(50, 0, Port.INOUT, 32);
-            ports[DATA].setToolTip(S.getter("timerData"));
-        }
+        ports[DATA_OUT] = new Port(50, 0, Port.OUTPUT, 32);
+        ports[DATA_OUT].setToolTip(S.getter("timerDataOut"));
+
+        ports[DATA_IN] = new Port(40, 50, Port.INPUT, 32);   // bottom edge, right of Clock
+        ports[DATA_IN].setToolTip(S.getter("timerDataIn"));
 
         ports[INTERRUPT_OUT] = new Port(50, 20, Port.OUTPUT, 1);
         ports[INTERRUPT_OUT].setToolTip(S.getter("timerInterruptRequestOut"));
@@ -91,33 +92,35 @@ public class Timer extends InstanceFactory {
     }
 
     @Override
-    protected void configureNewInstance(Instance instance) {
-        instance.addAttributeListener();
-        instance.setPorts(ports(DataBus.isSeparate(instance.getAttributeSet())));
-    }
-
-    @Override
-    protected void instanceAttributeChanged(Instance instance, Attribute<?> attr) {
-        if (attr == DataBus.ATTR) {
-            instance.setPorts(ports(DataBus.isSeparate(instance.getAttributeSet())));
-        }
-    }
-
-    @Override
     public void paintInstance(InstancePainter painter) {
         painter.drawBounds();
-        painter.drawPorts();
+        painter.drawClock(CLOCK, Direction.NORTH);
 
+        final var loc = painter.getLocation();
+        final var x = loc.getX();
+        final var y = loc.getY();
+        final var graphics = (Graphics2D) painter.getGraphics();
+        final var font = graphics.getFont();
+        graphics.setFont(PORT_FONT);
+        graphics.setColor(Color.BLACK);
+        painter.drawPort(ADDRESS, "Address", Direction.EAST);
+        painter.drawPort(READ_ENABLE, "Read", Direction.EAST);
+        painter.drawPort(WRITE_ENABLE, "Write", Direction.EAST);
+        painter.drawPort(DATA_OUT, "Data out", Direction.WEST);
+        painter.drawPort(INTERRUPT_OUT, "IRQ", Direction.WEST);
+        painter.drawPort(RESET);
+        painter.drawPort(DATA_IN);
+        // above the bottom edge, clear of the clock's triangle: Data In's at the corner, where it has room
+        GraphicsUtil.drawText(graphics, "Reset", x - 10, y + 45, GraphicsUtil.H_CENTER, GraphicsUtil.V_BASELINE);
+        GraphicsUtil.drawText(graphics, "Data in", x + 47, y + 45, GraphicsUtil.H_RIGHT, GraphicsUtil.V_BASELINE);
+        graphics.setFont(font);
+
+        final var posX = x - 30;
+        final var posY = y + TOP + 52;   // the registers end 20 above Address
+        GraphicsUtil.drawText(graphics, TITLE_FONT, "Timer", posX + 33, posY - 42, 0, 0, Color.black, Color.WHITE);
         if (painter.getShowState()) {
-            final var bds = painter.getBounds();
             TimerRegisters regs = TimerRegisters.get(painter);
-            final var graphics = (Graphics2D) painter.getGraphics();
-            final var posX = bds.getX() + 10;
-            final var posY = bds.getY() + 50; // Adjusted to fit the text properly within the bounds
             final var hex = painter.getAttributeValue(ATTR_HEX_REGS);
-            Font font = new Font("SansSerif", Font.BOLD, 15);
-
-            GraphicsUtil.drawText(graphics, font, "Timer", posX+33, posY-42, 0, 0, Color.black, Color.WHITE);
             graphics.setColor(Color.BLUE);
             graphics.fillRect(posX-3, posY-28, 75, 17);
             GraphicsUtil.drawText(graphics, "mtime", posX+35, posY-22, 0, 0, Color.YELLOW, Color.BLUE);
@@ -153,13 +156,10 @@ public class Timer extends InstanceFactory {
         long address = state.getPortValue(ADDRESS).toLongValue();
         long mtimecmpAddr = state.getAttributeValue(RISCV_MTIMECMP_ADDR);
         long mtimeAddr = state.getAttributeValue(RISCV_MTIME_ADDR);
-        // A separate data bus has no floating output: where the bidirectional one lets go, it drives 0
-        final var separate = DataBus.isSeparate(state.getAttributeSet());
-        final var free = separate ? ZERO_32 : HI_Z_32;
 
         // Handle register write on clock edge
         if (state.getPortValue(WRITE_ENABLE) == Value.TRUE && clockTriggered) {
-            long dataValue = state.getPortValue(separate ? DATA_IN : DATA).toLongValue() & 0xFFFFFFFFL;
+            long dataValue = state.getPortValue(DATA_IN).toLongValue() & 0xFFFFFFFFL;
             if (address == mtimecmpAddr) {
                 regs.setCounterComparator(dataValue);
             } else if (address == mtimeAddr) {
@@ -167,17 +167,17 @@ public class Timer extends InstanceFactory {
             }
         }
 
-        // Handle register read (directly drives data bus when enabled)
+        // Handle register read: Data Out is 0 unless a register is read
         if (state.getPortValue(READ_ENABLE) == Value.TRUE) {
             if (address == mtimecmpAddr) {
-                state.setPort(DATA, Value.createKnown(32, regs.getCounterComparator()), 9);
+                state.setPort(DATA_OUT, Value.createKnown(32, regs.getCounterComparator()), 9);
             } else if (address == mtimeAddr) {
-                state.setPort(DATA, Value.createKnown(32, regs.getCounter()), 9);
+                state.setPort(DATA_OUT, Value.createKnown(32, regs.getCounter()), 9);
             } else {
-                state.setPort(DATA, free, 9);
+                state.setPort(DATA_OUT, ZERO_32, 9);
             }
         } else {
-            state.setPort(DATA, free, 9);
+            state.setPort(DATA_OUT, ZERO_32, 9);
         }
 
         // Increment counter on clock edge
