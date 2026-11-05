@@ -31,4 +31,9 @@
 
     <!-- Auto-generated file. https://github.com/logisim-evolution/logisim-evolution/issues/563-->
     <suppress id="VhdlSyntax" files="src/main/java/com/cburch/logisim/vhdl/syntax/VhdlSyntax.java"/>
+
+    <!-- UCD's RISC-V package (and its tests) keeps its own layout: 4-space indentation, braces and spacing
+         of its own, wildcard imports -->
+    <suppress checks="Indentation|WhitespaceAround|WhitespaceAfter|LeftCurly|RightCurly|AvoidStarImport|ParenPad|NoWhitespaceBefore|ArrayTypeStyle"
+              files="[\\/]com[\\/]cburch[\\/]logisim[\\/]riscv[\\/]"/>
 </suppressions>
