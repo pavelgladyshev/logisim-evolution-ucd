@@ -4,6 +4,7 @@ package com.cburch.logisim.riscv.blockstorage;
 import com.cburch.logisim.data.*;
 import com.cburch.logisim.fpga.data.ComponentMapInformationContainer;
 import com.cburch.logisim.instance.*;
+import com.cburch.logisim.proj.Project;
 import com.cburch.logisim.riscv.DataBus;
 import com.cburch.logisim.util.GraphicsUtil;
 import com.cburch.logisim.util.StringUtil;
@@ -191,7 +192,7 @@ public class BlockStorage extends InstanceFactory {
 
 
         String fileName = painter.getAttributeValue(FILE_NAME_ATTR);
-        FileStatus status = getFileStatus(fileName);
+        FileStatus status = getFileStatus(fileName, circuitFile(painter));
 
         Color statusColor = Color.BLACK;
         String statusText1 = fileName;
@@ -258,12 +259,41 @@ public class BlockStorage extends InstanceFactory {
         }
     }
 
-    private FileStatus getFileStatus(String fileName) {
+    /**
+     * The disk image file a File name attribute names. A relative name is taken in the folder of
+     * the circuit's file, so that a circuit and its disk image kept together work wherever the
+     * circuit is opened from (another folder, a Windows program opening a WSL folder). An absolute
+     * name, an empty one, or a circuit not saved yet: the name as it is, which Java takes in the
+     * folder Logisim was started in.
+     */
+    static File resolveFile(String fileName, File circuitFile) {
+        File file = new File(fileName);
+        if (fileName.isEmpty() || file.isAbsolute() || circuitFile == null) {
+            return file;
+        }
+        File folder = circuitFile.getAbsoluteFile().getParentFile();
+        return folder == null ? file : new File(folder, fileName);
+    }
+
+    /** The file of the project being simulated, or null when it has none (not saved yet). */
+    private static File circuitFile(Project proj) {
+        final var file = proj == null ? null : proj.getLogisimFile();
+        final var loader = file == null ? null : file.getLoader();
+        return loader == null ? null : loader.getMainFile();
+    }
+
+    /** The same while painting, which may be without a circuit state (an image of the circuit). */
+    private static File circuitFile(InstancePainter painter) {
+        final var state = painter.getCircuitState();
+        return state == null ? null : circuitFile(state.getProject());
+    }
+
+    private FileStatus getFileStatus(String fileName, File circuitFile) {
         if (fileName == null || fileName.isEmpty()) {
             return new FileStatus("No file selected");
         }
 
-        File file = new File(fileName);
+        File file = resolveFile(fileName, circuitFile);
 
         if (file.exists()) {
             if (!file.canRead()) {
@@ -339,13 +369,20 @@ public class BlockStorage extends InstanceFactory {
     @Override
     public void propagate(InstanceState state) {
         String fileName = state.getAttributeValue(FILE_NAME_ATTR);
+        File circuitFile = circuitFile(state.getProject());
         BlockStorageData data = (BlockStorageData) state.getData();
 
-        if (data == null) {
-            data = new BlockStorageData(fileName);
-            state.setData(data);
-        } else if (!data.getFilePath().equals(fileName)) {
-            data.setFilePath(fileName);
+        // The file (resolveFile), looked up again only when its name or the circuit's file changes:
+        // this runs at every clock edge
+        if (data == null || !data.isFor(fileName, circuitFile)) {
+            String path = resolveFile(fileName, circuitFile).getPath();
+            if (data == null) {
+                data = new BlockStorageData(path);
+                state.setData(data);
+            } else if (!data.getFilePath().equals(path)) {
+                data.setFilePath(path);
+            }
+            data.setSource(fileName, circuitFile);
         }
         Value reset = state.getPortValue(RESET);
         if (reset == Value.TRUE) {

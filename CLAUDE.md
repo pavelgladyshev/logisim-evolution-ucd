@@ -133,7 +133,10 @@ This fork includes a custom RISC-V RV32IM processor implementation with SV32 vir
 
 - **`com.cburch.logisim.riscv.videoram`** - Monochrome display memory
 
-- **`com.cburch.logisim.riscv.blockstorage`** - Persistent block storage device
+- **`com.cburch.logisim.riscv.blockstorage`** - Persistent block storage device. Its File name attribute
+  (default `block_storage.bin`), when relative, is taken in the folder of the circuit's file
+  (`BlockStorage.resolveFile`), so LogOS's `computer.circ` finds the disk image next to it however
+  Logisim is started; tests in `src/test/java/com/cburch/logisim/riscv/blockstorage/`
 
 ### SoC Framework
 

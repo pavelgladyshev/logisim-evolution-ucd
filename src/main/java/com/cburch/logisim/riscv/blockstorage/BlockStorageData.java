@@ -4,6 +4,7 @@ import com.cburch.logisim.data.*;
 import com.cburch.logisim.instance.InstanceData;
 import java.io.*;
 import java.util.Arrays;
+import java.util.Objects;
 
 public class BlockStorageData implements InstanceData, Cloneable, AutoCloseable {
     public static final int BLOCK_SIZE = 512;
@@ -16,6 +17,9 @@ public class BlockStorageData implements InstanceData, Cloneable, AutoCloseable 
     private static final BitWidth BIT_WIDTH_32 = BitWidth.create(32);
 
     private String filePath;
+    // What filePath was made from (BlockStorage.resolveFile): the File name and the circuit's file
+    private String sourceName;
+    private File sourceCircuit;
     private String errorMessage;
     public static final int REG_COMMAND = 0x0;
     public static final int REG_MEM_ADDR = 0x4;
@@ -285,6 +289,16 @@ public class BlockStorageData implements InstanceData, Cloneable, AutoCloseable 
 
     public String getFilePath() {
         return filePath;
+    }
+
+    /** Whether filePath was made from this File name and this circuit file. */
+    boolean isFor(String fileName, File circuitFile) {
+        return Objects.equals(fileName, sourceName) && circuitFile == sourceCircuit;
+    }
+
+    void setSource(String fileName, File circuitFile) {
+        sourceName = fileName;
+        sourceCircuit = circuitFile;
     }
 
     public void setFilePath(String filePath) {
