@@ -556,6 +556,12 @@ public class AppPreferences {
               HdlGeneratorFactory.VHDL));
   public static final PrefMonitor<String> SelectedBoard =
       create(new PrefMonitorString("SelectedBoard", null));
+  // FPGA > Serial Terminal: the port and speed connected to last (115200: the TTY's and
+  // Keyboard's on an FPGA)
+  public static final PrefMonitor<String> FPGA_SERIAL_PORT =
+      create(new PrefMonitorString("FPGASerialPort", ""));
+  public static final PrefMonitor<Integer> FPGA_SERIAL_BAUD =
+      create(new PrefMonitorInt("FPGASerialBaud", 115200));
 
   public static final FpgaBoards Boards = new FpgaBoards();
 

@@ -13,6 +13,7 @@ import static com.cburch.logisim.fpga.Strings.S;
 
 import com.cburch.logisim.fpga.gui.BoardEditor;
 import com.cburch.logisim.fpga.gui.FpgaCommander;
+import com.cburch.logisim.fpga.gui.SerialTerminal;
 import com.cburch.logisim.gui.main.Frame;
 import com.cburch.logisim.gui.menu.LogisimMenuBar;
 import com.cburch.logisim.proj.Project;
@@ -25,19 +26,24 @@ import javax.swing.JMenuItem;
 @SuppressWarnings("serial")
 public class MenuFpga extends JMenu implements ActionListener {
   private final Project ThisCircuit;
+  private final JFrame parentFrame;
   private final JMenuItem BoardEditor = new JMenuItem();
   private final JMenuItem FPGACommander = new JMenuItem();
+  private final JMenuItem serialTerminal = new JMenuItem();
   private BoardEditor Editor = null;
   private FpgaCommander Commander = null;
 
   public MenuFpga(JFrame parent, LogisimMenuBar menubar, Project proj) {
     ThisCircuit = proj;
+    parentFrame = parent;
 
     BoardEditor.addActionListener(this);
     FPGACommander.addActionListener(this);
+    serialTerminal.addActionListener(this);
 
     add(BoardEditor);
     add(FPGACommander);
+    add(serialTerminal);
     setEnabled(parent instanceof Frame);
   }
 
@@ -55,6 +61,8 @@ public class MenuFpga extends JMenu implements ActionListener {
     } else if (src == FPGACommander) {
       if (Commander == null) Commander = new FpgaCommander(ThisCircuit);
       Commander.showGui();
+    } else if (src == serialTerminal) {
+      SerialTerminal.showWindow(parentFrame);
     }
   }
 
@@ -62,6 +70,7 @@ public class MenuFpga extends JMenu implements ActionListener {
     this.setText(S.get("FPGAMenu"));
     BoardEditor.setText(S.get("FPGABoardEditor"));
     FPGACommander.setText(S.get("FPGACommander"));
+    serialTerminal.setText(S.get("FPGASerialTerminal"));
   }
 
   public FpgaCommander getFpgaCommander() {

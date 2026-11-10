@@ -154,6 +154,10 @@ This fork includes a custom RISC-V RV32IM processor implementation with SV32 vir
 ### FPGA & HDL
 
 - **`com.cburch.logisim.fpga`** - FPGA synthesis, HDL generation (VHDL/Verilog), board support
+  - `fpga.gui.SerialTerminal` - FPGA > Serial Terminal: a terminal on the board's USB serial port (jSerialComm,
+    native code for Windows/macOS/Linux in its jar) for a circuit whose TTY and Keyboard are mapped to the UART
+    (115200 baud); `TerminalScreen` shows the received bytes (CR, LF, BS, TAB, FF, ESC [2J/J/K/C/D/G/H); tests in
+    `src/test/java/com/cburch/logisim/fpga/gui/`
 - **`com.cburch.logisim.vhdl`** - VHDL entity integration
 
 ### Generated Sources

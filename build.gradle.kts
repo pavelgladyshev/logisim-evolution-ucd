@@ -56,6 +56,8 @@ dependencies {
   implementation("com.vladsch.flexmark:flexmark-all:0.64.8")
   implementation("org.apache.commons:commons-text:1.15.0")
   implementation("org.jline:jline:3.30.6")
+  // Serial ports for FPGA > Serial Terminal (native code for Windows, macOS and Linux in the jar)
+  implementation("com.fazecast:jSerialComm:2.11.4")
 
   // NOTE: Be aware of reported issues with Eclipse and Batik
   // See: https://github.com/logisim-evolution/logisim-evolution/issues/709
