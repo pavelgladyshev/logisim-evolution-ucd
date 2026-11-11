@@ -229,12 +229,17 @@ public class GowinDownload implements VendorDownload {
     // start value, which Logisim gives for simulation only: with Reset wired too, synth_gowin builds them from
     // two flip-flops and a latch, which start at 0; with Preset alone they start at 1. The design is flattened
     // first, so that only the flip-flops whose Preset is wired in the circuit are touched.
+    // abc9.D gives ABC9 a delay target of 100 ns, far above any clock Logisim drives, so that it maps for area
+    // instead of for the shortest delay. For the shortest delay it duplicates logic around slow paths (for example
+    // through a multiplier's DSP block), and a small change in a circuit could then cost hundreds of LUTs. For a
+    // 16-bit CPU this gave about 13% fewer LUTs and no lower maximum clock frequency.
     script
         .add("hierarchy -top {{1}}", top)
         .add("proc")
         .add("flatten")
         .add("opt -nodffe -nosdff")
         .add("setattr -unset init t:$dffsr* t:$adff* r:ARST_VALUE=1'1 %i %u %co:+[Q] w:* %i")
+        .add("scratchpad -set abc9.D 100000")
         .add("synth_gowin -top {{1}} -json {{2}}", top, JSON_FILE)
         .add("stat");
     if (!FileWriter.writeContents(yosysScript, script.get())) return false;
