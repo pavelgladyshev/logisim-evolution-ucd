@@ -7,6 +7,9 @@ public class Packet {
     private final String packetData;
     private int checksum;
     private int processedBytes;
+    // true when a whole $...#xx packet was read, checksum digits included. A checksum of 00 is a
+    // checksum like any other (gdb sends $m104428,4#00), so it cannot mark a packet as incomplete.
+    private boolean complete;
 
     // constructor for pre-existing packets to be decoded
     public Packet(byte[] data, int len, int startIndex) {
@@ -20,7 +23,7 @@ public class Packet {
     }
 
     public Boolean isValid(){
-        return !(isACK()) && !(isNACK()) && checksum != 0 && checksum == computeChecksum();
+        return complete && checksum == computeChecksum();
     }
 
     public Boolean isNACK() {
@@ -54,11 +57,12 @@ public class Packet {
     private String decodePacket(byte[] data, int len, int startIndex) {
         StringBuilder packetDataBuilder = new StringBuilder();
         int i = startIndex;
+        boolean framed = false;
         
-        // Find the start of the packet
-        while (i < len && (char) data[i] != '$') i++;
-        
-        if (i < len) {
+        // A packet starts with '$'. Anything else (an ACK, a NACK, Ctrl-C) is one byte on its own,
+        // so a Ctrl-C followed by a packet in the same read is not skipped over.
+        if (i < len && (char) data[i] == '$') {
+            framed = true;
             i++; // Move past the '$'
             while (i < len && (char) data[i] != '#') {
                 packetDataBuilder.append((char) data[i]);
@@ -70,9 +74,11 @@ public class Packet {
                 try {
                     String checksum = "" + (char) data[i + 1] + (char) data[i + 2];
                     this.checksum = Integer.parseUnsignedInt(checksum, 16);
+                    this.complete = true;
                     i += 3; // Move past '#' and two checksum characters
                 } catch (Exception ex) {
                     this.checksum = 0;
+                    i += 3; // a malformed checksum: skip it, and the packet is not complete
                 }
             } else {
                 this.checksum = 0;
@@ -81,8 +87,9 @@ public class Packet {
         
         this.processedBytes = i - startIndex;
         
-        // If no valid packet was found, return the first character
-        if (packetDataBuilder.length() == 0 && len > startIndex) {
+        // If no packet was found, return the first character (an ACK, a NACK or Ctrl-C).
+        // An empty packet, $#00, is a packet and is returned as such.
+        if (!framed && len > startIndex) {
             this.processedBytes = 1;
             return String.valueOf((char) data[startIndex]);
         }
