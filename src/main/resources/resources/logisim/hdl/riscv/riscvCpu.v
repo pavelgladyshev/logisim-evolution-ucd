@@ -16,11 +16,20 @@
 // translation, and least recently used replacement (here as ranks, 0 the most recent, which order the entries as
 // the Java CPU's time stamps do); a page table walk of two bus cycles a PTE; every CSR address from 0x000 to
 // 0xBFF exists (those without a meaning keep what is written, in block RAM) and from 0xC00 reads 0; no
-// instruction cache, no GDB.
+// instruction cache.
+//
+// With DEBUG, the RISC-V External Debug Support (0.13.2) of riscvDebug.v, through the FPGA's JTAG port: the CPU
+// halts between instructions (at a halt request, after a single step, at one of two execute triggers, or at ebreak
+// when dcsr says so), and while halted does the Debug Module's requests: a GPR or CSR read or written, or a bus
+// cycle (of 8, 16 or 32 bits) on its bus. The debugger's CSRs dcsr (0x7B0), dpc (0x7B1), tselect, tdata1, tdata2
+// and tinfo (0x7A0-0x7A4) are the debugger's only: the CPU's own instructions see what they always did there, the
+// CSRs that keep what is written. Without DEBUG none of this is there, and with it, while no debugger acts, the
+// CPU does at each edge what it does without.
 module riscvCpu #(
    parameter [31:0] RESET_ADDR  = 32'h0,
    parameter integer TLB_ENTRIES = 16,
-   parameter integer START       = 8
+   parameter integer START       = 8,
+   parameter integer DEBUG       = 0
 ) (
    input  wire        clock,
    input  wire        tick,
@@ -42,7 +51,7 @@ module riscvCpu #(
    localparam [2:0] P_IDLE = 3'd0, P_L1_ADDR = 3'd1, P_L1_LATCH = 3'd2, P_L0_ADDR = 3'd3, P_L0_LATCH = 3'd4;
    localparam [3:0] U_WAIT = 4'd0, U_EDGE = 4'd1, U_PTW = 4'd2, U_IRQ = 4'd3, U_EXEC = 4'd4, U_LS = 4'd5,
                     U_FETCH = 4'd6, U_MUL = 4'd7, U_MULW = 4'd8, U_DIV = 4'd9, U_DIVW = 4'd10, U_CSR = 4'd11,
-                    U_DONE = 4'd12;
+                    U_DONE = 4'd12, U_HALT = 4'd13;
    localparam integer RW = (TLB_ENTRIES <= 2) ? 1 : (TLB_ENTRIES <= 4) ? 2 : (TLB_ENTRIES <= 8) ? 3 :
                            (TLB_ENTRIES <= 16) ? 4 : (TLB_ENTRIES <= 32) ? 5 : 6;
 
@@ -81,6 +90,26 @@ module riscvCpu #(
    reg  [33:0] lPaBase = 0;
    reg  [6:0]  lPerms = 0;
 
+   // the debug state (DEBUG)
+   reg         halted = 1'b0;             // in Debug Mode
+   reg         stepFirst = 1'b0;          // resumed, and the first instruction not yet begun
+   reg         memPending = 1'b0;         // the debugger's bus cycle is out, its answer at the next edge
+   reg         dbgDone = 1'b0, resumed = 1'b0, wasReset = 1'b0;    // pulses to the Debug Module
+   reg  [31:0] dbgRdata = 32'd0;
+   reg  [31:0] dpc = 32'd0;
+   reg         dcsrEbm = 1'b0, dcsrEbs = 1'b0, dcsrEbu = 1'b0, dcsrStep = 1'b0;
+   reg  [2:0]  dcsrCause = 3'd0;
+   reg  [1:0]  dcsrPrv = PRIV_M;
+   wire [31:0] dcsr = {4'd4, 12'd0, dcsrEbm, 1'b0, dcsrEbs, dcsrEbu, 3'b000, dcsrCause, 3'b000, dcsrStep, dcsrPrv};
+   reg         tSel = 1'b0;
+   reg  [1:0]  tExec = 2'b00, tM = 2'b00, tS = 2'b00, tU = 2'b00;
+   reg  [31:0] tAddr0 = 32'd0, tAddr1 = 32'd0;
+   // the Debug Module's
+   wire        dbgHaltReq, dbgResumeReq, dbgNdmreset, dbgReq, dbgMem, dbgWrite;
+   wire [15:0] dbgRegno;
+   wire [31:0] dbgAddr, dbgWdata;
+   wire [1:0]  dbgSize;
+
    integer i;
    initial begin
       for (i = 0; i < 32; i = i + 1) x[i] = 32'd0;
@@ -106,7 +135,7 @@ module riscvCpu #(
    wire [4:0]  rd = ir[11:7], rs1 = ir[19:15], rs2 = ir[24:20];
    wire [2:0]  f3 = ir[14:12];
    wire [6:0]  f7 = ir[31:25];
-   wire [11:0] csrAddr = ir[31:20];
+   wire [11:0] csrAddr = (DEBUG && halted) ? dbgRegno[11:0] : ir[31:20];   // the debugger's, when halted
    wire [31:0] immI = {{20{ir[31]}}, ir[31:20]};
    wire [31:0] immS = {{20{ir[31]}}, ir[31:25], ir[11:7]};
    wire [31:0] immB = {{19{ir[31]}}, ir[31], ir[7], ir[30:25], ir[11:8], 1'b0};
@@ -389,11 +418,87 @@ module riscvCpu #(
    wire [31:0] csrNew = (f3[1:0] == 2'd1) ? csrOperand : (f3[1:0] == 2'd2) ? (csrValue | csrOperand)
                                                      : (csrValue & ~csrOperand);
    reg         csrMemWe;
+   // the debugger's own CSRs, and what it reads at a CSR address
+   wire        dbgCsrOwn = csrAddr == 12'h7b0 || csrAddr == 12'h7b1 || csrAddr == 12'h7a0 || csrAddr == 12'h7a1
+                           || csrAddr == 12'h7a2 || csrAddr == 12'h7a4 || csrAddr == 12'h301;
+   wire [31:0] tdata1 = {4'd2, 1'b1, 6'd0, 1'b0, 1'b0, 1'b0, 2'd0, 4'd1, 1'b0, 4'd0, tM[tSel], 1'b0, tS[tSel],
+                         tU[tSel], tExec[tSel], 2'b00};          // mcontrol: execute, equal, to Debug Mode
+   reg  [31:0] dbgCsrValue;
+   always @(*)
+      case (csrAddr)
+         12'h7b0: dbgCsrValue = dcsr;
+         12'h7b1: dbgCsrValue = dpc;
+         12'h7a0: dbgCsrValue = {31'd0, tSel};
+         12'h7a1: dbgCsrValue = tdata1;
+         12'h7a2: dbgCsrValue = tSel ? tAddr1 : tAddr0;
+         12'h7a4: dbgCsrValue = 32'd4;                            // tinfo: mcontrol triggers
+         12'h301: dbgCsrValue = 32'h40141100;                     // misa: RV32IM, S- and U-mode
+         default: dbgCsrValue = csrValue;
+      endcase
+   wire        dbgCsrWrite = DEBUG && u == U_HALT && !memPending && dbgReq && !dbgMem && !dbgRegno[12] && dbgWrite;
    always @(posedge clock) begin
       csrMemOut <= csrMem[csrAddr];
-      if (csrMemWe) csrMem[csrAddr] <= csrNew;
+      if (csrMemWe) csrMem[csrAddr] <= (DEBUG && halted) ? dbgWdata : csrNew;
    end
-   always @(*) csrMemWe = u == U_CSR && !csrDenied && f3 != 3'd4 && f3 != 3'd0 && csrWillWrite && !csrDedicated;
+   always @(*) csrMemWe = (u == U_CSR && !csrDenied && f3 != 3'd4 && f3 != 3'd0 && csrWillWrite && !csrDedicated)
+                          || (dbgCsrWrite && !csrDedicated && !dbgCsrOwn);
+
+   // a CSR with a meaning written, by an instruction or the debugger
+   task csrSet(input [11:0] a, input [31:0] v);
+      case (a)
+         12'h300: mstatus <= v;
+         12'h302: medeleg <= v;
+         12'h303: mideleg <= v;
+         12'h304: mie <= v;
+         12'h305: mtvec <= v;
+         12'h341: mepc <= v & ~32'd3;
+         12'h342: mcause <= v;
+         12'h343: mtval <= v;
+         12'h344: mip <= v;
+         12'h100: mstatus <= (mstatus & ~SSTATUS_MASK) | (v & SSTATUS_MASK);
+         12'h104: mie <= (mie & ~SIE_MASK) | (v & SIE_MASK);
+         12'h105: stvec <= v;
+         12'h141: sepc <= v & ~32'd3;
+         12'h142: scause <= v;
+         12'h143: stval <= v;
+         12'h144: mip <= (mip & ~SIP_WRITE_MASK) | (v & SIP_WRITE_MASK);
+         12'h180: satp <= v;
+         default: ;
+      endcase
+   endtask
+
+   // the debugger's CSR written
+   task dbgCsrSet(input [11:0] a, input [31:0] v);
+      case (a)
+         12'h7b0: begin
+               dcsrEbm <= v[15]; dcsrEbs <= v[13]; dcsrEbu <= v[12]; dcsrStep <= v[2];
+               if (v[1:0] != 2'd2) dcsrPrv <= v[1:0];
+            end
+         12'h7b1: dpc <= v & ~32'd3;
+         12'h7a0: if (v < 32'd2) tSel <= v[0];
+         12'h7a1: begin tExec[tSel] <= v[2]; tU[tSel] <= v[3]; tS[tSel] <= v[4]; tM[tSel] <= v[6]; end
+         12'h7a2: if (tSel) tAddr1 <= v; else tAddr0 <= v;
+         12'h7a4, 12'h301: ;
+         default: csrSet(a, v);
+      endcase
+   endtask
+
+   // ------------------------------------------------------------------------------------------- Debug Mode
+   wire        privM = priv == PRIV_M, privS = priv == PRIV_S;
+   wire        trigHit = DEBUG && ((tExec[0] && pc == tAddr0 && (privM ? tM[0] : privS ? tS[0] : tU[0]))
+                                   || (tExec[1] && pc == tAddr1 && (privM ? tM[1] : privS ? tS[1] : tU[1])));
+   // at an instruction's start (its fetch done): halt for a trigger, a halt request or a single step
+   wire        atStart = fetching && !addressing;
+   wire        stopNow = DEBUG && atStart && (dbgHaltReq || (!stepFirst && (trigHit || dcsrStep)));
+   wire [2:0]  stopCause = (!stepFirst && trigHit) ? 3'd2 : dbgHaltReq ? 3'd3 : 3'd4;
+   wire [31:0] dbgLoad = dIn >> {dbgAddr[1:0], 3'b000};
+   task enterDebug(input [2:0] cause);
+      begin
+         halted <= 1'b1; dpc <= pc; dcsrCause <= cause; dcsrPrv <= priv;
+         bRead <= 1'b0; bWrite <= 1'b0; bWidth <= 3'd0; fetching <= 1'b0; addressing <= 1'b0;
+         u <= U_DONE;
+      end
+   endtask
 
    // ------------------------------------------------------------------------------------------- the step
    task fetchDone;   // fetchNextInstruction's start, before its translation
@@ -404,16 +509,22 @@ module riscvCpu #(
 
    always @(posedge clock) begin
       if (phase != 8'hff) phase <= phase + 8'd1;
+      dbgDone <= 1'b0; resumed <= 1'b0; wasReset <= 1'b0;
       case (u)
          U_WAIT : if (phase == START - 1) begin
                dIn <= dataIn; tIrq <= timerIrq; eIrq <= extIrq; bReq <= busReq;
                u <= U_EDGE;
-               if (reset) begin
-                  // the Reset pin, as rv32imData.reset
+               if (reset || (DEBUG && dbgNdmreset)) begin
+                  // the Reset pin, as rv32imData.reset (and the Debug Module's ndmreset)
                   pc <= RESET_ADDR; priv <= PRIV_M; mstatus[3] <= 1'b0; mstatus[17] <= 1'b0; mcause <= 32'd0;
                   ptwState <= P_IDLE; lValid <= 1'b0;
                   for (i = 0; i < TLB_ENTRIES; i = i + 1) tValid[i] <= 1'b0;
                   u <= U_FETCH;
+                  if (DEBUG) begin
+                     halted <= 1'b0; stepFirst <= 1'b0; memPending <= 1'b0; wasReset <= 1'b1;
+                     dcsrEbm <= 1'b0; dcsrEbs <= 1'b0; dcsrEbu <= 1'b0; dcsrStep <= 1'b0; dcsrCause <= 3'd0;
+                     dcsrPrv <= PRIV_M;
+                  end
                end
             end
          U_EDGE : begin
@@ -421,6 +532,7 @@ module riscvCpu #(
                if (granted && !bReq) begin granted <= 1'b0; u <= U_DONE; end
                else if (!granted && bReq) begin granted <= 1'b1; u <= U_DONE; end
                else if (granted) u <= U_DONE;
+               else if (DEBUG && halted) u <= U_HALT;
                else u <= (ptwState != P_IDLE) ? U_PTW : U_IRQ;
             end
          U_PTW : case (ptwState)
@@ -454,13 +566,15 @@ module riscvCpu #(
             endcase
          U_IRQ : begin
                mip <= mipNow;
-               if (!addressing && irqTake) begin
+               if (stopNow) enterDebug(stopCause);
+               else if (!addressing && irqTake && !(DEBUG && dcsrStep)) begin   // no interrupts in a step
                   trap(1'b1, irqCode, 32'd0);
                   u <= U_FETCH;
                end else begin
                   if (fetching) ir <= dIn;
                   u <= U_EXEC;
                end
+               if (DEBUG && atStart) stepFirst <= 1'b0;
             end
          U_EXEC : begin
                u <= U_FETCH;
@@ -535,7 +649,8 @@ module riscvCpu #(
                         end else if (ir == 32'h00000073) begin
                            trap(1'b0, priv == PRIV_U ? 4'd8 : priv == PRIV_S ? 4'd9 : 4'd11, 32'd0);
                         end else if (ir == 32'h00100073) begin
-                           trap(1'b0, 4'd3, 32'd0);
+                           if (DEBUG && (privM ? dcsrEbm : privS ? dcsrEbs : dcsrEbu)) enterDebug(3'd1);
+                           else trap(1'b0, 4'd3, 32'd0);
                         end else if (ir == 32'h10200073 && priv != PRIV_U) begin
                            // sret
                            pc <= sepc;
@@ -610,27 +725,7 @@ module riscvCpu #(
                if (f3 == 3'd4) trap(1'b0, 4'd2, 32'd0);
                else begin
                   if (rd != 0) x[rd] <= csrValue;
-                  if (csrWillWrite)
-                     case (csrAddr)
-                        12'h300: mstatus <= csrNew;
-                        12'h302: medeleg <= csrNew;
-                        12'h303: mideleg <= csrNew;
-                        12'h304: mie <= csrNew;
-                        12'h305: mtvec <= csrNew;
-                        12'h341: mepc <= csrNew & ~32'd3;
-                        12'h342: mcause <= csrNew;
-                        12'h343: mtval <= csrNew;
-                        12'h344: mip <= csrNew;
-                        12'h100: mstatus <= (mstatus & ~SSTATUS_MASK) | (csrNew & SSTATUS_MASK);
-                        12'h104: mie <= (mie & ~SIE_MASK) | (csrNew & SIE_MASK);
-                        12'h105: stvec <= csrNew;
-                        12'h141: sepc <= csrNew & ~32'd3;
-                        12'h142: scause <= csrNew;
-                        12'h143: stval <= csrNew;
-                        12'h144: mip <= (mip & ~SIP_WRITE_MASK) | (csrNew & SIP_WRITE_MASK);
-                        12'h180: satp <= csrNew;
-                        default: ;
-                     endcase
+                  if (csrWillWrite) csrSet(csrAddr, csrNew);
                   pc <= pc + 32'd4;
                end
                u <= U_FETCH;
@@ -656,6 +751,35 @@ module riscvCpu #(
                   end
                end
             end
+         U_HALT : begin
+               // Debug Mode: the Debug Module's requests, one an edge, or the resumption
+               u <= U_DONE;
+               if (memPending) begin
+                  // the answer to the debugger's bus cycle
+                  memPending <= 1'b0; bRead <= 1'b0; bWrite <= 1'b0;
+                  dbgRdata <= (dbgSize == 2'd0) ? {24'd0, dbgLoad[7:0]} : (dbgSize == 2'd1) ? {16'd0, dbgLoad[15:0]} : dIn;
+                  dbgDone <= 1'b1;
+               end else if (dbgReq) begin
+                  if (dbgMem) begin
+                     bAddr <= dbgAddr; bData <= dbgWdata; bWidth <= (dbgSize == 2'd0) ? 3'd1 : (dbgSize == 2'd1) ? 3'd2 : 3'd4;
+                     bRead <= !dbgWrite; bWrite <= dbgWrite;
+                     memPending <= 1'b1;
+                  end else if (dbgRegno[12]) begin
+                     // a GPR (0x1000-0x101f)
+                     if (dbgWrite) begin if (dbgRegno[4:0] != 5'd0) x[dbgRegno[4:0]] <= dbgWdata; end
+                     else dbgRdata <= x[dbgRegno[4:0]];
+                     dbgDone <= 1'b1;
+                  end else begin
+                     // a CSR: csrAddr is dbgRegno's, and csrMemOut its, since the edge
+                     if (dbgWrite) dbgCsrSet(dbgRegno[11:0], dbgWdata);
+                     else dbgRdata <= dbgCsrValue;
+                     dbgDone <= 1'b1;
+                  end
+               end else if (dbgResumeReq) begin
+                  halted <= 1'b0; pc <= dpc; priv <= dcsrPrv; stepFirst <= 1'b1; resumed <= 1'b1;
+                  u <= U_FETCH;
+               end
+            end
          default : ;   // U_DONE: the step is done, for the tick
       endcase
       if (tick) begin
@@ -678,4 +802,25 @@ module riscvCpu #(
          end
       end
    end
+
+   // ------------------------------------------------------------------------------------- the Debug Module
+   generate
+      if (DEBUG) begin : debug
+         wire        dmiReq;
+         wire [6:0]  dmiAddr;
+         wire [31:0] dmiWdata, dmiRdata;
+         wire [1:0]  dmiOp;
+         riscvDebugTransport dtm (.clock(clock), .dmiReq(dmiReq), .dmiAddr(dmiAddr), .dmiWdata(dmiWdata),
+                                  .dmiOp(dmiOp), .dmiRdata(dmiRdata));
+         riscvDebugModule dm (.clock(clock), .dmiReq(dmiReq), .dmiAddr(dmiAddr), .dmiWdata(dmiWdata), .dmiOp(dmiOp),
+                              .dmiRdata(dmiRdata), .haltReq(dbgHaltReq), .resumeReq(dbgResumeReq),
+                              .ndmreset(dbgNdmreset), .cpuReq(dbgReq), .cpuMem(dbgMem), .cpuWrite(dbgWrite),
+                              .cpuRegno(dbgRegno), .cpuAddr(dbgAddr), .cpuSize(dbgSize), .cpuWdata(dbgWdata),
+                              .cpuDone(dbgDone), .cpuRdata(dbgRdata), .halted(halted), .resumed(resumed),
+                              .wasReset(wasReset));
+      end else begin : noDebug
+         assign dbgHaltReq = 1'b0, dbgResumeReq = 1'b0, dbgNdmreset = 1'b0, dbgReq = 1'b0, dbgMem = 1'b0,
+                dbgWrite = 1'b0, dbgRegno = 16'd0, dbgAddr = 32'd0, dbgSize = 2'd2, dbgWdata = 32'd0;
+      end
+   endgenerate
 endmodule

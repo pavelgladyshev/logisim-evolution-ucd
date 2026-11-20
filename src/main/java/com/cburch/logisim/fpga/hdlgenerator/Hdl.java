@@ -43,6 +43,21 @@ public class Hdl {
     return fpgaClockFrequency;
   }
 
+  /**
+   * The FPGA family of the board that the HDL is for (as its board file has it, such as GW2A-18C), set by the
+   * download flow before the design rule check; null for HDL written without a board. Components whose HDL uses
+   * a family's primitives (the RV32IM CPU's debug support) say from it whether they can go onto the board.
+   */
+  private static String fpgaFamily = null;
+
+  public static void setFpgaFamily(String family) {
+    fpgaFamily = family;
+  }
+
+  public static String getFpgaFamily() {
+    return fpgaFamily;
+  }
+
 
   public static final String NET_NAME = "s_logisimNet";
   public static final String BUS_NAME = "s_logisimBus";

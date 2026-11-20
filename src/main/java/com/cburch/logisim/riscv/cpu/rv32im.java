@@ -74,8 +74,13 @@ public class rv32im extends InstanceFactory {
   public static final Attribute<Integer> ATTR_TCP_PORT =
           Attributes.forIntegerRange("tcpPort", S.getter("rv32imTcpPort"), 0, 65535);
 
+  /**
+   * Debug Enable: in Logisim, the GDB server (on TCP Port), with the CPU stopped until gdb says go; on an FPGA, the
+   * RISC-V debug support of riscvDebug.v on the FPGA's JTAG port, for OpenOCD and gdb (a Gowin GW2A board). Saved
+   * as gdbServerRunning, the attribute's name before.
+   */
   public static final Attribute<Boolean> ATTR_GDB_SERVER_RUNNING =
-          Attributes.forBoolean("gdbServerRunning", S.getter("rv32imStartGDBServer"));
+          Attributes.forBoolean("gdbServerRunning", S.getter("rv32imDebugEnable"));
 
   public static final Attribute<Boolean> ATTR_INSTRUCTION_CACHE =
           Attributes.forBoolean("instructionCache", S.getter("rv32imInstructionCache"));

@@ -52,16 +52,32 @@ class RiscvHdlSupportTest {
   }
 
   @Test
-  void theInstructionCacheAndTheGdbServerAreToBeOff() {
+  void theInstructionCacheIsToBeOff() {
     final var attrs = CPU.createAttributeSet();
     attrs.setValue(rv32im.ATTR_INSTRUCTION_CACHE, true);
-    attrs.setValue(rv32im.ATTR_GDB_SERVER_RUNNING, true);
     final var settings = settings(CPU, attrs);
-    assertEquals(2, settings.size(), settings.toString());
+    assertEquals(1, settings.size(), settings.toString());
     assertTrue(
         settings.get(0).contains(rv32im.ATTR_INSTRUCTION_CACHE.getDisplayName()), settings.get(0));
-    assertTrue(
-        settings.get(1).contains(rv32im.ATTR_GDB_SERVER_RUNNING.getDisplayName()), settings.get(1));
+  }
+
+  @Test
+  void debugEnableGoesOntoAGw2aBoardOnly() {
+    final var attrs = CPU.createAttributeSet();
+    attrs.setValue(rv32im.ATTR_GDB_SERVER_RUNNING, true);
+    try {
+      Hdl.setFpgaFamily("GW2A-18C");
+      assertEquals(List.of(), settings(CPU, attrs));
+      Hdl.setFpgaFamily(null);
+      assertEquals(List.of(), settings(CPU, attrs));
+      Hdl.setFpgaFamily("Artix 7");
+      final var settings = settings(CPU, attrs);
+      assertEquals(1, settings.size(), settings.toString());
+      assertTrue(
+          settings.get(0).contains(rv32im.ATTR_GDB_SERVER_RUNNING.getDisplayName()), settings.get(0));
+    } finally {
+      Hdl.setFpgaFamily(null);
+    }
   }
 
   @Test

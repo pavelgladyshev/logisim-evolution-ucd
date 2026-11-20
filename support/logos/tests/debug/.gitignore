@@ -1,0 +1,7 @@
+tb
+*.vpi
+*.o
+prog.elf
+prog.bin
+prog.hex
+*.log

@@ -17,6 +17,7 @@ import com.cburch.logisim.fpga.data.BoardInformation;
 import com.cburch.logisim.fpga.data.ComponentMapParser;
 import com.cburch.logisim.fpga.gui.ComponentMapDialog;
 import com.cburch.logisim.fpga.gui.Reporter;
+import com.cburch.logisim.fpga.hdlgenerator.Hdl;
 import com.cburch.logisim.fpga.hdlgenerator.HdlGeneratorFactory;
 import com.cburch.logisim.fpga.settings.VendorSoftware;
 import com.cburch.logisim.gui.generic.OptionPane;
@@ -176,6 +177,7 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
     if (rootSheet == null) return;
     var steps = basicSteps;
     if (!this.generateHdlOnly && useGui) rootSheet.setDownloadBoard(myBoardInformation.getBoardName());
+    Hdl.setFpgaFamily(myBoardInformation.fpga.getTechnology());
     switch (vendor) {
       case VendorSoftware.VENDOR_ALTERA -> downloader =
           new AlteraDownload(

@@ -26,13 +26,31 @@ import java.util.List;
 /**
  * The RV32IM CPU on an FPGA, in Verilog: riscvCpu (resources/logisim/hdl/riscv), a model of the Java CPU that does
  * at each rising edge of its clock what the Java CPU does there, and says how. It takes the CPU's TLB, of 16 or 32
- * entries, and needs the instruction cache and the GDB server off, and a clock cycle of 23 FPGA clocks at least
+ * entries, and needs the instruction cache off, and a clock cycle of 23 FPGA clocks at least
  * (getMinimumFpgaClocksPerCycle: with the Tang Nano 20K's 27 MHz and two ticks a cycle, Logisim's ticks of 2.25 MHz
- * and slower, such as 2048 kHz).
+ * and slower, such as 2048 kHz). With Debug Enable, the CPU has the RISC-V debug support of riscvDebug.v on the
+ * FPGA's JTAG port, which is Gowin's (a GW2A board, such as the Tang Nano 20K), for OpenOCD and gdb.
  */
 public class rv32imHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 
   private static final String MODULE = "/resources/logisim/hdl/riscv/riscvCpu.v";
+  private static final String DEBUG_MODULE = "/resources/logisim/hdl/riscv/riscvDebug.v";
+
+  /** Gowin's JTAG primitive, which the open-source flow's yosys does not know (nextpnr and apicula do). */
+  private static final String GW_JTAG = """
+      (* blackbox *)
+      module GW_JTAG (
+         input  tck_pad_i, tms_pad_i, tdi_pad_i, tdo_er1_i, tdo_er2_i,
+         output tdo_pad_o, tck_o, tdi_o, test_logic_reset_o, run_test_idle_er1_o, run_test_idle_er2_o,
+                shift_dr_capture_dr_o, pause_dr_o, update_dr_o, enable_er1_o, enable_er2_o
+      );
+      endmodule
+      """;
+
+  /** The FPGA families whose JTAG port riscvDebug.v has: Gowin's GW2A. */
+  static boolean hasDebugJtag(String family) {
+    return family == null || family.toUpperCase().startsWith("GW2A");
+  }
 
   /** FPGA clocks after a tick at which the CPU takes its inputs: when every device has answered. */
   private static final int START = 8;
@@ -71,10 +89,11 @@ public class rv32imHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
         .pair("resetAddress", String.format("32'h%08x", attrs.getValue(rv32im.ATTR_RESET_ADDR) & 0xffffffffL))
         .pair("tlbEntries", rv32im.tlbEntries(attrs))
         .pair("start", START)
+        .pair("debug", attrs.getValue(rv32im.ATTR_GDB_SERVER_RUNNING) ? 1 : 0)
         .add("""
             assign {be3, be2, be1, be0} = s_be;
 
-            riscvCpu #(.RESET_ADDR({{resetAddress}}), .TLB_ENTRIES({{tlbEntries}}), .START({{start}})) cpu (
+            riscvCpu #(.RESET_ADDR({{resetAddress}}), .TLB_ENTRIES({{tlbEntries}}), .START({{start}}), .DEBUG({{debug}})) cpu (
                .clock(clock), .tick(tick), .reset(reset), .dataIn(dataIn), .timerIrq(timerIrq), .extIrq(extIrq),
                .busReq(busReq), .address(address), .dataOut(dataOut), .memRead(memRead), .memWrite(memWrite),
                .be(s_be), .busAck(busAck), .late());
@@ -85,13 +104,23 @@ public class rv32imHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
   public List<String> getArchitecture(Netlist theNetlist, AttributeSet attrs, String componentName) {
     final var contents = new ArrayList<>(super.getArchitecture(theNetlist, attrs, componentName));
     contents.add("");
-    try (final var in = rv32imHdlGeneratorFactory.class.getResourceAsStream(MODULE);
+    addResource(contents, MODULE);
+    if (attrs.getValue(rv32im.ATTR_GDB_SERVER_RUNNING)) {
+      contents.add("");
+      addResource(contents, DEBUG_MODULE);
+      contents.add("");
+      GW_JTAG.lines().forEach(contents::add);
+    }
+    return contents;
+  }
+
+  private static void addResource(List<String> contents, String name) {
+    try (final var in = rv32imHdlGeneratorFactory.class.getResourceAsStream(name);
          final var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
       reader.lines().forEach(contents::add);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
-    return contents;
   }
 
   @Override
@@ -111,7 +140,7 @@ public class rv32imHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     if (attrs.getValue(rv32im.ATTR_INSTRUCTION_CACHE)) {
       reasons.add(Hdl.setAttributeReason(rv32im.ATTR_INSTRUCTION_CACHE, false));
     }
-    if (attrs.getValue(rv32im.ATTR_GDB_SERVER_RUNNING)) {
+    if (attrs.getValue(rv32im.ATTR_GDB_SERVER_RUNNING) && !hasDebugJtag(Hdl.getFpgaFamily())) {
       reasons.add(Hdl.setAttributeReason(rv32im.ATTR_GDB_SERVER_RUNNING, false));
     }
     return reasons;
