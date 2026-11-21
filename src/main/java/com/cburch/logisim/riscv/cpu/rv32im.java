@@ -120,24 +120,65 @@ public class rv32im extends InstanceFactory {
 
   public static final Attribute<GDBServer> ATTR_GDB_SERVER = new GDBServerAttribute();
 
+  /**
+   * The CSR panel below the registers: none (the default, and the component's size as before), the machine CSRs, or
+   * the machine and the supervisor CSRs. For the display only: the CPU and its HDL do not read it.
+   */
+  public static final AttributeOption CSR_PANEL_NONE =
+          new AttributeOption("none", S.getter("rv32imCsrPanelNone"));
+  public static final AttributeOption CSR_PANEL_MACHINE =
+          new AttributeOption("machine", S.getter("rv32imCsrPanelMachine"));
+  public static final AttributeOption CSR_PANEL_SUPERVISOR =
+          new AttributeOption("supervisor", S.getter("rv32imCsrPanelSupervisor"));
+
+  public static final Attribute<AttributeOption> ATTR_CSR_PANEL = Attributes.forOption("csrPanel",
+          S.getter("rv32imCsrPanel"), new AttributeOption[] {CSR_PANEL_NONE, CSR_PANEL_MACHINE, CSR_PANEL_SUPERVISOR});
+
   // The CPU's box: its ports along the top part of its sides, each with its label, the title and the state (Data,
   // Addr, PC, CPU state) between the labels, and the registers below the ports.
   private static final int REGISTERS_Y = 232;   // below the lowest port, Bus Request (220)
+  private static final int REGISTERS_HEIGHT = 495;
   private static final int CENTER_X = 27;       // the middle between the labels
+  // The instruction at the pc: below the CPU state and the right side's lowest label (BE0, 180), from the left edge
+  // of the boxes above to near the right edge, right of the left side's labels (Ext IRQ 190, Bus req 220).
+  private static final int INSTRUCTION_Y = 188;
+  private static final int INSTRUCTION_WIDTH = 128;
+  // The CSR panel: below the registers, in the same column
+  private static final int CSR_PANEL_Y = REGISTERS_Y + REGISTERS_HEIGHT + 10;
+  private static final Bounds DEFAULT_BOUNDS = Bounds.create(-60, -20, 180, REGISTERS_Y + REGISTERS_HEIGHT + 10 + 20);
   private static final Font TITLE_FONT = new Font("SansSerif", Font.BOLD, 16);
   private static final Font PORT_FONT = new Font("SansSerif", Font.PLAIN, 10);
 
   public rv32im() {
     super(_ID, new rv32imHdlGeneratorFactory());
-    setOffsetBounds(Bounds.create(-60, -20, 180, REGISTERS_Y + 495 + 10 + 20));
     setPorts(ports());
 
     // Add attributes
     setAttributes(
             new Attribute[] {
-                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_INSTRUCTION_CACHE, ATTR_TLB_ENTRIES, ATTR_GDB_SERVER, StdAttr.LABEL, StdAttr.LABEL_FONT
+                    ATTR_RESET_ADDR, ATTR_HEX_REGS, ATTR_TCP_PORT, ATTR_GDB_SERVER_RUNNING, ATTR_INSTRUCTION_CACHE, ATTR_TLB_ENTRIES, ATTR_CSR_PANEL, ATTR_GDB_SERVER, StdAttr.LABEL, StdAttr.LABEL_FONT
             },
-            new Object[] {Long.valueOf(0), false, 3333, false, false, DEFAULT_TLB_ENTRIES, new GDBServer(), "", StdAttr.DEFAULT_LABEL_FONT});
+            new Object[] {Long.valueOf(0), false, 3333, false, false, DEFAULT_TLB_ENTRIES, CSR_PANEL_NONE, new GDBServer(), "", StdAttr.DEFAULT_LABEL_FONT});
+  }
+
+  /** The CSR panel's setting: none, machine, or supervisor (machine and supervisor). */
+  static AttributeOption csrPanel(AttributeSet attrs) {
+    final var option = attrs.getValue(ATTR_CSR_PANEL);
+    return option == null ? CSR_PANEL_NONE : option;
+  }
+
+  @Override
+  public Bounds getOffsetBounds(AttributeSet attrs) {
+    final var panel = csrPanel(attrs);
+    if (panel == CSR_PANEL_NONE) return DEFAULT_BOUNDS;
+    final int grow = csrPanelHeight(panel == CSR_PANEL_SUPERVISOR) + 10;
+    return Bounds.create(DEFAULT_BOUNDS.getX(), DEFAULT_BOUNDS.getY(), DEFAULT_BOUNDS.getWidth(),
+        DEFAULT_BOUNDS.getHeight() + grow);
+  }
+
+  @Override
+  protected void instanceAttributeChanged(Instance instance, Attribute<?> attr) {
+    if (attr == ATTR_CSR_PANEL) instance.recomputeBounds();
   }
 
   /**
@@ -184,6 +225,7 @@ public class rv32im extends InstanceFactory {
 
   @Override
   protected void configureNewInstance(Instance instance) {
+    instance.addAttributeListener();
     final var bds = instance.getBounds();
     instance.setTextField(
             StdAttr.LABEL,
@@ -230,7 +272,13 @@ public class rv32im extends InstanceFactory {
       drawHexReg(graphics, boxX, y + 100, false, (int) state.getPC().get(), "PC", true);
       // below Timer IRQ's label (140)
       drawCpuState(graphics, boxX, y + 150, false, "CPU state", state.getCpuState());
+      final long word = state.instructionWordAtPc(painter.getPortValue(DATA_IN));
+      drawInstruction(graphics, boxX, y + INSTRUCTION_Y, INSTRUCTION_WIDTH, word, state);
       drawRegisters(graphics, x - 50, y + REGISTERS_Y, false, state, painter.getAttributeValue(ATTR_HEX_REGS));
+      final var panel = csrPanel(painter.getAttributeSet());
+      if (panel != CSR_PANEL_NONE) {
+        drawCsrPanel(graphics, x - 50, y + CSR_PANEL_Y, state, panel == CSR_PANEL_SUPERVISOR);
+      }
     }
   }
 

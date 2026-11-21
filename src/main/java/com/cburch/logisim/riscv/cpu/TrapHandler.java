@@ -34,6 +34,7 @@ public class TrapHandler {
                 delegated = medeleg.isDelegated(code);
             }
         }
+        hartData.noteTrapTaken(delegated);   // for the display only
 
         if (delegated) {
             // ---- Trap to S-mode ----

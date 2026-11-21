@@ -110,6 +110,28 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   private TranslationLookasideBuffer.AccessType pendingAccessType;
   private long translatedPhysicalAddress;
 
+  /**
+   * For the display only, never read by the CPU: the integer registers that the last instruction wrote (bit i for
+   * xi), the TRACKED_CSRS that it wrote with setCSR (bit i for TRACKED_CSRS[i]), and the values of TRACKED_CSRS and
+   * the privilege mode when it began, to tell which of them it changed. A step begins when the CPU takes an
+   * instruction word to execute it, or takes an interrupt (beginStep).
+   */
+  private int writtenRegisters;
+  private int writtenCsrs;
+  /** For the display only: whether a trap has been taken into M-mode, and into S-mode, since the reset. */
+  private boolean trapTakenToMachine;
+  private boolean trapTakenToSupervisor;
+  private final long[] csrsAtStepStart = new long[TRACKED_CSRS.length];
+  private PRIVILEGE_MODE modeAtStepStart = PRIVILEGE_MODE.MACHINE;
+
+  /** The CSRs that the display shows and highlights when the last step changed them. */
+  public static final int[] TRACKED_CSRS = {
+    MMCSR.MSTATUS.getAddress(), MMCSR.MIE.getAddress(), MMCSR.MIP.getAddress(), MMCSR.MTVEC.getAddress(),
+    MMCSR.MEPC.getAddress(), MMCSR.MCAUSE.getAddress(), MMCSR.MTVAL.getAddress(), MMCSR.MSCRATCH.getAddress(),
+    SCSR.SSTATUS.getAddress(), SCSR.SIE.getAddress(), SCSR.SIP.getAddress(), SCSR.STVEC.getAddress(),
+    SCSR.SEPC.getAddress(), SCSR.SCAUSE.getAddress(), SCSR.STVAL.getAddress(), SCSR.SSCRATCH.getAddress(),
+    SCSR.SATP.getAddress(), MMCSR.MEDELEG.getAddress(), MMCSR.MIDELEG.getAddress()};
+
   public rv32imData(Value lastClock, long resetAddress, int port, boolean startGDBServer, boolean instructionCacheEnabled, CPUState initialCpuState, GDBServer gdbServerAttr) {
     this(lastClock, resetAddress, port, startGDBServer, instructionCacheEnabled, initialCpuState, gdbServerAttr,
         TranslationLookasideBuffer.TLB_SIZE);
@@ -148,6 +170,84 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
     this.breakpoints = new HashSet<>();
     this.breakpointsEnabled = true;
+    beginStep();
+  }
+
+  /** For the display: a step (an instruction, or the entry to an interrupt's handler) begins. */
+  private void beginStep() {
+    writtenRegisters = 0;
+    writtenCsrs = 0;
+    for (int i = 0; i < TRACKED_CSRS.length; i++) csrsAtStepStart[i] = csr.get(TRACKED_CSRS[i]).read();
+    modeAtStepStart = currentPrivilegeMode;
+  }
+
+  /** For the display: whether the last step wrote xi (never x0). */
+  public boolean wasRegisterWritten(int index) {
+    return ((writtenRegisters >>> index) & 1) != 0;
+  }
+
+  /**
+   * For the display: whether the last step wrote this CSR, one of TRACKED_CSRS: a CSR instruction wrote it (even
+   * with the value it had), or its value changed (a trap, mret or sret, or a write to a CSR that shares its bits).
+   */
+  public boolean wasCsrChanged(int csrAddress) {
+    for (int i = 0; i < TRACKED_CSRS.length; i++) {
+      if (TRACKED_CSRS[i] == csrAddress) {
+        return ((writtenCsrs >>> i) & 1) != 0 || csr.get(csrAddress).read() != csrsAtStepStart[i];
+      }
+    }
+    return false;
+  }
+
+  /** For the display: the last word that instructionWordAtPc found, and the pc it was at. */
+  private long shownPc = -1;
+  private long shownWord;
+
+  /**
+   * For the display: the word of the instruction at the pc, or -1 when the CPU does not know it yet. Between
+   * instructions, when the CPU fetches (address bus at the pc, or a hit in the instruction cache), it is the word it
+   * will take at the next rising edge: the cache's, or what memory answers on Data In (dataIn), which is the word
+   * gdb's x/i $pc reads; while a load or a store waits for its data, the pc has not moved yet and it is the word being
+   * executed, in the instruction register. It is not known during the page table walk of a fetch, or while another
+   * device has the bus; while the address bus is elsewhere at a fetch (gdb reading memory with the CPU stopped), the
+   * word found last at the same pc stands.
+   */
+  public long instructionWordAtPc(Value dataIn) {
+    final long pcVal = pc.get() & 0xFFFFFFFFL;
+    long word = -1;
+    if (!fetching) {
+      if (ptw.isIdle() || ptw.getAccessType() != TranslationLookasideBuffer.AccessType.FETCH) word = ir.get();
+    } else {
+      final long physical = isTranslationEnabled() ? translatedPhysicalAddress : pcVal;
+      if (instructionCacheEnabled && cache.isValid(physical)) {
+        word = cache.get(physical);
+      } else if (!busGranted && memRead == Value.TRUE && address != null && address.isFullyDefined()
+          && address.toLongValue() == physical && dataIn != null && dataIn.isFullyDefined()) {
+        word = dataIn.toLongValue();
+      } else if (!busGranted && shownPc == pcVal) {
+        word = shownWord;
+      }
+    }
+    if (word < 0) return -1;
+    shownPc = pcVal;
+    shownWord = word & 0xFFFFFFFFL;
+    return shownWord;
+  }
+
+  /** For the display: a trap has been taken into S-mode (supervisor) or M-mode (TrapHandler). */
+  public void noteTrapTaken(boolean supervisor) {
+    if (supervisor) trapTakenToSupervisor = true;
+    else trapTakenToMachine = true;
+  }
+
+  /** For the display: whether a trap has been taken into S-mode (supervisor) or M-mode since the reset. */
+  public boolean wasTrapTaken(boolean supervisor) {
+    return supervisor ? trapTakenToSupervisor : trapTakenToMachine;
+  }
+
+  /** For the display: whether the last step changed the privilege mode. */
+  public boolean wasModeChanged() {
+    return modeAtStepStart != currentPrivilegeMode;
   }
 
   /**
@@ -302,6 +402,9 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     // Reset CPU execution state
     waitingForMemory = false;
     fetchNextInstruction();
+    beginStep();
+    trapTakenToMachine = false;
+    trapTakenToSupervisor = false;
   }
 
   /** The hart's part of a reset: the Reset pin's (reset) and the debugger's (resetForDebugger). */
@@ -405,6 +508,7 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     if (!addressing) {
       final MCAUSE_CSR.TRAP_CAUSE interrupt = pendingInterrupt();
       if (interrupt != null) {
+        beginStep();
         TrapHandler.handle(this, interrupt);
         fetchNextInstruction();
         return;
@@ -412,6 +516,7 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     }
 
     if (fetching) {
+      beginStep();
       long pcVal = pc.get();
       if (isTranslationEnabled()) {
         // When SV32 is active, instruction cache is indexed by physical address
@@ -756,7 +861,12 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   public CPUState getCpuState() { return cpuState; }
   public InstructionRegister getIR() { return ir; }
   public long getX(int index) { return x.get(index); }
-  public void setX(int index, long value) { x.set(index,value); }
+  public void setX(int index, long value) {
+    x.set(index, value);
+    if (index != 0) writtenRegisters |= 1 << index;
+  }
+  public boolean isFetching() { return fetching; }
+  public boolean isInstructionCacheEnabled() { return instructionCacheEnabled; }
   public boolean getAddressing() { return addressing; }
   public long getCSRValue(int csr) {return this.csr.read(this, csr);}
   public CSR getCSR(int csr) { return this.csr.get(csr); }
@@ -800,7 +910,12 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
   public void setAddress(Value newAddress) { address = newAddress; }
   public void setMemRead(Value value) { memRead = value; }
   public void setMemWrite(Value value) { memWrite = value; }
-  public void setCSR(int csr, long value) { this.csr.write(this, csr, value); }
+  public void setCSR(int csr, long value) {
+    this.csr.write(this, csr, value);
+    for (int i = 0; i < TRACKED_CSRS.length; i++) {
+      if (TRACKED_CSRS[i] == csr) writtenCsrs |= 1 << i;
+    }
+  }
 
   // Breakpoint handling
   public void setBreakpoint(long address) {
