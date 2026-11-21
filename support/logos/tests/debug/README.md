@@ -26,6 +26,14 @@ like an FT2232, takes the latency timer of its JTAG interface for its serial por
 to 255 ms, which would hold back the console's short output by up to that long. The script puts it back to 1 ms.
 It uses Linux's usbfs (Linux and WSL 2): elsewhere OpenOCD says it could not, and the console is slower.
 
+Two things to do in order. Start OpenOCD a moment after the download, once LogOS has booted: the CPU starts about
+0.13 s after the bitstream is loaded, and OpenOCD's first look at it waits less than that for it to halt (it gave up
+0.09 s after the load). Started at once, it says "unable to halt hart 0" and quits, but its halt request stays, and the CPU halts
+at its second instruction and waits; the next OpenOCD finds it there. And start OpenOCD before you open the console: as it
+starts, the BL616 can put a few stray characters into the console's input (`p|||`), and on the first start after the
+board was plugged in, with the console open, its serial port has twice stopped altogether, in both directions, until
+the board was unplugged. Later starts, with the console open or not, have not stopped it.
+
 ## In simulation
 
 `make sim` runs the CPU, a RAM with `prog.c` and a model of `GW_JTAG` (`gw_jtag_model.v`, with what the user's

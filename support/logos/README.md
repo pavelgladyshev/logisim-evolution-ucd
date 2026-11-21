@@ -152,7 +152,8 @@ Two things came first.
   ("Results: 0 passed" for 10). Now the sessions with 16 and 128 TLB entries are the same, and clean.
 
 **The Verilog**, `riscvCpu` in `src/main/resources/resources/logisim/hdl/riscv`, generated for the CPU
-(rv32imHdlGeneratorFactory: Verilog, no instruction cache, no GDB server).
+(rv32imHdlGeneratorFactory: Verilog, no instruction cache; with Debug Enable, the RISC-V debug support of
+`riscvDebug.v` in place of the GDB server, section 7).
 It does what the Java CPU does at each of the 405504 edges of LogOS's boot (the bootloader, the kernel in S-mode with
 SV32, user programs, page table walks, interrupts, the Block Storage's DMA), at each edge of the boot and one of
 LogOS's ten test programs, for each of them (31.2 million edges in all, stress_test's 11.2 million among them), and
@@ -207,3 +208,23 @@ as it is set up is named with the settings to change (for a CPU with its instruc
 Cache?” to “false”), and a tick frequency that gives a component too few FPGA clocks a cycle
 is refused with the highest one that will do: the CPU needs 23 (2.25 MHz on the Tang Nano 20K), a RAM in the SDRAM
 12 (4.5 MHz).
+
+## 7. Debugging on the board
+
+With the CPU's attribute Debug Enable set (Logisim 5.0.9 and later), the FPGA flow gives the CPU the RISC-V External
+Debug Support (0.13.2) of `riscvDebug.v`, on the FPGA's own JTAG port (Gowin's `GW_JTAG`; a GW2A board such as the
+Tang Nano 20K). OpenOCD reaches it through the board's USB cable, and gdb connects to OpenOCD on port 3334, since
+Logisim's own GDB server has 3333 while the circuit is open. OpenOCD's settings for the board are
+`tests/debug/tangnano20k.cfg`, with `bl616_latency.py`, which it runs to keep the board's console quick (on Linux).
+LogOS carries the same two files, in `fpga/`:
+
+```bash
+make openocd        # in the LogOS tree: OpenOCD with fpga/tangnano20k.cfg; leave it running
+make fpga-gdb       # in another terminal: make gdb on port 3334
+```
+
+gdb halts the CPU when it connects. Breakpoints (two of them hardware, `hbreak`), steps, registers and memory work,
+and `detach` lets LogOS run on. Start `make openocd` once LogOS has booted and before opening the console
+(`tests/debug/README.md` says why). Checked on 18 November 2026 with LogOS Belfield 1.0.4, Blackrock 2.1.3 and
+Glendalough 3.0.3 on a Tang Nano 20K. `tests/debug/README.md` has the details, and a simulation of the CPU with
+its debug support that OpenOCD and gdb drive (`make sim`).
