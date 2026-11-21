@@ -17,16 +17,25 @@ import com.cburch.logisim.fpga.hdlgenerator.Hdl;
 import com.cburch.logisim.fpga.hdlgenerator.HdlParameters;
 import com.cburch.logisim.instance.Port;
 import com.cburch.logisim.util.LineBuffer;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * The Timer on an FPGA, in Verilog, doing at each tick what the component does at a rising clock edge: a write to
- * mtimecmp or mtime, then mtime counting on (31 bits), then the interrupt request set when mtime reaches mtimecmp.
- * Its registers are read without a clock, on Data Out; Reset holds mtime at 0 and mtimecmp at 0xffffffff.
+ * The Timer on an FPGA, in Verilog: the RISC-V machine timer, mtime and mtimecmp of 64 bits each, doing at each
+ * tick what the component does at a rising clock edge. The module that does it, riscvTimer, is shipped with
+ * Logisim (resources/logisim/hdl/riscv) and states the rules, which are TimerRegisters'; the module generated
+ * here gives it the two addresses of the component's attributes and the reset value of mtimecmp.
  */
 public class TimerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
+
+  private static final String MODULE = "/resources/logisim/hdl/riscv/riscvTimer.v";
 
   private static final String MTIMECMP_STRING = "mtimecmpAddr";
   private static final int MTIMECMP_ID = -1;
@@ -38,15 +47,6 @@ public class TimerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     myParametersList
         .add(MTIMECMP_STRING, MTIMECMP_ID, HdlParameters.MAP_CONSTANT, 0)
         .add(MTIME_STRING, MTIME_ID, HdlParameters.MAP_CONSTANT, 0);
-    myWires
-        .addWire("s_counterBase", 31)
-        .addWire("s_compareBase", 32)
-        .addWire("s_time", 32)
-        .addWire("s_nextCounter", 31)
-        .addWire("s_nextCompare", 32)
-        .addRegister("s_counter", 31)
-        .addRegister("s_compare", 32)
-        .addRegister("s_irq", 1);
     myPorts
         .add(Port.CLOCK, "clock", 1, Timer.CLOCK)
         .add(Port.INPUT, "address", 32, Timer.ADDRESS, true)
@@ -72,44 +72,25 @@ public class TimerHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
     return LineBuffer.getHdlBuffer()
         .pair("mtimecmp", MTIMECMP_STRING)
         .pair("mtime", MTIME_STRING)
+        .pair("mtimecmpReset", String.format("64'h%016x", TimerRegisters.MTIMECMP_RESET))
         .add("""
-            // what the component holds at a rising edge: Reset sets mtime to 0 and mtimecmp to 0xffffffff first
-            assign s_counterBase = reset ? 31'd0 : s_counter;
-            assign s_compareBase = reset ? 32'hffffffff : s_compare;
-            // then a write, then mtime counts on, masked to 31 bits
-            assign s_time        = (we && (address == {{mtime}})) ? dataIn : {1'b0, s_counterBase};
-            assign s_nextCounter = s_time[30:0] + 31'd1;
-            assign s_nextCompare = (we && (address == {{mtimecmp}})) ? dataIn : s_compareBase;
-
-            assign dataOut = ~re ? 32'd0 :
-                             (address == {{mtimecmp}}) ? s_compare :
-                             (address == {{mtime}}) ? {1'b0, s_counter} : 32'd0;
-            assign irq     = s_irq;
-
-            initial
-            begin
-               s_counter = 0;
-               s_compare = 0;
-               s_irq     = 1'b0;
-            end
-
-            always @(posedge clock)
-            begin
-               // Reset holds mtime and mtimecmp between edges too, as the component does
-               if (reset)
-               begin
-                  s_counter <= 31'd0;
-                  s_compare <= 32'hffffffff;
-               end
-               else if (tick)
-               begin
-                  s_counter <= s_nextCounter;
-                  s_compare <= s_nextCompare;
-               end
-               if (tick)
-                  s_irq <= ({1'b0, s_nextCounter} >= s_nextCompare);
-            end
+            riscvTimer #(.MTIMECMP_ADDR({{mtimecmp}}), .MTIME_ADDR({{mtime}}), .MTIMECMP_RESET({{mtimecmpReset}})) timer (
+               .clock(clock), .tick(tick), .reset(reset), .address(address), .re(re), .we(we), .dataIn(dataIn),
+               .dataOut(dataOut), .irq(irq));
             """);
+  }
+
+  @Override
+  public List<String> getArchitecture(Netlist theNetlist, AttributeSet attrs, String componentName) {
+    final var contents = new ArrayList<>(super.getArchitecture(theNetlist, attrs, componentName));
+    contents.add("");
+    try (final var in = TimerHdlGeneratorFactory.class.getResourceAsStream(MODULE);
+         final var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+      reader.lines().forEach(contents::add);
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+    return contents;
   }
 
   @Override

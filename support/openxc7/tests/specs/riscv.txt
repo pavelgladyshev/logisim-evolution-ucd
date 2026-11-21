@@ -1,5 +1,10 @@
 # name tool attributes (skip = port indices left unconnected; clock = the clock input; rare = 1 in 16 steps)
-# The Timer's registers at addresses the random inputs hit often (0 and 1), and at two with the top bit set
+# The Timer's registers, mtimecmp and mtime of 64 bits, each a low word at its address and a high word 4 above:
+# the low words at addresses the random inputs hit often (0 and 1), and at two with the top bit set (mtimecmp's
+# high word is then at 3, past the top of the address space); the high words where the inputs hit often (0 and
+# 0x7fffffff); and mtime in the word after mtimecmp, where it hides mtimecmp's high word
 # Timer ports: 0 address, 1 re, 2 we, 3 data out, 4 irq, 5 reset, 6 clock, 7 data in
 timer01 Timer mtimecmpaddr=0x0 mtimeaddr=0x1 clock=6 rare=5
 timerhi Timer mtimecmpaddr=0xffffffff mtimeaddr=0x80000000 clock=6 rare=5
+timerhw Timer mtimecmpaddr=0xfffffffc mtimeaddr=0x7ffffffb clock=6 rare=5
+timer04 Timer mtimecmpaddr=0x0 mtimeaddr=0x4 clock=6 rare=5

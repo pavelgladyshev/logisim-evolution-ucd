@@ -64,8 +64,40 @@ their pins are separate only, the old circuit no longer runs in this version, an
 Both are Verilog only, and need a separate data bus. Like the CPU they run on the FPGA's clock and act at a
 Logisim clock tick, as the Java components do at a rising edge.
 
-- **Timer**: mtime and mtimecmp at the addresses of its attributes, as the Java one. `HdlDiff` (in
-  `support/openxc7/tests/harness`) compares the two with random inputs, from `support/openxc7/tests/specs/riscv.txt`.
+- **Timer**: the RISC-V machine timer, as the Java one. From Logisim 5.0.10 its two registers, mtime and mtimecmp,
+  have 64 bits each, as the privileged specification has them on RV32 too. Each is two words: the low word at the
+  address of the component's attribute and the high word 4 above it, so by default mtimecmp at `0x02004000` and
+  `0x02004004` and mtime at `0x0200bff8` and `0x0200bffc`, where QEMU's virt machine has them. mtime counts on by
+  one at each rising clock edge, and the interrupt request is 1 while mtime >= mtimecmp, both unsigned. The Verilog
+  is `riscvTimer`, in `src/main/resources/resources/logisim/hdl/riscv`. `tests/timer` checks it against the Java
+  component edge for edge (`make` there: 1.3 million clock edges of reads, writes and resets, with mtime set just
+  below 2^32 and 2^64 and left to count across), and its README has the rules that the two follow. `HdlDiff` (in
+  `support/openxc7/tests/harness`) compares the simulator and the generated circuit with random inputs too, from
+  `support/openxc7/tests/specs/riscv.txt`. On the GW2AR-18 the Timer takes 250 LUTs, 128 ALUs and 129 flip-flops
+  (yosys; 109 LUTs, 65 ALUs and 65 flip-flops more than with 32 bits). Checked on 21 November 2026 in Icarus
+  Verilog, with LogOS in Logisim, and on a Tang Nano 20K. On the board LogOS Blackrock and Glendalough with the
+  three stores (below) pass their ten test programs and `sh /etc/test.sh`, 87 tests of 87 each, and each session
+  is Logisim's line for line. With mtime set 6,000,000 ticks below 2^32 when the kernel starts, two processes that
+  only compute go on alternating while mtime passes 2^32, about six seconds later.
+
+  Reset. When the simulation or the FPGA starts, and after Reset, mtime is zero, as the ACLINT specification
+  requires. The specifications leave mtimecmp undefined after reset (the privileged specification says nothing of
+  it, ACLINT says "unknown state"), so correct software writes both words of mtimecmp before it enables the timer
+  interrupt. This Timer's own choice is all ones (`0xffffffffffffffff`), with which software that writes only the
+  low word gets no interrupt.
+
+  Software. Up to 5.0.9 mtime counted 31 bits and mtimecmp had 32. Once `mtime + TIME_SLICE` had passed
+  `0x7fffffff`, mtime went back to 0 before it got there, and the timer interrupt never came again: after 34
+  minutes on the board, with its clock of 1.04 MHz. Software for the 64 bits reads mtime as its high word, its low
+  word and its high word again (and again if the high word changed), and sets mtimecmp with the three stores that
+  the specification gives: all ones to the low word, the new high word, the new low word. LogOS up to Blackrock
+  2.1.3 and Glendalough 3.0.3 stores mtimecmp's low word only, and so gets no timer interrupt from this Timer.
+  Checked on 21 November 2026 with both: their ten test programs still pass (85 tests of 85, and one number in
+  pipe_test's output is 512 where it was 612), but no process is ever preempted. Two processes that only compute
+  print their letters one after the other, forty of one and then forty of the other, where they alternated with
+  5.0.9, and so does `rr` of the book's Chapter 14. LogOS needs the three stores; with them it also runs on 5.0.9.
+  The circuits need no change: LogOS's computer.circ gives the Timer every address from `0x02000000` to
+  `0x0200ffff`.
 - **Block Storage**: a microSD card in SPI mode, where the component has its image file: block n of the disk is
   block n of the card, so a disk image goes onto the card as it is (from its block 0, not into a partition). The
   card is on four pins that the board's map gives it: SD_MISO, SD_SCK, SD_MOSI and SD_CS (on the Tang Nano 20K the
