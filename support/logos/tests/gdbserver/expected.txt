@@ -1,0 +1,178 @@
+# What gdb_test.gdb must print (see run_test.py for the format)
+=== stopped at the reset address
+^pc +0x0\s
+^\$1 = 3$
+
+# the integer registers by their ABI names, then the pc
+=== info registers
++ ^ra +0x0\s
++ ^sp\s
++ ^gp\s
++ ^tp\s
++ ^t0\s
++ ^t1\s
++ ^t2\s
++ ^fp\s
++ ^s1\s
++ ^a0\s
++ ^a1\s
++ ^a2\s
++ ^a3\s
++ ^a4\s
++ ^a5\s
++ ^a6\s
++ ^a7\s
++ ^s2\s
++ ^s3\s
++ ^s4\s
++ ^s5\s
++ ^s6\s
++ ^s7\s
++ ^s8\s
++ ^s9\s
++ ^s10\s
++ ^s11\s
++ ^t3\s
++ ^t4\s
++ ^t5\s
++ ^t6\s
++ ^pc\s
++ ^$
+
+# exactly the CSRs the CPU implements, then priv (gdb puts it in the group csr)
+=== info registers csr
++ ^sstatus\s
++ ^sie\s
++ ^stvec\s
++ ^sscratch\s
++ ^sepc\s
++ ^scause\s
++ ^stval\s
++ ^sip\s
++ ^satp\s
++ ^mstatus +0x1800\s
++ ^medeleg\s
++ ^mideleg\s
++ ^mie\s
++ ^mtvec\s
++ ^mscratch\s
++ ^mepc\s
++ ^mcause\s
++ ^mtval\s
++ ^mip\s
++ ^priv +0x3\s+prv:3 \[Machine\]
++ ^$
+
+=== an unimplemented CSR
+received: "xxxxxxxx"
+
+# mepc is do_ecall's address, mcause 11 (an ecall from M-mode), mstatus.MPP 3
+=== in the trap handler
+^Breakpoint 1, trap_handler \(\)
++ csrr t0, mepc
++ ^\$2 = 1$
++ ^\$3 = 0x30$
++ ^\$4 = 11$
++ ^\$5 = 0x0$
++ ^\$6 = 0x1800$
++ ^\$7 = 0x808$
++ ^\$8 = 0x0$
++ ^\$9 = 1$
++ ^\$10 = 0x5ca7c4ed$
++ ^\$11 = 3$
+
+=== registers written by gdb
++ ^\$12 = 0x1234$
++ ^\$13 = 77$
++ ^priv write: refused$
++ ^\$14 = 3$
+
+=== break, continue, finish
+^Breakpoint 2, square \(x=1\) at prog.c
+^\$15 = 1$
+in main \(\) at prog.c
+^Value returned is \$16 = 1$
+
+=== stepi
+^\$17 = 4$
+
+=== memory
+^0x100004 <squares>:\s+0x00000000\s+0x00000001\s+0x00000004\s+0x00000009$
+<greeting>:\s+"hello, gdb"$
+
+# a word of the Timer (which decodes the whole address and takes whole words): what main stored, then gdb's
+=== a device register
++ ^0x2004000:\s+0x13579bdf$
++ ^0x2004000:\s+0x89abcdef$
+# x/4xb reads byte by byte, as lbu does: the Timer answers only the word's own address
++ ^0x2004000:\s+0xef\s+0x00\s+0x00\s+0x00$
+
+# gdb shows each write watchpoint after the store, with the old and new values; the stop is before the next
+# instruction of main (prog.c line 21, the loop)
+=== watch counter
+^Hardware watchpoint \d+: counter
+^Hardware watchpoint \d+: counter
++ ^$
++ ^Old value = 1$
++ ^New value = 2$
++ ^main \(\) at prog.c:21
+^Hardware watchpoint \d+: counter
++ ^$
++ ^Old value = 2$
++ ^New value = 3$
+^Hardware read watchpoint \d+: counter
+^Hardware read watchpoint \d+: counter
++ ^$
++ ^Value = 3$
+^Hardware access \(read/write\) watchpoint \d+: squares\[2\]
+^Hardware access \(read/write\) watchpoint \d+: squares\[2\]
++ ^$
++ ^Old value = 16$
++ ^New value = 25$
+
+=== monitor help, monitor reset
++ ^Logisim RV32IM CPU's GDB server commands:
++ monitor reset
++ monitor help
+^CPU reset: stopped at 0x00000000
+^\$\d+ = .*0x0 <_start>$
++ ^\$\d+ = 3$
++ ^\$\d+ = 0$
+
+=== detach
+detached
+=== DONE
+
+# The protocol without gdb: PacketSize is the input buffer's size in hex (0x10000), vCont is not offered (gdb uses
+# c and s), malformed packets get an error and unknown ones the empty reply, and the session goes on; Ctrl-C while
+# the CPU runs gets the stop reply T02 (SIGINT)
+^----- session raw$
++ ^\? -> S05$
++ PacketSize=10000;qXfer:features:read\+$
++ ^vCont\? -> \(empty\)$
++ ^Zx -> E01$
++ ^mzz,4 -> E00$
++ ^Z0,zz,4 -> E01$
++ ^qNoSuchQuery -> \(empty\)$
++ ^xNoSuchPacket -> \(empty\)$
++ ^p1041 -> 03000000$
++ ^c, Ctrl-C -> T02$
++ ^p1041 -> 03000000$
+
+# a new gdb after the raw session closed without D; it dies at a breakpoint
+^----- session gdb_crash.gdb$
+^Breakpoint 1, square
+^\$1 = 0$
+
+# after the crash the CPU ran on, and its breakpoint is gone; kill ends the session
+^----- session gdb_after_crash.gdb$
+^\$1 = 1$
+^Breakpoint 1, do_ecall \(\)
+^\[Inferior 1 \(Remote target\) killed\]$
+
+# and after kill, another gdb
+^----- session gdb_after_kill.gdb$
+^\$1 = 3$
+^\$2 = 1$
+detached
+=== DONE

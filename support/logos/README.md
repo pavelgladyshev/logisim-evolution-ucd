@@ -228,3 +228,31 @@ and `detach` lets LogOS run on. Start `make openocd` once LogOS has booted and b
 (`tests/debug/README.md` says why). Checked on 18 November 2026 with LogOS Belfield 1.0.4, Blackrock 2.1.3 and
 Glendalough 3.0.3 on a Tang Nano 20K. `tests/debug/README.md` has the details, and a simulation of the CPU with
 its debug support that OpenOCD and gdb drive (`make sim`).
+
+## 8. Debugging in the simulator
+
+With Debug Enable set, the CPU in the simulation has a GDB server on its TCP Port (3333 by default), and the CPU waits
+for gdb at its reset address. In LogOS, `make debug` starts the system in text mode with the server on, and `make
+gdb`, in another terminal, connects gdb with the kernel's symbols (Logisim 5.0.10 and later for what follows).
+
+- **Registers.** `info registers` shows x0-x31 by their ABI names and the pc; `info registers csr` the CSRs the CPU
+  implements (mstatus, medeleg, mideleg, mie, mtvec, mscratch, mepc, mcause, mtval, mip, and sstatus, sie, stvec,
+  sscratch, sepc, scause, stval, sip, satp) and `priv`, the privilege mode (0 U, 1 S, 3 M). `p/x $mcause` reads one,
+  `set $mepc = ...` writes one as a CSR instruction would; `priv` cannot be written. The numbers are OpenOCD's, so
+  the board's gdb sessions look the same.
+- **Memory** is at the hart's addresses: in S- and U-mode with Sv32 on, virtual ones, which the server translates
+  through the page table (in a user program, `x/4i $pc` and `x/s` of its strings read its own pages). An unmapped
+  address gives "Cannot access memory". gdb's accesses are a program's: `x/xw` and `set {int}` at a word's address
+  are `lw` and `sw`, `x/xb` and `set {char}` are `lbu` and `sb`, so a device register (`x/xw 0x0200bff8`, the
+  Timer's mtime) reads as the kernel reads it.
+- **Watchpoints**: `watch counter` (stores), `rwatch` (loads) and `awatch` (both) stop after the instruction that
+  touched the variable, with its old and new values.
+- **`monitor reset`** resets the CPU as its Reset pin does (M-mode, the pc at the reset address, mstatus.MIE and MPRV
+  0, mcause 0) and stops it there. It does not reset memory, the devices or the other registers. `monitor help`
+  lists the commands.
+- Quitting gdb without `detach` (or closing its terminal) lets the system run on, as `detach` does, and the next
+  `make gdb` connects again.
+
+Two things to know. A breakpoint at a user address stops every process that reaches that address: all of LogOS's
+programs start at 0x00400000. And gdb does not know that `monitor reset` changed the registers: run `maintenance
+flush register-cache` after it. `tests/gdbserver/README.md` has the details and the server's test (`make test`).

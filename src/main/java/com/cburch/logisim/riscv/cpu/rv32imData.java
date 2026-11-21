@@ -16,9 +16,12 @@ import com.cburch.logisim.instance.InstanceData;
 import com.cburch.logisim.instance.InstanceState;
 import com.cburch.logisim.riscv.cpu.csrs.*;
 import com.cburch.logisim.riscv.cpu.gdb.DebuggerRequest;
+import com.cburch.logisim.riscv.cpu.gdb.Watchpoint;
 
 import javax.swing.*;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.HashSet;
 
@@ -82,6 +85,15 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
   private Set<Long> breakpoints;
   private boolean breakpointsEnabled;
+  /** The reset address: the CPU's attribute when it was created or last reset (for the debugger's reset). */
+  private long resetAddress;
+  /** A single step's instruction has finished, and the CPU stops for the debugger at its next fetch. */
+  private boolean stepDone;
+  /** The debugger's watchpoints; loads and stores look at them only while watchpointsSet. */
+  private final List<Watchpoint> watchpoints = new ArrayList<>();
+  private boolean watchpointsSet;
+  /** The stop reply's part for the watchpoint that a load or store hit, or null. */
+  private String watchpointHit;
 
   /** Memory cache */
   public final MemoryCache cache = new MemoryCache();
@@ -110,6 +122,7 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
     // initial values for registers
     this.lastClock = lastClock;
     this.pc = new ProgramCounter(resetAddress);
+    this.resetAddress = resetAddress;
     this.ir = new InstructionRegister(0x13); // Initial value 0x13 is opcode for addi x0,x0,0 (nop)
     this.x = new IntegerRegisters();
     this.csr = new ControlAndStatusRegisters();
@@ -260,20 +273,14 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
    * keeps its value. The TLB, the instruction cache and the page table walk start again.
    */
   public void reset(long pcInit, int port, boolean startGDBServer) {
-    pc.set(pcInit);
-    cache.invalidate();
-    tlb.invalidate();
-    ptw.reset();
-    currentPrivilegeMode = PRIVILEGE_MODE.MACHINE;  // CPU starts in M-mode
-    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
-    mstatus.MIE.set(0);
-    mstatus.MPRV.set(0);
-    MMCSR.getCSR(this, MMCSR.MCAUSE).write(0);
+    resetHart(pcInit);
 
     // Reset debugger-related state
     synchronized (this) {
       debuggerRequest = null;
     }
+    stepDone = false;
+    watchpointHit = null;
 
     // Stop and restart GDB server to force client reconnection
     if (gdbServer != null) {
@@ -294,6 +301,34 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
     // Reset CPU execution state
     waitingForMemory = false;
+    fetchNextInstruction();
+  }
+
+  /** The hart's part of a reset: the Reset pin's (reset) and the debugger's (resetForDebugger). */
+  private void resetHart(long pcInit) {
+    resetAddress = pcInit;
+    pc.set(pcInit);
+    cache.invalidate();
+    tlb.invalidate();
+    ptw.reset();
+    currentPrivilegeMode = PRIVILEGE_MODE.MACHINE;  // CPU starts in M-mode
+    MSTATUS_CSR mstatus = (MSTATUS_CSR) MMCSR.getCSR(this, MMCSR.MSTATUS);
+    mstatus.MIE.set(0);
+    mstatus.MPRV.set(0);
+    MMCSR.getCSR(this, MMCSR.MCAUSE).write(0);
+  }
+
+  /**
+   * The debugger's reset (monitor reset, in one of its requests): the hart's state as after the Reset pin, at the
+   * reset address the CPU last had, stopped there. The GDB server keeps its connection, and the rest of the circuit
+   * (memory, devices) is not reset.
+   */
+  public void resetForDebugger() {
+    resetHart(resetAddress);
+    stepDone = false;
+    watchpointHit = null;
+    waitingForMemory = false;
+    cpuState = CPUState.STOPPED;
     fetchNextInstruction();
   }
 
@@ -321,10 +356,11 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
       return;
     }
 
-    // Check for breakpoint before executing instruction
-    if (isBreakpointHit()) {
-      cpuState = CPUState.STOPPED;
-      addDebuggerResponse("T05"); // Signal 5 is SIGTRAP
+    // Check for breakpoint before executing instruction, or a step that has finished. The CPU stops for the debugger
+    // only with an instruction's fetch on the bus (fetching), as it takes the debugger's requests then: stopped in a
+    // page table walk, or a load or store, it would never answer them
+    if (fetching && (stepDone || isBreakpointHit())) {
+      stopForDebugger();
       return;
     }
 
@@ -341,7 +377,10 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
       // If a page fault occurred during the walk, handlePageFault() already set up
       // the trap handler fetch. Detect this by checking if a new walk was started
       // or if fetchNextInstruction set fetching=true (TLB hit for trap handler).
-      if (!ptw.isIdle() || fetching) return;
+      if (!ptw.isIdle() || fetching) {
+        if (cpuState == CPUState.SINGLE_STEP) stepDone = true;   // the step took a trap: it stops in the handler
+        return;
+      }
       // Walk completed normally — if it was a fetch walk, re-enter fetchNextInstruction
       // (the TLB now has the mapping, so it will hit this time).
       // Note: we use the saved walkType rather than the 'fetching' flag because
@@ -430,6 +469,11 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
             raiseException(MCAUSE_CSR.TRAP_CAUSE.LOAD_ADDRESS_MISALIGNED, LoadInstruction.getAddress(this));
             break;
           }
+          if (watchpointsSet && fetching
+              && watchpointHit(LoadInstruction.getAddress(this), LoadInstruction.getWidth(this), false)) {
+            stopForDebugger();
+            return;
+          }
           if (isTranslationEnabledForLoadStore()) {
             long va = LoadInstruction.getAddress(this);
             tlb.translate(va, getCurrentASID());
@@ -469,6 +513,11 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
           if (isMisaligned(StoreInstruction.getAddress(this), StoreInstruction.getWidth(this))) {
             raiseException(MCAUSE_CSR.TRAP_CAUSE.STORE_ADDRESS_MISALIGNED, StoreInstruction.getAddress(this));
             break;
+          }
+          if (watchpointsSet && fetching
+              && watchpointHit(StoreInstruction.getAddress(this), StoreInstruction.getWidth(this), true)) {
+            stopForDebugger();
+            return;
           }
           if (isTranslationEnabledForLoadStore()) {
             long va = StoreInstruction.getAddress(this);
@@ -548,16 +597,29 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
         fetchNextInstruction();
     }
 
-    // After updating PC, check for breakpoint again
-    if (isBreakpointHit() || (fetching && (cpuState == CPUState.SINGLE_STEP))) {
-      cpuState = CPUState.STOPPED;
-      addDebuggerResponse("T05"); // Signal 5 is SIGTRAP
+    // After updating PC, check for breakpoint again, and stop after a single step. If the next fetch has started
+    // a page table walk, the CPU stops when the walk is done (at the top of update)
+    if (fetching && (isBreakpointHit() || cpuState == CPUState.SINGLE_STEP)) {
+      stopForDebugger();
       return;
+    }
+    if (cpuState == CPUState.SINGLE_STEP && !ptw.isIdle()
+        && ptw.getAccessType() == TranslationLookasideBuffer.AccessType.FETCH) {
+      stepDone = true;
     }
   }
 
   public void stop() {
     cpuState = CPUState.STOPPED;
+  }
+
+  /** Stop for the debugger, and tell it why: T05 (SIGTRAP), with the watchpoint that fired if one did. */
+  private void stopForDebugger() {
+    cpuState = CPUState.STOPPED;
+    final String reply = watchpointHit == null ? "T05" : "T05" + watchpointHit;
+    stepDone = false;
+    watchpointHit = null;
+    addDebuggerResponse(reply);
   }
 
   /** The interrupts in the order of the RISC-V privileged spec: MEI, MSI, MTI, SEI, SSI, STI. */
@@ -755,6 +817,41 @@ public class rv32imData implements InstanceData, Cloneable, AutoCloseable {
 
   public boolean isBreakpointHit() {
     return breakpointsEnabled && breakpoints.contains(pc.get());
+  }
+
+  /** A new debugging session, or the end of one without a detach: no breakpoints and no watchpoints. */
+  public void clearBreakpointsAndWatchpoints() {
+    breakpoints.clear();
+    watchpoints.clear();
+    watchpointsSet = false;
+  }
+
+  // Watchpoints: the debugger's (in its requests, on the simulation thread)
+  public void setWatchpoint(Watchpoint watchpoint) {
+    watchpoints.add(watchpoint);
+    watchpointsSet = true;
+  }
+
+  public void removeWatchpoint(Watchpoint watchpoint) {
+    watchpoints.remove(watchpoint);
+    watchpointsSet = !watchpoints.isEmpty();
+  }
+
+  /**
+   * Whether a load (store false) or store of width bytes at the virtual address va hits a watchpoint, which it is
+   * about to make (with its fetch on the bus: nothing has changed yet). The CPU then stops before it, as RISC-V's
+   * triggers do and as gdb expects of them (its RISC-V watchpoints are "nonsteppable": it steps the instruction
+   * with the watchpoint removed, then shows the old and new values).
+   */
+  private boolean watchpointHit(long va, int width, boolean store) {
+    if (!breakpointsEnabled) return false;
+    for (final Watchpoint watchpoint : watchpoints) {
+      if (watchpoint.hits(va, width, store)) {
+        watchpointHit = watchpoint.stopReason(va);
+        return true;
+      }
+    }
+    return false;
   }
 
   // SV32 virtual memory accessors

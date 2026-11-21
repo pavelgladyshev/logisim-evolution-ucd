@@ -97,6 +97,19 @@ public class Packet {
         return packetDataBuilder.toString();
     }
 
+    /**
+     * The length of the next unit of the bytes from start to len: a whole packet, $data#xx (gdb escapes a # in its
+     * data, so the first one ends it), or one byte (an ACK, a NACK, Ctrl-C); 0 if the packet's end has not come yet.
+     */
+    public static int unitLength(byte[] data, int start, int len) {
+        if (start >= len) return 0;
+        if (data[start] != '$') return 1;
+        for (int i = start + 1; i < len; i++) {
+            if (data[i] == '#') return i + 2 < len ? i + 3 - start : 0;
+        }
+        return 0;
+    }
+
     public int getProcessedBytes() {
         return processedBytes;
     }

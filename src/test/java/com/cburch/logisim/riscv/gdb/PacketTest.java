@@ -102,4 +102,15 @@ class PacketTest {
     assertEquals("$m104428,4#00", new Packet("m104428,4").wrapped());
     assertEquals("$OK#9A", new Packet("OK").wrapped());
   }
+
+  @Test
+  void unitLengthWaitsForAWholePacket() {
+    assertEquals(5, Packet.unitLength(bytes("$g#67"), 0, 5));
+    assertEquals(0, Packet.unitLength(bytes("$g#6"), 0, 4), "a checksum digit still to come");
+    assertEquals(0, Packet.unitLength(bytes("$m100"), 0, 5));
+    assertEquals(1, Packet.unitLength(bytes("+$g#67"), 0, 6));
+    assertEquals(5, Packet.unitLength(bytes("+$g#67"), 1, 6));
+    assertEquals(1, Packet.unitLength(bytes("\u0003"), 0, 1));
+    assertEquals(0, Packet.unitLength(bytes(""), 0, 0));
+  }
 }
