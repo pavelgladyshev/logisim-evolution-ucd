@@ -3,6 +3,8 @@
 # Changes #
 
 * @dev (????-??-??)
+  * Added the Sipeed Tang Nano 9K board to the Gowin FPGA flow, which now also stops with a message
+    when a circuit needs more of a resource than the FPGA has (@pavelgladyshev).
 
 * v5.0.0 (2026-09-12)
   * Improved visual representation of Pull Resistor component (@V-Zemlyakov).
