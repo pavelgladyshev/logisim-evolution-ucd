@@ -7,6 +7,10 @@
     when a circuit needs more of a resource than the FPGA has (@pavelgladyshev).
   * Fixed the FPGA tests' automatic board map giving the TF slot's pins to other inputs and outputs,
     which left a Block Storage's SD card unconnected (@pavelgladyshev).
+  * Fixed gdb losing its connection to the RISC-V CPU in text mode (`--tty`) a second after the
+    start, or never getting one, in circuits with a Power-On Reset or a Real Time Clock: the
+    project's own simulator ran a second copy of the circuit there, whose CPU took the GDB server
+    (@pavelgladyshev).
 
 * v5.0.0 (2026-09-12)
   * Improved visual representation of Pull Resistor component (@V-Zemlyakov).

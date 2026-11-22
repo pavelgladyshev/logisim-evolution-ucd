@@ -313,6 +313,10 @@ public class TtyInterface {
       return EXIT_FAILURE;
     }
     final var proj = new Project(file);
+    // text mode runs the circuit in root states of its own, so the project's simulator is left
+    // without one: a component that nudges that simulator (POR, RealTimeClock) would otherwise
+    // bring the project's idle copy of the circuit to life, and its CPU takes over the GDB server
+    proj.getSimulator().setCircuitState(null);
     try {
       return run(args, file, proj);
     } finally {
