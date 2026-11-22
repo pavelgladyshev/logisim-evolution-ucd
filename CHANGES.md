@@ -5,6 +5,8 @@
 * @dev (????-??-??)
   * Added the Sipeed Tang Nano 9K board to the Gowin FPGA flow, which now also stops with a message
     when a circuit needs more of a resource than the FPGA has (@pavelgladyshev).
+  * Fixed the FPGA tests' automatic board map giving the TF slot's pins to other inputs and outputs,
+    which left a Block Storage's SD card unconnected (@pavelgladyshev).
 
 * v5.0.0 (2026-09-12)
   * Improved visual representation of Pull Resistor component (@V-Zemlyakov).

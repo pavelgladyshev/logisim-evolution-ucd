@@ -18,6 +18,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -29,7 +30,8 @@ import java.util.Set;
  *
  * Existing (saved) maps are kept. TTY -> "UART_TX" and Keyboard -> "UART_RX"; a RAM whose FPGA memory is SDRAM
  * -> the board's SDRAM, pin for pin; a Block Storage's SD card -> the pins labelled TF_D0, TF_CLK, TF_CMD and TF_D3
- * (the TF slot of a Tang Nano 20K or 9K); other 1-bit inputs go to the
+ * (the TF slot of a Tang Nano 20K or 9K). These are mapped first, as the TF slot's pins are PortIo pins too, which
+ * the rest would take. Then other 1-bit inputs go to the
  * buttons and other outputs to the LEDs, then everything goes to the PortIo pins; what is left becomes
  * constant 0 (inputs) or open (outputs). An FPGA pin is used once, even where the board offers it twice (an
  * LED that is also a header pin). Exit code 2 when the DRC fails.
@@ -103,10 +105,19 @@ public class AutoMap extends DownloadBase {
     return false;
   }
 
+  /** Whether the component has pins of its own on a board, for all of its pins. */
+  private static boolean hasOwnPins(MapComponent comp) {
+    final var factory = comp.getComponentFactory();
+    return factory instanceof Tty || factory instanceof Keyboard || factory instanceof BlockStorage
+        || (factory instanceof Ram && RamSdram.isSdram(comp.getAttributeSet()));
+  }
+
   private void complete() {
     resources = myMappableResources.getIoComponentInformation().getComponents();
     final var keys = new ArrayList<>(myMappableResources.getMappableResources().keySet());
     keys.sort((a, b) -> String.join("/", a).compareTo(String.join("/", b)));
+    // those with pins of their own first (the sort is stable): their pins can also be among those the others take
+    keys.sort(Comparator.comparing(key -> !hasOwnPins(myMappableResources.getMappableResources().get(key))));
     for (final var comp : myMappableResources.getMappableResources().values()) {
       for (var pin = 0; pin < comp.getNrOfPins(); pin++) {
         if (comp.isBoardMapped(pin)) taken.add(comp.getPinLocation(pin));

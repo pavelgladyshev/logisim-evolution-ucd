@@ -40,7 +40,8 @@ support/openxc7/tests/run_course_test.py ~/git/COMP20020/2026_2027_course
 
 For every circuit, this completes the board map automatically (`harness/lstest/AutoMap.java`):
 
-- TTY and Keyboard go to the UART.
+- TTY and Keyboard go to the UART, a Block Storage to the TF slot, and a RAM in SDRAM to the SDRAM. These are
+  mapped first, so that nothing else gets their pins.
 - 1-bit inputs and outputs go to the buttons and LEDs.
 - Everything else goes to the header pins, or to constants when the pins run out.
 
