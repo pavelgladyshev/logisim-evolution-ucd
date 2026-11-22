@@ -29,7 +29,7 @@ import java.util.Set;
  *
  * Existing (saved) maps are kept. TTY -> "UART_TX" and Keyboard -> "UART_RX"; a RAM whose FPGA memory is SDRAM
  * -> the board's SDRAM, pin for pin; a Block Storage's SD card -> the pins labelled TF_D0, TF_CLK, TF_CMD and TF_D3
- * (the Tang Nano 20K's TF slot); other 1-bit inputs go to the
+ * (the TF slot of a Tang Nano 20K or 9K); other 1-bit inputs go to the
  * buttons and other outputs to the LEDs, then everything goes to the PortIo pins; what is left becomes
  * constant 0 (inputs) or open (outputs). An FPGA pin is used once, even where the board offers it twice (an
  * LED that is also a header pin). Exit code 2 when the DRC fails.

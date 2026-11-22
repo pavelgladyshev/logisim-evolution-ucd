@@ -1,5 +1,5 @@
 #!/bin/sh
-# A terminal on the board's USB-UART (Cmod A7, Tang Nano 20K; 115200 baud, 8N1): what a circuit's TTY prints on
+# A terminal on the board's USB-UART (Cmod A7, Tang Nano 20K or 9K; 115200 baud, 8N1): what a circuit's TTY prints on
 # the FPGA appears here, and what you type goes to its Keyboard (Enter and Backspace work as in Logisim).
 #
 #   support/openxc7/uart_terminal.sh [port]

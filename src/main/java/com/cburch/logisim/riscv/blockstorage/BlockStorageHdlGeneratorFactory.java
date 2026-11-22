@@ -28,9 +28,9 @@ import java.util.TreeMap;
 
 /**
  * The Block Storage on an FPGA, in Verilog: its registers and DMA as the component has them, and a microSD card in
- * SPI mode, on the four mappable pins SD_MISO, SD_SCK, SD_MOSI and SD_CS (on the Tang Nano 20K: TF_D0, TF_CLK,
- * TF_CMD and TF_D3), where the component has its image file. The module that does it, riscvSdBlockStorage, is
- * shipped with Logisim (resources/logisim/hdl/riscv) and says how it works.
+ * SPI mode, on the four mappable pins SD_MISO, SD_SCK, SD_MOSI and SD_CS (on the Tang Nano 20K and 9K: TF_D0,
+ * TF_CLK, TF_CMD and TF_D3), where the component has its image file. The module that does it,
+ * riscvSdBlockStorage, is shipped with Logisim (resources/logisim/hdl/riscv) and says how it works.
  */
 public class BlockStorageHdlGeneratorFactory extends AbstractHdlGeneratorFactory {
 
