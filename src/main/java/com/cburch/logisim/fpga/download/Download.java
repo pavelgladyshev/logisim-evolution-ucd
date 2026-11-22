@@ -398,6 +398,7 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
     synchronized (lock) {
       executable = process.start();
     }
+    String problem = null;
     try {
       var is = executable.getInputStream();
       var isr = new InputStreamReader(is);
@@ -405,6 +406,11 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
       var line = "";
       while ((line = br.readLine()) != null) {
         Reporter.report.print(line);
+        problem = downloader.checkOutput(line);
+        if (problem != null) {
+          stopExecutable();
+          break;
+        }
       }
     } catch (IOException e) {
       if (!stopRequested) {
@@ -412,6 +418,9 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
       }
     }
     executable.waitFor();
+    if (problem != null) {
+      return problem;
+    }
     if (stopRequested) {
       return S.get("FPGAInterrupted");
     }
@@ -505,6 +514,11 @@ public class Download extends DownloadBase implements Runnable, BaseWindowListen
   public void windowClosing(WindowEvent e) {
     progressBar.setString(S.get("FPGACancelWait"));
     stopRequested = true;
+    stopExecutable();
+  }
+
+  /** Ends the program of the stage that runs, and what it started. */
+  private void stopExecutable() {
     synchronized (lock) {
       if (executable != null) {
         try {

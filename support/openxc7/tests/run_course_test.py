@@ -11,9 +11,10 @@ is not touched. Prints a table; details in build/course/<circuit>/ and build/cou
 board than the Cmod A7, build/course_<board>/).
 
 Needs the built jar (./gradlew shadowJar), a JDK and the board's toolchain (~/openxc7 or $OPENXC7_DIR for the
-Cmod A7, ~/gowin or $GOWIN_DIR for --board SIPEED_TANG_NANO_20K).
+Cmod A7, ~/gowin or $GOWIN_DIR for --board SIPEED_TANG_NANO_20K or SIPEED_TANG_NANO_9K).
 """
-import argparse, concurrent.futures, json, os, pathlib, re, subprocess, time, xml.etree.ElementTree as ET
+import argparse, concurrent.futures, contextlib, json, os, pathlib, re, signal, subprocess, time
+import xml.etree.ElementTree as ET
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parents[2]
@@ -26,6 +27,8 @@ BOARDS = {
                                  programs=["yosys", "nextpnr-xilinx", "fasm2frames", "xc7frames2bit"]),
     "SIPEED_TANG_NANO_20K": dict(tools="gowin", variable="GOWIN_DIR", preference="GowinToolPath",
                                  folders=["pyenv", "share"], programs=["yosys", "nextpnr-himbaechel", "gowin_pack"]),
+    "SIPEED_TANG_NANO_9K": dict(tools="gowin", variable="GOWIN_DIR", preference="GowinToolPath",
+                                folders=["pyenv", "share"], programs=["yosys", "nextpnr-himbaechel", "gowin_pack"]),
 }
 
 parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -67,11 +70,39 @@ stub.write_text('#!/bin/sh\n# test stand-in: check the bitstream instead of load
 stub.chmod(0o755)
 
 
+def kill_with_descendants(pid):
+    """Kills a process and all that it started. They are found by their parents rather than put in a process group
+    of their own, as they have to stay in the test's: Ctrl-C and a closed terminal end them through it."""
+    with contextlib.suppress(ProcessLookupError):       # here and below: it may have ended by itself
+        os.kill(pid, signal.SIGSTOP)                    # so that it starts nothing more meanwhile
+    children = {}
+    table = subprocess.run(["ps", "-A", "-o", "pid=", "-o", "ppid="], capture_output=True, text=True, check=True)
+    for line in table.stdout.splitlines():
+        child, parent = map(int, line.split())
+        children.setdefault(parent, []).append(child)
+    doomed = [pid]
+    for each in doomed:                                 # the list grows by each one's children
+        doomed.extend(children.get(each, []))
+    for each in doomed:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(each, signal.SIGKILL)
+
+
 def java(prefs, *arguments):
     command = ["java", "-Djava.util.prefs.PreferencesFactory=isoprefs.FilePrefsFactory", f"-Disoprefs.file={prefs}",
                "-Djava.awt.headless=true", "-cp", f"{OUT / 'classes'}{os.pathsep}{JAR}", *arguments]
-    result = subprocess.run(command, capture_output=True, text=True, timeout=1800)
-    return result.returncode, result.stdout + result.stderr
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        out, err = process.communicate(timeout=1800)
+        return process.returncode, out + err
+    except subprocess.TimeoutExpired:
+        # killing Logisim alone left a nextpnr behind that went on searching; the circuit fails as "timeout"
+        if os.name != "nt":
+            kill_with_descendants(process.pid)
+        else:
+            process.kill()
+        out, err = process.communicate()
+        return "timeout", out + err + "\nERROR: timeout after 1800 s\n"
 
 
 def lines_of(log):

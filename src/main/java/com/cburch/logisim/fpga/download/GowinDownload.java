@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Open-source flow for Gowin FPGAs, such as the Sipeed Tang Nano boards: Yosys synth_gowin,
@@ -35,9 +36,10 @@ import java.util.Locale;
  * Verilog.
  *
  * <p>A board file names its FPGA in the vendor's own terms: Part, Package and Speedgrade together are the
- * device nextpnr is given (GW2AR-LV18 + QN88 + C8/I7 is GW2AR-LV18QN88C8/I7), and Family is the chip
- * family that nextpnr and gowin_pack both need beside it (GW2A-18C), since one family covers several
- * packages and some devices are named only through theirs.
+ * device nextpnr is given (GW2AR-LV18 + QN88 + C8/I7 is the Tang Nano 20K's GW2AR-LV18QN88C8/I7, GW1NR-LV9 +
+ * QN88P + C6/I5 the 9K's GW1NR-LV9QN88PC6/I5), and Family is the chip family that nextpnr and gowin_pack both
+ * need beside it (GW2A-18C, GW1N-9C), since one family covers several packages and some devices are named
+ * only through theirs.
  */
 public class GowinDownload implements VendorDownload {
 
@@ -47,6 +49,9 @@ public class GowinDownload implements VendorDownload {
   private static final String ROUTED_FILE = "toplevel_pnr.json";
   private static final String BIT_FILE = "toplevel.fs";
   private static final String DEFAULT_IO_STANDARD = "LVCMOS33";
+  /** A line of nextpnr's report of what the circuit takes of the FPGA, e.g. "Info:  LUT4:  8997/  8640  104%". */
+  private static final Pattern UTILISATION =
+      Pattern.compile("Info:\\s+(\\w+):\\s+(\\d+)/\\s*(\\d+)\\s+\\d+%\\s*");
 
   private final VendorSoftware vendor = VendorSoftware.getSoftware(VendorSoftware.VENDOR_GOWIN);
   private final String scriptPath;
@@ -146,9 +151,9 @@ public class GowinDownload implements VendorDownload {
           .add(vendor.getBinaryPath(2))
           .add("-d").add(family())
           // The pins of the slave SPI configuration port are the circuit's, like every pin on the board (on a
-          // Tang Nano 20K they are 52-56, the audio and HDMI DDC lines). Left a configuration port, it takes
-          // what a circuit drives there for commands, after which the next load stops at "Erase SRAM" until
-          // the FPGA is reset.
+          // Tang Nano 20K they are 52-56, the audio and HDMI DDC lines; on a 9K 55 and 56, header pins that are
+          // also LCD lines). Left a configuration port, it takes what a circuit drives there for commands, after
+          // which the next load stops at "Erase SRAM" until the FPGA is reset.
           .add("--sspi_as_gpio")
           .add("-o").add(BIT_FILE)
           .add(ROUTED_FILE);
@@ -181,6 +186,31 @@ public class GowinDownload implements VendorDownload {
   @Override
   public boolean readyForDownload() {
     return new File(sandboxPath + BIT_FILE).exists();
+  }
+
+  /**
+   * nextpnr-himbaechel places a circuit that cannot fit until it gives up, which can take long: on a Tang Nano 9K
+   * it gave up after 15 seconds at 104% of the LUTs, and at 112% it was still trying after 30 minutes. Its report
+   * of what the circuit takes of the FPGA comes before the placement and is enough to end the build: it counts
+   * each cell under the one kind of site that can take it (and the LUT that an ALU blocks as a LUT), so a circuit
+   * that asks for more of a kind than there are has no placement.
+   */
+  @Override
+  public String checkOutput(String line) {
+    final var excess = excess(line);
+    return excess == null ? null : S.get("GowinTooLarge", boardInfo.getBoardName(), excess[0], excess[1], excess[2]);
+  }
+
+  /**
+   * The resource, the number the circuit needs and the number the FPGA has, from a line of nextpnr's report that
+   * asks for more than there are; otherwise null.
+   */
+  static String[] excess(String line) {
+    final var report = UTILISATION.matcher(line);
+    if (!report.matches()) return null;
+    return Long.parseLong(report.group(2)) > Long.parseLong(report.group(3))
+        ? new String[] {report.group(1), report.group(2), report.group(3)}
+        : null;
   }
 
   /** openFPGALoader options that select the board for the boards it knows by name. */

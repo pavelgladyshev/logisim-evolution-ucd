@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """On-board test of a circuit with a Keyboard and a TTY, through Logisim's whole FPGA flow, on a Cmod A7-35T
-(or with --board SIPEED_TANG_NANO_20K, a Tang Nano 20K):
+(or with --board SIPEED_TANG_NANO_20K or SIPEED_TANG_NANO_9K, a Tang Nano 20K or 9K):
 
   support/openxc7/tests/board/boardtest.py [--board NAME] [--reference other.circ] [--seconds S] [--port NAME] \
         <file.circ> <top> <tick Hz> [--] <input> [<input> ...]   (-- before inputs that start with '-')
@@ -29,6 +29,8 @@ BOARDS = {
                                  bitstream="toplevel.bit", loader="cmoda7_35t", usb="Digilent"),
     "SIPEED_TANG_NANO_20K": dict(tools="gowin", variable="GOWIN_DIR", preference="GowinToolPath",
                                  bitstream="toplevel.fs", loader="tangnano20k", usb="SIPEED"),
+    "SIPEED_TANG_NANO_9K": dict(tools="gowin", variable="GOWIN_DIR", preference="GowinToolPath",
+                                bitstream="toplevel.fs", loader="tangnano9k", usb="SIPEED"),
 }
 
 parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])

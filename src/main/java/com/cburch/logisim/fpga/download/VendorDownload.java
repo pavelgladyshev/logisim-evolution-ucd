@@ -40,4 +40,12 @@ public interface VendorDownload {
   /*
    * This handle returns true if a board is connected
    */
+
+  /**
+   * A line that a stage printed, which can end the stage at once: the message that says why, or null to go on (as
+   * the stages of most vendors always do).
+   */
+  default String checkOutput(String line) {
+    return null;
+  }
 }
