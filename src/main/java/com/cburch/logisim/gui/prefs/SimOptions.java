@@ -18,6 +18,7 @@ import com.cburch.logisim.proj.Projects;
 import java.awt.Color;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -26,6 +27,7 @@ import java.util.prefs.PreferenceChangeListener;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 
 public class SimOptions extends OptionsPanel {
@@ -318,18 +320,19 @@ public class SimOptions extends OptionsPanel {
 
     gbc.gridx = 0;
     gbc.gridy++;
-    gbc.gridwidth = 2;
+    gbc.gridwidth = 4;
     defaultButton.setActionCommand("default");
     defaultButton.addActionListener(mcol);
-    add(defaultButton, gbc);
-    gbc.gridx += 2;
     colorBlindButton.setActionCommand("colorblind");
     colorBlindButton.addActionListener(mcol);
-    add(colorBlindButton, gbc);
-    gbc.gridx += 2;
     greyscaleButton.setActionCommand("greyscale");
     greyscaleButton.addActionListener(mcol);
-    add(greyscaleButton, gbc);
+    // the three presets share one row of equal buttons under the four columns of colors
+    final var presets = new JPanel(new GridLayout(1, 3, 4, 0));
+    presets.add(defaultButton);
+    presets.add(colorBlindButton);
+    presets.add(greyscaleButton);
+    add(presets, gbc);
 
     localeChanged();
   }
