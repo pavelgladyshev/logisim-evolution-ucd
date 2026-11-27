@@ -68,6 +68,7 @@ public class SimOptions extends OptionsPanel {
   private final ColorChooserButton widthErrorBackgroundColor;
   private final JButton defaultButton = new JButton();
   private final JButton colorBlindButton = new JButton();
+  private final JButton greyscaleButton = new JButton();
   private final JLabel kmap1ColorTitle = new JLabel();
   private final JLabel kmap2ColorTitle = new JLabel();
   private final JLabel kmap3ColorTitle = new JLabel();
@@ -325,6 +326,10 @@ public class SimOptions extends OptionsPanel {
     colorBlindButton.setActionCommand("colorblind");
     colorBlindButton.addActionListener(mcol);
     add(colorBlindButton, gbc);
+    gbc.gridx += 2;
+    greyscaleButton.setActionCommand("greyscale");
+    greyscaleButton.addActionListener(mcol);
+    add(greyscaleButton, gbc);
 
     localeChanged();
   }
@@ -360,6 +365,7 @@ public class SimOptions extends OptionsPanel {
     clockFrequencyColorTitle.setText(S.get("simClockFrequencyTitle"));
     defaultButton.setText(S.get("simDefaultColors"));
     colorBlindButton.setText(S.get("simColorBlindColors"));
+    greyscaleButton.setText(S.get("simGreyscaleColors"));
     kmap1ColorTitle.setText(S.get("simKmapColors", 1));
     kmap2ColorTitle.setText(S.get("simKmapColors", 2));
     kmap3ColorTitle.setText(S.get("simKmapColors", 3));
@@ -408,6 +414,47 @@ public class SimOptions extends OptionsPanel {
     AppPreferences.KMAP14_COLOR.set(0xE7BEFF);
     AppPreferences.KMAP15_COLOR.set(0xAAFFC4);
     AppPreferences.KMAP16_COLOR.set(0xF032E7);
+    repaint();
+  }
+
+  /**
+   * Shades of grey that stay apart when a screenshot is printed without colour: a wire at 1 is
+   * black, a wire at 0 light grey, a floating wire lighter still, and the unknown and error values
+   * two greys in between. Buses stay black and are told from a 1 by their thickness.
+   */
+  private void setGreyscale() {
+    AppPreferences.TRUE_COLOR.set(AppPreferences.GREYSCALE_TRUE_COLOR);
+    AppPreferences.FALSE_COLOR.set(AppPreferences.GREYSCALE_FALSE_COLOR);
+    AppPreferences.UNKNOWN_COLOR.set(AppPreferences.GREYSCALE_UNKNOWN_COLOR);
+    AppPreferences.ERROR_COLOR.set(AppPreferences.GREYSCALE_ERROR_COLOR);
+    AppPreferences.NIL_COLOR.set(AppPreferences.GREYSCALE_NIL_COLOR);
+    AppPreferences.BUS_COLOR.set(AppPreferences.GREYSCALE_BUS_COLOR);
+    AppPreferences.STROKE_COLOR.set(AppPreferences.GREYSCALE_STROKE_COLOR);
+    AppPreferences.WIDTH_ERROR_COLOR.set(0x3C3C3C);
+    AppPreferences.WIDTH_ERROR_CAPTION_COLOR.set(0x000000);
+    AppPreferences.WIDTH_ERROR_HIGHLIGHT_COLOR.set(0xFFFFFF);
+    AppPreferences.WIDTH_ERROR_BACKGROUND_COLOR.set(0xE6E6E6);
+    AppPreferences.CLOCK_FREQUENCY_COLOR.set(0x505050);
+    final int[] kmap = {
+      0x1A1A1A, 0x2C2C2C, 0x3E3E3E, 0x505050, 0x626262, 0x747474, 0x868686, 0x989898,
+      0xAAAAAA, 0xB6B6B6, 0xC2C2C2, 0xCECECE, 0xDADADA, 0xE2E2E2, 0xEAEAEA, 0xF2F2F2
+    };
+    AppPreferences.KMAP1_COLOR.set(kmap[0]);
+    AppPreferences.KMAP2_COLOR.set(kmap[8]);
+    AppPreferences.KMAP3_COLOR.set(kmap[4]);
+    AppPreferences.KMAP4_COLOR.set(kmap[12]);
+    AppPreferences.KMAP5_COLOR.set(kmap[2]);
+    AppPreferences.KMAP6_COLOR.set(kmap[10]);
+    AppPreferences.KMAP7_COLOR.set(kmap[6]);
+    AppPreferences.KMAP8_COLOR.set(kmap[14]);
+    AppPreferences.KMAP9_COLOR.set(kmap[1]);
+    AppPreferences.KMAP10_COLOR.set(kmap[9]);
+    AppPreferences.KMAP11_COLOR.set(kmap[5]);
+    AppPreferences.KMAP12_COLOR.set(kmap[13]);
+    AppPreferences.KMAP13_COLOR.set(kmap[3]);
+    AppPreferences.KMAP14_COLOR.set(kmap[11]);
+    AppPreferences.KMAP15_COLOR.set(kmap[7]);
+    AppPreferences.KMAP16_COLOR.set(kmap[15]);
     repaint();
   }
 
@@ -517,6 +564,8 @@ public class SimOptions extends OptionsPanel {
         setDefaults();
       } else if (e.getActionCommand().equals("colorblind")) {
         setColorBlind();
+      } else if (e.getActionCommand().equals("greyscale")) {
+        setGreyscale();
       }
     }
   }

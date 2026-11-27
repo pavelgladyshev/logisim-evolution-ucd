@@ -690,6 +690,14 @@ public class AppPreferences {
   public static final int DEFAULT_NIL_COLOR = 0x00808080;
   public static final int DEFAULT_BUS_COLOR = 0x00000000;
   public static final int DEFAULT_STROKE_COLOR = 0x00FF00FF;
+  // signal colors for screenshots that are printed without colour (the Greyscale preset)
+  public static final int GREYSCALE_TRUE_COLOR = 0x00000000;
+  public static final int GREYSCALE_FALSE_COLOR = 0x00A6A6A6;
+  public static final int GREYSCALE_UNKNOWN_COLOR = 0x00787878;
+  public static final int GREYSCALE_ERROR_COLOR = 0x004A4A4A;
+  public static final int GREYSCALE_NIL_COLOR = 0x00D2D2D2;
+  public static final int GREYSCALE_BUS_COLOR = 0x00000000;
+  public static final int GREYSCALE_STROKE_COLOR = 0x00BBBBBB;
 
   // returns true if the given LookAndFeel class name indicates a dark theme
   public static boolean isDarkTheme(String lafClassName) {
